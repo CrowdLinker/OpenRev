@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "openrev",
+  "main": "src/runtime/cloudflare.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // The dashboard (SPA) and the tracking script are served as static assets.
+  "assets": {
+    "directory": "./dist/public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/mcp", "/mcp/*"]
+  },
+  // Created automatically on first deploy (no database_id needed).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "openrev"
+    }
+  ],
+  // Alerts, digests, FX rates and cleanup.
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "vars": {
+    "DISABLE_SIGNUP": "false"
+  }
+}

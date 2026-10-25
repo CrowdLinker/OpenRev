@@ -1,0 +1,16 @@
+# Render Blueprint: https://render.com/deploy?repo=https://github.com/CrowdLinker/OpenRev
+services:
+  - type: web
+    name: openrev
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENREV_SECRET
+        generateValue: true
+      - key: DATA_DIR
+        value: /data
+    disk:
+      name: openrev-data
+      mountPath: /data
+      sizeGB: 1

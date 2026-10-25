@@ -1,0 +1,39 @@
+# OpenRev with PostgreSQL. Start with: docker compose -f docker-compose.postgres.yml up -d
+services:
+  openrev:
+    image: ghcr.io/crowdlinker/openrev:latest
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgres://openrev:${POSTGRES_PASSWORD:-openrev}@db:5432/openrev
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      OPENREV_SECRET: ${OPENREV_SECRET:-}
+      DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      OPENREV_EMAIL_FROM: ${OPENREV_EMAIL_FROM:-}
+    volumes:
+      - openrev-data:/data
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openrev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openrev}
+      POSTGRES_DB: openrev
+    volumes:
+      - openrev-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openrev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  openrev-data:
+  openrev-postgres:

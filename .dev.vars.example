@@ -1,0 +1,2 @@
+# Secret used to encrypt payment provider credentials. Generate one with: openssl rand -hex 32
+OPENREV_SECRET=

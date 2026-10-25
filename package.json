@@ -1,0 +1,72 @@
+{
+  "name": "openrev",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source, self-hostable revenue-first web analytics. Know which marketing channels make you money.",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/CrowdLinker/OpenRev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CrowdLinker/OpenRev.git"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:cf": "npm run build:client && wrangler dev",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build && node scripts/build-tracker.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "start": "node --env-file-if-exists=.env dist/server/node.js",
+    "deploy": "npm run build:client && wrangler deploy",
+    "setup": "node scripts/setup.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cf-typegen": "wrangler types",
+    "update": "node scripts/setup.mjs update"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "D1 database that stores your analytics data. It is created automatically."
+      },
+      "OPENREV_SECRET": {
+        "description": "A long random string used to encrypt provider secrets and sign tokens. Generate one with `openssl rand -hex 32`."
+      }
+    }
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.14",
+    "maxmind": "^5.0.7",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261025.1",
+    "@electric-sql/pglite": "^0.5.11",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/d3-geo": "^3.1.1",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/topojson-client": "^3.1.5",
+    "@vitejs/plugin-react": "^6.1.2",
+    "cobe": "^2.0.1",
+    "d3-geo": "^3.1.1",
+    "esbuild": "^0.28.2",
+    "lucide-react": "^1.61.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.3",
+    "topojson-client": "^3.1.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5",
+    "world-atlas": "^2.0.2",
+    "wouter": "^3.13.0",
+    "wrangler": "^4.152.0"
+  }
+}

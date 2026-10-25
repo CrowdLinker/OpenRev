@@ -1,0 +1,13 @@
+node_modules
+dist
+data
+.git
+.wrangler
+.dev.vars*
+.env
+.env.*
+!.env.example
+.openrev.json
+*.db
+*.mmdb
+coverage
