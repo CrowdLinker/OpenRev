@@ -20,8 +20,8 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: Use npm 11.15 or newer (staged publishing)
-        run: npm install -g npm@^11.15.0
+      - name: Use npm 11.21.1 (staged publishing needs 11.15 or newer)
+        run: npm install -g npm@11.21.1
       - name: Stage the release
         working-directory: packages/create-openrev
         run: npm stage publish
