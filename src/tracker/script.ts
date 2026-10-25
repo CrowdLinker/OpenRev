@@ -35,11 +35,18 @@ interface Payload {
   if ((w as { __openrev_loaded?: boolean }).__openrev_loaded) return;
   (w as { __openrev_loaded?: boolean }).__openrev_loaded = true;
 
-  // `document.currentScript` can be shadowed by a page element named "currentScript", so check its type.
-  const current = d.currentScript instanceof HTMLScriptElement ? d.currentScript : null;
-  const script = (current ||
-    d.querySelector("script[data-website-id][src*='script']") ||
-    d.querySelector("script[data-website-id]")) as HTMLScriptElement | null;
+  // Page markup such as <img name="currentScript"> shadows document.currentScript and querySelector
+  // (named properties override built-ins), so read both through Document.prototype and accept only a
+  // real <script>: otherwise injected HTML could choose where events are sent.
+  const proto = Document.prototype;
+  const isScript = (el: unknown): el is HTMLScriptElement => el instanceof HTMLScriptElement;
+  const current = Object.getOwnPropertyDescriptor(proto, "currentScript")?.get?.call(d) as unknown;
+  const find = (selector: string) => {
+    const el = proto.querySelector.call(d, selector) as unknown;
+    return isScript(el) ? el : null;
+  };
+  const script: HTMLScriptElement | null =
+    (isScript(current) ? current : null) || find("script[data-website-id][src*='script']") || find("script[data-website-id]");
   const attr = (name: string) => (script ? script.getAttribute("data-" + name) : null);
   const flag = (name: string) => attr(name) === "true";
 
