@@ -38,3 +38,17 @@ One file in `src/server/providers/` implementing `PaymentProvider`, registered i
 ## Commits & PRs
 
 Small, focused PRs with a clear description. Include tests for behaviour changes and update the docs when user-facing behaviour changes.
+
+## Releasing the installer
+
+`npm create openrev` runs the [`create-openrev`](https://www.npmjs.com/package/create-openrev) package in
+`packages/create-openrev`. It's published by the **Publish create-openrev to npm** workflow through npm trusted
+publishing, so no npm token is stored anywhere, and every release needs a maintainer's 2FA:
+
+1. Bump `version` in `packages/create-openrev/package.json` and merge the PR.
+2. Run the workflow from the Actions tab on `main`, or push a `v*` tag. It stages the release with `npm stage publish`.
+3. A package maintainer approves the staged version on npmjs.com (create-openrev → Staged Packages) with 2FA. It goes
+   public with a provenance attestation that links it to the workflow run.
+
+The installer clones `main`, so most changes to OpenRev reach users without a new installer release. Release it only
+when `packages/create-openrev` itself changes.

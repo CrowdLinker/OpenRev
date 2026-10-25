@@ -10,6 +10,7 @@
 See which channels, pages and campaigns actually make you money, on infrastructure you own.
 
 [![CI](https://github.com/CrowdLinker/OpenRev/actions/workflows/ci.yml/badge.svg)](https://github.com/CrowdLinker/OpenRev/actions/workflows/ci.yml)
+[![npm: create-openrev](https://img.shields.io/npm/v/create-openrev?label=npm%20create%20openrev&color=cb3837)](https://www.npmjs.com/package/create-openrev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-5b4cf5.svg)](LICENSE)
 [![Tracker: 3.9 kB gzipped](https://img.shields.io/badge/tracker-3.9%20kB%20gzipped-10b981.svg)](src/tracker/script.ts)
 [![Runs on Cloudflare, Docker and Node.js](https://img.shields.io/badge/runs%20on-Cloudflare%20%C2%B7%20Docker%20%C2%B7%20Node.js-18181b.svg)](#-self-hosting)
@@ -79,7 +80,7 @@ The installer downloads OpenRev and asks where to run it:
 | **Docker** | Writes `.env` and starts `docker compose` with SQLite or a bundled PostgreSQL. | Any $5 VPS |
 | **Node.js** | Builds and runs the server with a SQLite file or a `postgres://` URL. | Any Node.js 22 host |
 
-Prefer npm? `npm create openrev@latest` does the same thing. Already cloned the repo? Run `npm install && npm run setup`.
+Prefer npm? [`npm create openrev@latest`](https://www.npmjs.com/package/create-openrev) does the same thing. Already cloned the repo? Run `npm install && npm run setup`.
 
 ### One click
 
