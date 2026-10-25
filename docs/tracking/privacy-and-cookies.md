@@ -35,7 +35,7 @@ The default script (`/js/script.js`) sets two first-party cookies:
 
 | Cookie | Lifetime | Purpose |
 | --- | --- | --- |
-| `openrev_visitor_id` | 1 year | Random id that recognizes a returning visitor, so a payment days later can be credited to the visit that brought them |
+| `openrev_visitor_id` | 1 year, renewed on every visit | Random id that recognizes a returning visitor, so a payment days later can be credited to the visit that brought them |
 | `openrev_session_id` | 30 minutes, renewed on activity | Random id that groups the pages of one visit |
 
 Both are random UUIDs, not derived from any personal data. They're set by the script on your domain (shared across subdomains when `data-domain` is set), with `SameSite=Lax` and `Secure` on HTTPS. They're never shared with other websites.

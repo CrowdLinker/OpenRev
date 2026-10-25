@@ -105,7 +105,7 @@ The DataFast equivalents `data-fast-goal`, `data-fast-goal-*`, `data-fast-scroll
 
 | Name | Where | Lifetime | Content |
 | --- | --- | --- | --- |
-| `openrev_visitor_id` | cookie | 1 year | Random visitor id |
+| `openrev_visitor_id` | cookie | 1 year, renewed on every event | Random visitor id |
 | `openrev_session_id` | cookie | 30 minutes, renewed on every event | Random session id |
 | `openrev_session_id`, `openrev_session_id_t` | `sessionStorage` | the browser tab | Session id and last activity time (cookieless mode only) |
 | `openrev_cart` | `sessionStorage` | the browser tab | Shopify only: remembers that the cart was already tagged |
