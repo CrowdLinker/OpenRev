@@ -96,7 +96,7 @@ export function v1Routes() {
     c.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
     c.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     if (c.req.method === "OPTIONS") return c.body(null, 204);
-    if (c.req.path.endsWith("/openapi.json")) return next();
+    if (c.req.method === "GET" && c.req.path === "/api/v1/openapi.json") return next();
     const auth = c.req.header("authorization") ?? "";
     const key = auth.replace(/^Bearer\s+/i, "").trim();
     const apiKey = key ? await verifyApiKey(c.get("rt").db, key) : null;

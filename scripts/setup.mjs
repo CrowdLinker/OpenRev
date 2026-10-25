@@ -8,7 +8,7 @@
 // No dependencies: runs right after cloning the repository.
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { ReadStream } from "node:tty";
 import { createInterface } from "node:readline/promises";
 import { dirname, join } from "node:path";
@@ -108,7 +108,9 @@ function has(cmd) {
 }
 
 function saveState(state) {
-  writeFileSync(".openrev.json", JSON.stringify(state, null, 2) + "\n");
+  // May hold a database URL with a password, so keep it private like .env.
+  writeFileSync(".openrev.json", JSON.stringify(state, null, 2) + "\n", { mode: 0o600 });
+  chmodSync(".openrev.json", 0o600);
 }
 function loadState() {
   try {
@@ -228,7 +230,9 @@ function readEnv() {
   return env;
 }
 function writeEnv(env) {
-  writeFileSync(".env", Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n");
+  // Holds OPENREV_SECRET and database credentials: owner read/write only (mode applies to new files, chmod to old ones).
+  writeFileSync(".env", Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n", { mode: 0o600 });
+  chmodSync(".env", 0o600);
 }
 
 function done(url, tips) {

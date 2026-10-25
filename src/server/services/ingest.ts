@@ -11,6 +11,17 @@ import { notifyGoal } from "./notify";
 import { attachVisitorToPayments } from "./payments";
 import { getSiteCached, hostAllowed, siteHosts, type Site } from "./sites";
 
+/** Avatar URLs are shown in the dashboard, so only keep plain https:// image links. */
+function imageUrl(value: unknown): string | null {
+  const url = clampString(value, 250);
+  if (!url) return null;
+  try {
+    return new URL(url).protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 export const SESSION_TIMEOUT = 30 * 60 * 1000;
 
 /** Payload sent by the tracking script (and accepted by the server-side events API). */
@@ -293,7 +304,7 @@ export async function ingestEvent(rt: Runtime, body: IncomingEvent, meta: Reques
           userId,
           clampString(body.props?.name ?? (body as { name?: string }).name, 200),
           email,
-          clampString(body.image ?? body.props?.image, 250),
+          imageUrl(body.image ?? body.props?.image),
           mergedProps ? JSON.stringify(mergedProps) : null,
           site.id,
           visitorId,
@@ -375,14 +386,14 @@ export async function identifyVisitor(
         clampString(input.userId, 200),
         clampString(input.name, 200),
         email,
-        clampString(input.image, 250),
+        imageUrl(input.image),
         merged ? JSON.stringify(merged) : null,
         site.id,
         input.visitorId,
       ],
     },
   ]);
-  if (email) await attachVisitorToPayments(rt, site, { visitorId: input.visitorId, email });
+  if (email) await attachVisitorToPayments(rt, site, { visitorId: input.visitorId, email, trusted: true });
 }
 
 /** Records a goal on behalf of a visitor from the server (API, payment providers). */

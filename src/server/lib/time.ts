@@ -11,6 +11,8 @@ export type Interval = "hour" | "day" | "week" | "month";
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
+/** Longest range a stats query may cover. */
+const MAX_RANGE = 10 * 366 * DAY;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 function formatter(tz: string) {
@@ -94,7 +96,8 @@ export function offsetSegments(tz: string, from: number, to: number): OffsetSegm
   const step = to - from > 120 * DAY ? DAY : 6 * HOUR;
   let current = offsetAt(tz, from);
   let prev = from;
-  for (let t = from + step; t < to + step; t += step) {
+  let guard = 0;
+  for (let t = from + step; t < to + step && guard++ < 25_000; t += step) {
     const probe = Math.min(t, to);
     const off = offsetAt(tz, probe);
     if (off !== current) {
@@ -241,7 +244,9 @@ function parseDate(s: string | null | undefined): { y: number; m: number; d: num
   if (!s) return null;
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
-  return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
+  const y = Number(m[1]);
+  if (y < 1970 || y > 2100) return null;
+  return { y, m: Number(m[2]), d: Number(m[3]) };
 }
 
 export function defaultInterval(from: number, to: number): Interval {
@@ -330,6 +335,9 @@ export function resolveRange(
       from = dayStart(-6);
       to = dayStart(1);
   }
+
+  // Keep every range bounded (custom dates and "all" alike) so one request can't plan decades of buckets.
+  if (to - from > MAX_RANGE) from = startOfLocalDay(tz, to - MAX_RANGE);
 
   let interval = defaultInterval(from, to);
   if (period === "12m" || (period === "all" && to - from > 400 * DAY)) interval = "month";

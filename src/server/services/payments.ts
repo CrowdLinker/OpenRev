@@ -83,15 +83,16 @@ export async function attributionSessions(
   ts: number,
   preferredSession?: string | null,
 ): Promise<AttributionSessions> {
-  // Allow a little clock skew between the provider and the tracker.
+  // Allow a little clock skew between the provider and the tracker. Only sessions that started before the
+  // conversion get credit, so a session opened later (even a "preferred" one) can't claim an older payment.
   const until = ts + 60 * 60 * 1000;
   const row = await db.first<{ first: string | null; last: string | null; touch: string | null; preferred: string | null }>(
     `SELECT
-      (SELECT id FROM sessions WHERE site_id = ? AND visitor_id = ? ORDER BY started_at ASC LIMIT 1) AS first,
+      (SELECT id FROM sessions WHERE site_id = ? AND visitor_id = ? AND started_at <= ? ORDER BY started_at ASC LIMIT 1) AS first,
       (SELECT id FROM sessions WHERE site_id = ? AND visitor_id = ? AND started_at <= ? ORDER BY started_at DESC LIMIT 1) AS last,
       (SELECT id FROM sessions WHERE site_id = ? AND visitor_id = ? AND started_at <= ? AND channel <> 'Direct' ORDER BY started_at DESC LIMIT 1) AS touch,
-      (SELECT id FROM sessions WHERE id = ? AND site_id = ? AND visitor_id = ?) AS preferred`,
-    [siteId, visitorId, siteId, visitorId, until, siteId, visitorId, until, preferredSession ?? "", siteId, visitorId],
+      (SELECT id FROM sessions WHERE id = ? AND site_id = ? AND visitor_id = ? AND started_at <= ?) AS preferred`,
+    [siteId, visitorId, until, siteId, visitorId, until, siteId, visitorId, until, preferredSession ?? "", siteId, visitorId, until],
   );
   const last = row?.preferred ?? row?.last ?? row?.first ?? null;
   return {
@@ -130,17 +131,20 @@ async function resolveVisitor(db: Database, site: Site, p: NormalizedPayment): P
     if (prev?.visitor_id) return prev.visitor_id;
   }
   if (p.email) {
+    // Anyone can claim an email from the tracker, so prefer a link an earlier payment already made, and
+    // when several visitors claim the email, attribute to none of them rather than guess.
     const email = p.email.toLowerCase();
-    const v = await db.first<{ id: string }>(
-      "SELECT id FROM visitors WHERE site_id = ? AND (LOWER(email) = ? OR LOWER(user_id) = ?) ORDER BY last_seen DESC LIMIT 1",
-      [site.id, email, email],
-    );
-    if (v) return v.id;
     const prev = await db.first<{ visitor_id: string | null }>(
       "SELECT visitor_id FROM payments WHERE site_id = ? AND LOWER(email) = ? AND visitor_id IS NOT NULL ORDER BY ts ASC LIMIT 1",
       [site.id, email],
     );
     if (prev?.visitor_id) return prev.visitor_id;
+    const vs = await db.all<{ id: string }>("SELECT id FROM visitors WHERE site_id = ? AND (LOWER(email) = ? OR LOWER(user_id) = ?) LIMIT 2", [
+      site.id,
+      email,
+      email,
+    ]);
+    if (vs.length === 1) return vs[0].id;
   }
   return null;
 }
@@ -266,18 +270,30 @@ export async function recordPayment(rt: Runtime, site: Site, input: NormalizedPa
   return { payment, created: !existing && payment.id === id };
 }
 
+/** How far back an unauthenticated (tracker) claim can reach: the checkout success-page visit. */
+export const CLAIM_WINDOW_MS = 2 * 60 * 60 * 1000;
+
 /**
  * Called when the tracker learns something that links a visitor to a payment that
  * may already be stored (checkout session id on the success page, email, identify...).
+ * Tracker claims are unauthenticated, so unless `trusted` is set (an API key made the call) they only
+ * reach recent payments, and an email alone never binds the paying customer (and their renewals).
  */
 export async function attachVisitorToPayments(
   rt: Runtime,
   site: Site,
-  link: { visitorId: string; sessionId?: string | null; ref?: string | null; email?: string | null; customerId?: string | null },
+  link: {
+    visitorId: string;
+    sessionId?: string | null;
+    ref?: string | null;
+    email?: string | null;
+    customerId?: string | null;
+    trusted?: boolean;
+  },
 ): Promise<number> {
   const db = rt.db;
   const conditions: string[] = [];
-  const params: (string | null)[] = [site.id];
+  const params: (string | number | null)[] = [site.id];
   if (link.ref) {
     conditions.push("ref = ?");
     params.push(link.ref);
@@ -291,22 +307,25 @@ export async function attachVisitorToPayments(
     params.push(link.customerId);
   }
   if (!conditions.length) return 0;
+  const recent = link.trusted ? "" : " AND ts >= ?";
+  if (!link.trusted) params.push(Date.now() - CLAIM_WINDOW_MS);
   const rows = await db.all<PaymentRow>(
-    `SELECT * FROM payments WHERE site_id = ? AND visitor_id IS NULL AND (${conditions.join(" OR ")}) LIMIT 100`,
+    `SELECT * FROM payments WHERE site_id = ? AND visitor_id IS NULL AND (${conditions.join(" OR ")})${recent} LIMIT 100`,
     params,
   );
   for (const p of rows) {
     const s = await attributionSessions(db, site.id, link.visitorId, Number(p.ts), link.sessionId);
+    const bindCustomer = p.customer_id && (link.trusted || (link.ref && p.ref === link.ref));
     await db.batch([
       {
         sql: `UPDATE payments SET visitor_id = ?, first_session_id = ?, last_session_id = ?, touch_session_id = ? WHERE id = ? AND visitor_id IS NULL`,
         params: [link.visitorId, s.first, s.last, s.touch, p.id],
       },
-      ...(p.customer_id
+      ...(bindCustomer
         ? [
             {
               sql: "UPDATE customers SET visitor_id = COALESCE(visitor_id, ?) WHERE site_id = ? AND provider = ? AND customer_id = ?",
-              params: [link.visitorId, site.id, p.provider, p.customer_id],
+              params: [link.visitorId, site.id, p.provider, p.customer_id as string],
             },
           ]
         : []),

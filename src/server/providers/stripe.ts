@@ -13,7 +13,7 @@ export async function verifyStripeSignature(rawBody: string, signatureHeader: st
   const parts = signatureHeader.split(",").map((p) => p.trim().split("="));
   const t = parts.find(([k]) => k === "t")?.[1];
   const v1 = parts.filter(([k]) => k === "v1").map(([, v]) => v);
-  if (!t || !v1.length) return false;
+  if (!t || !/^\d{1,12}$/.test(t) || !v1.length) return false;
   if (Math.abs(now / 1000 - Number(t)) > TOLERANCE_SECONDS) return false;
   const expected = await hmacHex("SHA-256", secret.trim(), `${t}.${rawBody}`);
   return v1.some((sig) => safeEqual(sig, expected));
@@ -233,8 +233,9 @@ export const stripe: PaymentProvider = {
     const key = config.apiKey;
     if (!key) throw new Error("A Stripe API key is required to import past payments.");
     // cursor format: "<phase>:<starting_after>" where phase is sessions | invoices | charges
-    const [phase, after] = (cursor ?? "sessions:").split(":");
-    const qs = `limit=100${after ? `&starting_after=${after}` : ""}`;
+    const [phase = "sessions", after] = (cursor ?? "sessions:").split(":");
+    if (!["sessions", "invoices", "charges"].includes(phase)) throw new Error("Invalid import cursor");
+    const qs = `limit=100${after ? `&starting_after=${encodeURIComponent(after)}` : ""}`;
     const payments: NormalizedPayment[] = [];
     let list: Obj;
     if (phase === "sessions") {

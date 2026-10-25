@@ -80,8 +80,13 @@ function countryName(code: string | null | undefined): string {
 // Delivery
 // ---------------------------------------------------------------------------
 
-function markdown(msg: Message, bold: (s: string) => string): string {
-  return [bold(msg.title), ...msg.lines, msg.url ? msg.url : ""].filter(Boolean).join("\n");
+// Alert lines carry visitor-supplied text (names, sources, pages), so escape it for each chat format:
+// otherwise a visitor could ping the channel (<!channel>, @everyone) or post disguised links.
+const slackEscape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const discordEscape = (s: string) => s.replace(/[\\*_~`|[\]<>#]/g, "\\$&");
+
+function markdown(msg: Message, bold: (s: string) => string, escape: (s: string) => string): string {
+  return [bold(escape(msg.title)), ...msg.lines.map(escape), msg.url ? msg.url : ""].filter(Boolean).join("\n");
 }
 
 export const TELEGRAM_TOKEN = /^\d{3,15}:[A-Za-z0-9_-]{20,64}$/;
@@ -105,10 +110,14 @@ export async function deliver(rt: Runtime, channel: AlertChannel, config: AlertC
   switch (channel) {
     case "slack":
       if (!config.url) throw new Error("Missing Slack webhook URL");
-      return post(rt, config.url, { text: markdown(msg, (s) => `*${s}*`) });
+      return post(rt, config.url, { text: markdown(msg, (s) => `*${s}*`, slackEscape) });
     case "discord":
       if (!config.url) throw new Error("Missing Discord webhook URL");
-      return post(rt, config.url, { content: markdown(msg, (s) => `**${s}**`).slice(0, 1900), username: "OpenRev" });
+      return post(rt, config.url, {
+        content: markdown(msg, (s) => `**${s}**`, discordEscape).slice(0, 1900),
+        username: "OpenRev",
+        allowed_mentions: { parse: [] },
+      });
     case "telegram": {
       if (!config.botToken || !config.chatId) throw new Error("Missing Telegram bot token or chat id");
       if (!TELEGRAM_TOKEN.test(config.botToken)) throw new Error("Invalid Telegram bot token");

@@ -2,6 +2,11 @@ import type { Database, SqlValue } from "../db/types";
 import { planBuckets, type Interval, type ResolvedRange } from "../lib/time";
 import type { AttributionModel, Site } from "./sites";
 
+/** Integer in [min, max]; anything missing or non-numeric (NaN from a bad query string) gets the default. */
+function clampInt(value: number | undefined, fallback: number, min: number, max: number): number {
+  return Number.isFinite(value) ? Math.min(Math.max(Math.trunc(value as number), min), max) : fallback;
+}
+
 // ---------------------------------------------------------------------------
 // Dimensions & filters
 // ---------------------------------------------------------------------------
@@ -351,7 +356,7 @@ export async function breakdown(
   dim: Dimension,
   opts: { limit?: number; sort?: "visitors" | "revenue" | "conversion_rate" | "completions" } = {},
 ): Promise<BreakdownRow[]> {
-  const limit = Math.min(Math.max(opts.limit ?? 10, 1), 1000);
+  const limit = clampInt(opts.limit, 10, 1, 1000);
   const f = sessionFilterSql(q.filters);
   const attr = attributionColumn(q.site, q.attribution);
   const base = [q.site.id, q.range.from, q.range.to];
@@ -661,8 +666,8 @@ export async function listVisitors(
   q: StatsQuery,
   opts: { search?: string; customersOnly?: boolean; limit?: number; offset?: number; goal?: string | null },
 ) {
-  const limit = Math.min(opts.limit ?? 50, 200);
-  const offset = Math.max(opts.offset ?? 0, 0);
+  const limit = clampInt(opts.limit, 50, 1, 200);
+  const offset = clampInt(opts.offset, 0, 0, 1_000_000);
   const f = sessionFilterSql(q.filters);
   const extraParams: SqlValue[] = [];
   let extra = "";
@@ -804,8 +809,8 @@ export async function funnelResults(db: Database, q: StatsQuery, steps: FunnelSt
 // ---------------------------------------------------------------------------
 
 export async function listPayments(db: Database, q: StatsQuery, opts: { limit?: number; offset?: number } = {}) {
-  const limit = Math.min(opts.limit ?? 50, 200);
-  const offset = Math.max(opts.offset ?? 0, 0);
+  const limit = clampInt(opts.limit, 50, 1, 200);
+  const offset = clampInt(opts.offset, 0, 0, 1_000_000);
   const attr = attributionColumn(q.site, q.attribution);
   const f = sessionFilterSql(q.filters);
   return db.all<Record<string, unknown>>(

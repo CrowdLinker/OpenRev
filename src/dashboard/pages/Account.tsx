@@ -10,7 +10,9 @@ export function AccountPage() {
   const { user, instance, refresh } = useAuth();
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [emailPassword, setEmailPassword] = useState("");
   const [profileMsg, setProfileMsg] = useState<unknown>(null);
+  const emailChanged = email.trim().toLowerCase() !== (user?.email ?? "");
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [pwMsg, setPwMsg] = useState<unknown>(null);
@@ -26,7 +28,8 @@ export function AccountPage() {
             e.preventDefault();
             setProfileMsg(null);
             try {
-              await api("/api/account", { method: "PATCH", body: { name, email } });
+              await api("/api/account", { method: "PATCH", body: { name, email, current: emailChanged ? emailPassword : undefined } });
+              setEmailPassword("");
               refresh();
               setProfileMsg("Saved ✓");
             } catch (err) {
@@ -40,6 +43,11 @@ export function AccountPage() {
           <Field label="Email">
             <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
+          {emailChanged && (
+            <Field label="Current password" help="Required to change your email">
+              <input className="input" type="password" autoComplete="current-password" value={emailPassword} onChange={(e) => setEmailPassword(e.target.value)} required />
+            </Field>
+          )}
           <div className="flex items-center gap-3 sm:col-span-2">
             <Button variant="primary" type="submit">
               Save

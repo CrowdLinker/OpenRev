@@ -81,8 +81,13 @@ export function parseShopifyEvent(topic: string, body: Obj): ProviderResult {
   switch (topic) {
     case "orders/paid": {
       if (truthy(body.test)) return { payments, ignored: "test order" };
-      if (body.financial_status && !["paid", "partially_refunded", "refunded"].includes(String(body.financial_status))) {
-        return { payments, ignored: `order financial_status ${body.financial_status}` };
+      // X-Shopify-Topic isn't covered by the HMAC, so the signed body itself must be a paid order:
+      // other bodies signed with the same shop key (checkouts, draft orders) are ignored.
+      if (!["paid", "partially_refunded", "refunded"].includes(String(body.financial_status))) {
+        return { payments, ignored: `order financial_status ${body.financial_status ?? "missing"}` };
+      }
+      if (body.admin_graphql_api_id && !String(body.admin_graphql_api_id).startsWith("gid://shopify/Order/")) {
+        return { payments, ignored: "not an order" };
       }
       const p = orderPayment(body);
       if (!p) return { payments, ignored: "zero-amount order" };

@@ -130,7 +130,7 @@ export async function handleWebhook(rt: Runtime, integrationId: string, req: Web
       const visitorId = await resolveGoalVisitor(rt, site, provider.id, g);
       if (visitorId) await recordServerGoal(rt, site, { name: g.name, visitorId, props: g.props, timestamp: g.timestamp });
     }
-    await setStatus(null);
+    if (!result.unsigned) await setStatus(null);
     return {
       status: 200,
       body: { received: true, payments: recorded.length, goals: result.goals?.length ?? 0, ...(result.ignored ? { ignored: result.ignored } : {}) },

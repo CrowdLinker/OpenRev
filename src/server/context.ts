@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { Database } from "./db/types";
 import type { GeoResolver } from "./lib/geo";
+import { isPublicIp } from "./lib/net";
 import type { Site } from "./services/sites";
 
 export const VERSION = "0.1.0";
@@ -95,8 +96,10 @@ export function getClientIp(c: Context<AppEnv>): string | null {
 export function getPeerIp(c: Context<AppEnv>): string | null {
   const rt = c.get("rt");
   if (rt.platform === "cloudflare") return c.req.header("cf-connecting-ip")?.trim() || null;
-  const socket = rt.remoteAddress?.(c) ?? null;
-  if (rt.config.trustProxy === false) return socket;
+  const socket = rt.remoteAddress?.(c)?.replace(/^::ffff:/, "") ?? null;
+  // Forwarded headers only count when the connection comes from a proxy on a private network
+  // (same host, Docker network, Fly/Render/Railway edge); a directly exposed server uses the socket.
+  if (rt.config.trustProxy === false || (socket && isPublicIp(socket))) return socket;
   // A reverse proxy appends the address it received the request from; earlier entries come from the client.
   const chain = (c.req.header("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   return chain[chain.length - 1] ?? socket;

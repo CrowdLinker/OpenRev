@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { getClientIpInfo, type AppEnv } from "../context";
 import { geoFromHeaders } from "../lib/geo";
 import { handleWebhook } from "../services/integrations";
@@ -15,6 +16,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
   "Access-Control-Max-Age": "86400",
 };
+
+const RASTER_TYPES = new Set(["image/x-icon", "image/vnd.microsoft.icon", "image/png", "image/gif", "image/jpeg", "image/webp"]);
 
 export function publicRoutes() {
   const app = new Hono<AppEnv>();
@@ -38,6 +41,9 @@ export function publicRoutes() {
     return c.json(result.ok ? { ok: true } : result, 202, corsHeaders);
   };
 
+  const eventLimit = bodyLimit({ maxSize: MAX_EVENT_BYTES, onError: (c) => c.json({ ok: false, reason: "payload_too_large" }, 413, corsHeaders) });
+  app.use("/api/events", eventLimit);
+  app.use("/api/event", eventLimit);
   app.options("/api/events", (c) => c.body(null, 204, corsHeaders));
   app.post("/api/events", collect);
   // aliases (proxies, DataFast-style paths)
@@ -79,9 +85,13 @@ export function publicRoutes() {
     try {
       const res = await fetch(`https://icons.duckduckgo.com/ip3/${domain}.ico`, { headers: { "User-Agent": "OpenRev" } });
       if (!res.ok || !res.body) return c.body(null, 404, { "Cache-Control": "public, max-age=86400" });
+      // Served from our origin, so never trust the upstream type: raster images only, no sniffing, no scripts.
+      const type = res.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
       return new Response(res.body, {
         headers: {
-          "Content-Type": res.headers.get("content-type") ?? "image/x-icon",
+          "Content-Type": RASTER_TYPES.has(type) ? type : "image/x-icon",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; sandbox",
           "Cache-Control": "public, max-age=604800, immutable",
         },
       });

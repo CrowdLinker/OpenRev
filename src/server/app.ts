@@ -1,4 +1,5 @@
 import { Hono, type Context, type MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { getCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
 import { VERSION, type AppEnv, type Runtime } from "./context";
@@ -10,12 +11,24 @@ import { siteRoutes } from "./routes/sites";
 import { v1Routes } from "./routes/v1";
 import { SESSION_COOKIE, userFromSession } from "./services/auth";
 
+/** Host of an Origin header, or null for opaque origins ("null", sandboxed frames) and junk. */
+function originHost(origin: string): string | null {
+  try {
+    return new URL(origin).host || null;
+  } catch {
+    return null;
+  }
+}
+
 export interface CreateAppOptions {
   /** Serves the dashboard and tracking script (Node). On Cloudflare, Workers Static Assets do this. */
   staticHandler?: MiddlewareHandler<AppEnv>;
 }
 
 const UNAUTHENTICATED_PREFIXES = ["/api/events", "/api/event", "/api/webhooks/", "/api/share/", "/api/favicon/", "/api/v1", "/api/health"];
+
+/** Largest request body accepted anywhere (webhooks, API, dashboard). */
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 export function createApp(resolveRuntime: (c: Context) => Runtime | Promise<Runtime>, options: CreateAppOptions = {}) {
   const app = new Hono<AppEnv>();
@@ -39,6 +52,9 @@ export function createApp(resolveRuntime: (c: Context) => Runtime | Promise<Runt
     await next();
   });
 
+  // Cap request bodies before they're buffered (events have a tighter limit in publicRoutes).
+  app.use("*", bodyLimit({ maxSize: MAX_BODY_BYTES, onError: (c) => c.json({ error: "Request body too large" }, 413) }));
+
   app.get("/api/health", (c) => c.json({ ok: true, version: VERSION, platform: c.get("rt").platform }));
 
   app.route("/", publicRoutes());
@@ -55,7 +71,7 @@ export function createApp(resolveRuntime: (c: Context) => Runtime | Promise<Runt
       const origin = c.req.header("origin");
       if (origin) {
         const host = c.req.header("x-forwarded-host") ?? new URL(c.req.url).host;
-        if (new URL(origin).host !== host) return c.json({ error: "Cross-origin request blocked" }, 403);
+        if (originHost(origin) !== host) return c.json({ error: "Cross-origin request blocked" }, 403);
       }
     }
     await next();

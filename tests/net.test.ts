@@ -1,5 +1,8 @@
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
+import { getPeerIp, type AppEnv, type Runtime } from "../src/server/context";
 import { isPublicIp, publicHttpsUrl } from "../src/server/lib/net";
+import { matchPath } from "../src/server/lib/validate";
 
 describe("outbound URL guard", () => {
   it("classifies IP literals", () => {
@@ -30,5 +33,50 @@ describe("outbound URL guard", () => {
     ]) {
       expect(publicHttpsUrl(url), String(url)).toBeNull();
     }
+  });
+});
+
+describe("peer address for rate limits", () => {
+  const peer = async (rt: Partial<Runtime>, headers: Record<string, string>) => {
+    const app = new Hono<AppEnv>();
+    app.use("*", async (c, next) => {
+      c.set("rt", { platform: "node", config: {}, ...rt } as Runtime);
+      await next();
+    });
+    app.get("/", (c) => c.text(String(getPeerIp(c))));
+    return (await app.request("/", { headers })).text();
+  };
+  const xff = { "X-Forwarded-For": "198.51.100.9, 203.0.113.4" };
+
+  it("ignores forwarded headers on a directly exposed server", async () => {
+    expect(await peer({ remoteAddress: () => "93.184.216.34" }, xff)).toBe("93.184.216.34");
+  });
+  it("uses the hop appended by a proxy on a private network", async () => {
+    expect(await peer({ remoteAddress: () => "::ffff:172.18.0.1" }, xff)).toBe("203.0.113.4");
+  });
+  it("uses the socket when proxy trust is off", async () => {
+    expect(await peer({ remoteAddress: () => "10.0.0.2", config: { trustProxy: false } as Runtime["config"] }, xff)).toBe("10.0.0.2");
+  });
+  it("uses CF-Connecting-IP on Workers", async () => {
+    expect(await peer({ platform: "cloudflare" }, { ...xff, "CF-Connecting-IP": "192.0.2.77" })).toBe("192.0.2.77");
+  });
+});
+
+describe("path patterns", () => {
+  it("matches globs", () => {
+    expect(matchPath("/admin/*", "/admin/users/1")).toBe(true);
+    expect(matchPath("/blog/*/edit", "/blog/post/edit")).toBe(true);
+    expect(matchPath("/blog/*/edit", "/blog/a/b/edit")).toBe(false);
+    expect(matchPath("/docs/**", "/docs/a/b/c")).toBe(true);
+    expect(matchPath("/**/private", "/x/y/private")).toBe(true);
+    expect(matchPath("/a*c", "/abbbc")).toBe(true);
+    expect(matchPath("/a*c", "/ab/c")).toBe(false);
+    expect(matchPath("/exact", "/exact")).toBe(true);
+    expect(matchPath("/exact", "/exactly")).toBe(false);
+  });
+  it("stays fast on adversarial patterns", () => {
+    const start = performance.now();
+    expect(matchPath("/**a**a**a**a**a**a**a**b", "/" + "a".repeat(499))).toBe(false);
+    expect(performance.now() - start).toBeLessThan(200);
   });
 });

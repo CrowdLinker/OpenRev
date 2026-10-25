@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shopify } from "../../src/server/providers/shopify";
+import { parseShopifyEvent, shopify } from "../../src/server/providers/shopify";
 import { SESSION, VISITOR, json, makeRequest, signBase64 } from "./_helpers";
 
 const SECRET = "4f8f0c1e2d3b4a5968778695a4b3c2d1e0f";
@@ -106,5 +106,14 @@ describe("shopify.parse", () => {
   it("ignores other topics", async () => {
     const r = await shopify.parse(await signed("orders/create", order()), {});
     expect(r.ignored).toMatch(/unhandled topic/);
+  });
+});
+
+describe("shopify topic binding", () => {
+  it("ignores signed bodies that aren't paid orders even when labelled orders/paid", () => {
+    const checkout = { id: 31415926535, currency: "USD", total_price: "999.00", note_attributes: [{ name: "openrev_visitor_id", value: "visitor-1111-aaaa" }] };
+    expect(parseShopifyEvent("orders/paid", checkout).payments).toHaveLength(0);
+    expect(parseShopifyEvent("orders/paid", { ...checkout, financial_status: "paid", admin_graphql_api_id: "gid://shopify/DraftOrder/1" }).payments).toHaveLength(0);
+    expect(parseShopifyEvent("orders/paid", { ...checkout, financial_status: "paid", admin_graphql_api_id: "gid://shopify/Order/1" }).payments).toHaveLength(1);
   });
 });

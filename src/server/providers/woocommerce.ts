@@ -143,7 +143,7 @@ export const woocommerce: PaymentProvider = {
   },
 
   async parse(req: WebhookRequest, config) {
-    if (isPing(req)) return { payments: [], ignored: "WooCommerce webhook ping" };
+    if (isPing(req)) return { payments: [], ignored: "WooCommerce webhook ping", unsigned: true };
     const topic = String(req.headers.get("x-wc-webhook-topic") || "").toLowerCase();
     if (topic && !topic.startsWith("order.")) return { payments: [], ignored: `unhandled topic ${topic}` };
     if (topic === "order.deleted" || topic === "order.restored") return { payments: [], ignored: `unhandled topic ${topic}` };

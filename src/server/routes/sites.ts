@@ -14,12 +14,15 @@ import { emailEnabled, escapeHtml, sendEmail } from "../services/email";
 import { decryptConfig, encryptConfig, importPage, publicIntegration, type IntegrationRow } from "../services/integrations";
 import { recomputeRevenue } from "../services/payments";
 import {
+  claimInvite,
+  findInvite,
   getMemberRole,
   getSite,
   invalidateSite,
   isValidDomain,
   normalizeDomain,
   parseSite,
+  roleAtLeast,
   type AttributionModel,
   type Role,
   type SiteSettings,
@@ -132,7 +135,11 @@ export function siteRoutes() {
       const next: SiteSettings = { ...site.settings };
       if (s.allowedHostnames !== undefined) next.allowedHostnames = stringList(s.allowedHostnames).map(normalizeDomain).filter(isValidDomain);
       if (s.excludedIps !== undefined) next.excludedIps = stringList(s.excludedIps);
-      if (s.excludedPaths !== undefined) next.excludedPaths = stringList(s.excludedPaths);
+      if (s.excludedPaths !== undefined) {
+        const paths = stringList(s.excludedPaths);
+        if (paths.some((p) => p.length > 300)) fail(400, "Path patterns can be at most 300 characters");
+        next.excludedPaths = paths;
+      }
       if (s.excludedCountries !== undefined) next.excludedCountries = stringList(s.excludedCountries).map((x) => x.toUpperCase().slice(0, 2));
       if (s.excludedHostnames !== undefined) next.excludedHostnames = stringList(s.excludedHostnames).map((h) => h.toLowerCase().replace(/^www\./, ""));
       if (s.cookieless !== undefined) next.cookieless = !!s.cookieless;
@@ -220,18 +227,8 @@ export function siteRoutes() {
     const body = await readJson<{ email?: string; role?: Role }>(c);
     const role: Role = body.role && ROLES.includes(body.role) && body.role !== "owner" ? body.role : "viewer";
     const email = body.email && isEmail(body.email) ? body.email.toLowerCase() : null;
-    // Existing users are added directly.
-    if (email) {
-      const existing = await rt.db.first<{ id: string }>("SELECT id FROM users WHERE email = ?", [email]);
-      if (existing) {
-        await rt.db.run(
-          // Existing members keep their role (an invite must not demote an owner); use the members list to change roles.
-          "INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING",
-          [site.id, existing.id, role, Date.now()],
-        );
-        return c.json({ added: true });
-      }
-    }
+    // Everyone gets a link, even if an account with this email exists: account emails aren't verified,
+    // so membership is only granted to whoever opens the link sent to that mailbox.
     const token = randomToken(24);
     await rt.db.run("INSERT INTO invites (id, site_id, email, role, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
       await sha256Hex(token),
@@ -278,7 +275,11 @@ export function siteRoutes() {
       const owners = await db.first<{ n: number }>("SELECT COUNT(*) AS n FROM site_members WHERE site_id = ? AND role = 'owner'", [site.id]);
       if (Number(owners?.n ?? 0) <= 1) fail(400, "A website needs at least one owner");
     }
-    await db.run("UPDATE site_members SET role = ? WHERE site_id = ? AND user_id = ?", [body.role, site.id, target]);
+    await db.batch([
+      { sql: "UPDATE site_members SET role = ? WHERE site_id = ? AND user_id = ?", params: [body.role, site.id, target] },
+      // A member who can no longer invite loses the invitation links they created.
+      ...(roleAtLeast(body.role, "admin") ? [] : [{ sql: "DELETE FROM invites WHERE site_id = ? AND created_by = ?", params: [site.id, target] }]),
+    ]);
     return c.json({ ok: true });
   });
 
@@ -290,17 +291,17 @@ export function siteRoutes() {
     const owners = await db.all<{ user_id: string }>("SELECT user_id FROM site_members WHERE site_id = ? AND role = 'owner'", [site.id]);
     if (target !== user.id && myRole !== "owner" && owners.some((o) => o.user_id === target)) fail(403, "Only owners can remove an owner");
     if (owners.length === 1 && owners[0].user_id === target) fail(400, "A website needs at least one owner");
-    await db.run("DELETE FROM site_members WHERE site_id = ? AND user_id = ?", [site.id, target]);
+    await db.batch([
+      { sql: "DELETE FROM site_members WHERE site_id = ? AND user_id = ?", params: [site.id, target] },
+      { sql: "DELETE FROM invites WHERE site_id = ? AND created_by = ?", params: [site.id, target] },
+    ]);
     return c.json({ ok: true });
   });
 
   // Invitations (accepting)
   app.get("/invites/:token", async (c) => {
     const db = c.get("rt").db;
-    const invite = await db.first<{ site_id: string; role: string; email: string | null }>(
-      "SELECT site_id, role, email FROM invites WHERE id = ? AND expires_at > ?",
-      [await sha256Hex(c.req.param("token")), Date.now()],
-    );
+    const invite = await findInvite(db, await sha256Hex(c.req.param("token")));
     if (!invite) fail(404, "This invitation is invalid or has expired");
     const site = await getSite(db, invite.site_id);
     return c.json({ site: site ? { name: site.name, domain: site.domain } : null, role: invite.role, email: invite.email });
@@ -309,15 +310,13 @@ export function siteRoutes() {
   app.post("/invites/:token/accept", async (c) => {
     const user = requireUser(c);
     const db = c.get("rt").db;
-    const id = await sha256Hex(c.req.param("token"));
-    const invite = await db.first<{ site_id: string; role: string }>("SELECT site_id, role FROM invites WHERE id = ? AND expires_at > ?", [id, Date.now()]);
+    const invite = await claimInvite(db, await sha256Hex(c.req.param("token")));
     if (!invite) fail(404, "This invitation is invalid or has expired");
-    await db.batch([
-      {
-        sql: "INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING",
-        params: [invite.site_id, user.id, invite.role, Date.now()],
-      },
-      { sql: "DELETE FROM invites WHERE id = ?", params: [id] },
+    await db.run("INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING", [
+      invite.site_id,
+      user.id,
+      invite.role,
+      Date.now(),
     ]);
     return c.json({ siteId: invite.site_id });
   });
@@ -633,7 +632,7 @@ export function siteRoutes() {
       let s = String(v);
       // Neutralise spreadsheet formulas in visitor-controlled text (paths, referrers, UTM values, goal names).
       if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const csv = [cols.join(","), ...rows.map((r) => cols.map((k) => esc(r[k])).join(","))].join("\n");
     return new Response(csv, {

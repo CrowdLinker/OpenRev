@@ -7,6 +7,9 @@ import * as stats from "../services/stats";
 import { buildStatsQuery, rangeInfo } from "./helpers";
 import { resolveDimension } from "./v1";
 
+/** Each batch entry can run a full stats query, so keep batches small. */
+const MAX_BATCH = 20;
+
 /**
  * Minimal Model Context Protocol server (Streamable HTTP transport, JSON responses).
  * Connect Claude, Cursor or any MCP client to https://your-openrev/mcp with
@@ -202,6 +205,9 @@ export function mcpRoutes() {
       return c.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400);
     }
     if (Array.isArray(body)) {
+      if (body.length > MAX_BATCH) {
+        return c.json({ jsonrpc: "2.0", id: null, error: { code: -32600, message: `Batches are limited to ${MAX_BATCH} requests` } }, 400);
+      }
       const results = (await Promise.all(body.map((r) => handleRpc(rt, key, r)))).filter(Boolean);
       return results.length ? c.json(results) : c.body(null, 202);
     }

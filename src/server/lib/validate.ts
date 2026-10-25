@@ -43,26 +43,36 @@ export function isEmail(v: unknown): v is string {
   return typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length <= 254;
 }
 
-/** Matches a path against a pattern supporting `*` (single segment) and `**` (anything). */
+/**
+ * Matches a path against a pattern supporting `*` (within one segment) and `**` (anything).
+ * Runs in O(pattern × path) time: patterns are site settings and paths come from visitors, so a
+ * backtracking regex could be made to stall the server.
+ */
 export function matchPath(pattern: string, path: string): boolean {
   if (pattern === path) return true;
   if (!pattern.includes("*")) return false;
-  const re = new RegExp(
-    "^" +
-      pattern
-        .split("**")
-        .map((part) =>
-          part
-            .split("*")
-            .map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-            .join("[^/]*"),
-        )
-        .join(".*") +
-      "$",
-  );
   // `/blog/*` should also match nested paths like DataFast does.
   if (pattern.endsWith("/*") && path.startsWith(pattern.slice(0, -1))) return true;
-  return re.test(path);
+  const tokens: string[] = [];
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] === "*" && pattern[i + 1] === "*") {
+      tokens.push("**");
+      while (pattern[i + 1] === "*") i++;
+    } else tokens.push(pattern[i]);
+  }
+  // can[j]: the tokens seen so far can match path.slice(0, j)
+  let can = new Array<boolean>(path.length + 1).fill(false);
+  can[0] = true;
+  for (const t of tokens) {
+    const next = new Array<boolean>(path.length + 1).fill(false);
+    if (t === "*" || t === "**") {
+      for (let j = 0; j <= path.length; j++) next[j] = can[j] || (j > 0 && next[j - 1] && (t === "**" || path[j - 1] !== "/"));
+    } else {
+      for (let j = 1; j <= path.length; j++) next[j] = can[j - 1] && path[j - 1] === t;
+    }
+    can = next;
+  }
+  return can[path.length];
 }
 
 export function ipMatches(rule: string, ip: string): boolean {

@@ -104,3 +104,37 @@ export async function getMemberRole(db: Database, siteId: string, userId: string
   const row = await db.first<{ role: Role }>("SELECT role FROM site_members WHERE site_id = ? AND user_id = ?", [siteId, userId]);
   return row?.role ?? null;
 }
+
+/**
+ * Consumes an invitation if it is still valid: unexpired, and its creator still exists and can invite
+ * (admin or owner of the site, or an instance admin). Removing or demoting the creator voids their links.
+ * Returns the invite, or null. The delete is the claim, so a token can't be redeemed twice concurrently.
+ */
+export async function claimInvite(db: Database, tokenHash: string): Promise<{ site_id: string; role: Role } | null> {
+  const invite = await findInvite(db, tokenHash);
+  if (!invite) return null;
+  const { changes } = await db.run("DELETE FROM invites WHERE id = ?", [tokenHash]);
+  return changes > 0 ? { site_id: invite.site_id, role: invite.role } : null;
+}
+
+/**
+ * Looks up an unexpired invite whose creator can still grant it (an instance admin, or an admin/owner of the
+ * site). Invites from someone who has since lost that authority are deleted and treated as invalid.
+ */
+export async function findInvite(
+  db: Database,
+  tokenHash: string,
+): Promise<{ site_id: string; role: Role; email: string | null } | null> {
+  const invite = await db.first<{ site_id: string; role: Role; email: string | null; created_by: string | null }>(
+    "SELECT site_id, role, email, created_by FROM invites WHERE id = ? AND expires_at > ?",
+    [tokenHash, Date.now()],
+  );
+  if (!invite) return null;
+  const creator = invite.created_by ? await db.first<{ is_admin: number }>("SELECT is_admin FROM users WHERE id = ?", [invite.created_by]) : null;
+  const creatorRole = invite.created_by ? await getMemberRole(db, invite.site_id, invite.created_by) : null;
+  if (!creator || (!creator.is_admin && !roleAtLeast(creatorRole, "admin"))) {
+    await db.run("DELETE FROM invites WHERE id = ?", [tokenHash]);
+    return null;
+  }
+  return { site_id: invite.site_id, role: invite.role, email: invite.email };
+}

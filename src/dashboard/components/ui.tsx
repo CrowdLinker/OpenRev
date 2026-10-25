@@ -234,8 +234,17 @@ export function Delta({ value, invert }: { value: number | null; invert?: boolea
 
 export function Avatar({ name, image, size = 32 }: { name: string; image?: string | null; size?: number }) {
   const [failed, setFailed] = useState(false);
-  if (image && !failed) {
-    return <img src={image} alt="" onError={() => setFailed(true)} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
+  if (image && image.startsWith("https://") && !failed) {
+    return (
+      <img
+        src={image}
+        alt=""
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className="shrink-0 rounded-full object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
   }
   return (
     <span

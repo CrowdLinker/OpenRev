@@ -3,7 +3,26 @@ import type { AppEnv } from "../context";
 import * as stats from "../services/stats";
 import { fail, rangeInfo, readJson, statsQuery } from "./helpers";
 
-const PII_FIELDS = ["email", "name", "image", "user_id", "visitor_name", "visitor_image", "customer_id"];
+// Hidden on public share links: personal data, plus identifiers that would let a viewer follow one
+// visitor or customer across responses (row ids stay, they're random and only used as list keys).
+const PII_FIELDS = [
+  "email",
+  "name",
+  "image",
+  "user_id",
+  "visitor_name",
+  "visitor_image",
+  "customer_id",
+  "visitor_id",
+  "session_id",
+  "first_session_id",
+  "last_session_id",
+  "touch_session_id",
+  "transaction_id",
+  "subscription_id",
+  "ref",
+  "description",
+];
 
 function scrub<T extends Record<string, unknown>>(row: T): T {
   const out = { ...row } as Record<string, unknown>;
@@ -58,7 +77,9 @@ export function statsRoutes() {
   app.get("/realtime", async (c) => {
     const data = await stats.realtime(c.get("rt").db, c.get("site"));
     if (c.get("isPublic")) {
-      data.sessions = data.sessions.map((s) => scrub({ ...s, visitor_id: null, id: null }));
+      data.sessions = data.sessions.map((s) => scrub({ ...s, id: null }));
+      // Event names are goal/outbound labels the public feed shows, so only drop the identifiers.
+      data.events = data.events.map((e) => ({ ...e, visitor_id: null, session_id: null }));
       data.payments = data.payments.map((p) => scrub(p));
     }
     return c.json({ currency: c.get("site").currency, ...data });
@@ -90,7 +111,7 @@ export function statsRoutes() {
       limit: Number(c.req.query("limit") || 50),
       offset: Number(c.req.query("offset") || 0),
     });
-    if (c.get("isPublic")) rows = rows.map((r) => scrub({ ...r, visitor_id: null }));
+    if (c.get("isPublic")) rows = rows.map((r) => scrub(r));
     return c.json({ range: rangeInfo(q), currency: q.site.currency, payments: rows });
   });
 

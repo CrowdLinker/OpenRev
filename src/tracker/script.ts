@@ -35,7 +35,9 @@ interface Payload {
   if ((w as { __openrev_loaded?: boolean }).__openrev_loaded) return;
   (w as { __openrev_loaded?: boolean }).__openrev_loaded = true;
 
-  const script = (d.currentScript ||
+  // `document.currentScript` can be shadowed by a page element named "currentScript", so check its type.
+  const current = d.currentScript instanceof HTMLScriptElement ? d.currentScript : null;
+  const script = (current ||
     d.querySelector("script[data-website-id][src*='script']") ||
     d.querySelector("script[data-website-id]")) as HTMLScriptElement | null;
   const attr = (name: string) => (script ? script.getAttribute("data-" + name) : null);
@@ -118,8 +120,12 @@ interface Payload {
       const sid = url.searchParams.get("_or_sid") || url.searchParams.get("_df_sid");
       if (!vid && !sid) return;
       if (!cookieless) {
-        if (validId(vid)) setCookie(VISITOR_COOKIE, vid!, 31536000);
-        if (validId(sid)) setCookie(SESSION_COOKIE, sid!, SESSION_TTL);
+        // Only adopt ids for a browser we haven't seen yet, so a crafted link can't swap a known
+        // visitor onto someone else's existing profile.
+        if (validId(vid) && !getCookie(VISITOR_COOKIE)) {
+          setCookie(VISITOR_COOKIE, vid!, 31536000);
+          if (validId(sid)) setCookie(SESSION_COOKIE, sid!, SESSION_TTL);
+        }
       } else if (validId(sid)) {
         sessionStorage.setItem(SESSION_COOKIE, sid!);
         sessionStorage.setItem(SESSION_COOKIE + "_t", String(Date.now()));

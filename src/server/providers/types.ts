@@ -29,6 +29,8 @@ export interface ProviderResult {
   goals?: NormalizedGoal[];
   /** Set when the event was valid but not relevant (shown in the integration log). */
   ignored?: string;
+  /** The request was accepted without a signature (e.g. WooCommerce's setup ping), so it says nothing about the integration's health. */
+  unsigned?: boolean;
 }
 
 export interface ImportPage {

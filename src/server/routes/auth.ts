@@ -16,6 +16,7 @@ import {
 } from "../services/auth";
 import { emailEnabled } from "../services/email";
 import { setInstanceValue } from "../services/instance";
+import { claimInvite } from "../services/sites";
 import { fail, readJson, requireUser } from "./helpers";
 
 // Best-effort, per-isolate throttling of login and signup attempts.
@@ -87,24 +88,20 @@ export function authRoutes() {
     if (!isEmail(body.email)) fail(400, "Please enter a valid email address");
     if (!body.password || body.password.length < 8) fail(400, "Password must be at least 8 characters");
     const first = (await userCount(rt.db)) === 0;
-    let invite: { id: string; site_id: string; role: string } | null = null;
-    if (body.invite) {
-      invite = await rt.db.first("SELECT id, site_id, role FROM invites WHERE id = ? AND expires_at > ?", [await sha256Hex(body.invite), Date.now()]);
-      if (!invite) fail(400, "This invitation is invalid or has expired");
-    }
-    if (!first && !invite && !(await signupEnabled(rt.db, rt.config.disableSignup))) {
+    if (!first && !body.invite && !(await signupEnabled(rt.db, rt.config.disableSignup))) {
       fail(403, "Sign-ups are disabled on this OpenRev instance. Ask an admin for an invitation.");
     }
     const existing = await rt.db.first("SELECT id FROM users WHERE email = ?", [body.email.toLowerCase()]);
     if (existing) fail(409, "An account with this email already exists");
+    const invite = body.invite ? await claimInvite(rt.db, await sha256Hex(body.invite)) : null;
+    if (body.invite && !invite) fail(400, "This invitation is invalid or has expired");
     const user = await createUser(rt.db, { email: body.email, password: body.password, name: body.name, isAdmin: first });
     if (invite) {
-      await rt.db.batch([
-        {
-          sql: "INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING",
-          params: [invite.site_id, user.id, invite.role, Date.now()],
-        },
-        { sql: "DELETE FROM invites WHERE id = ?", params: [invite.id] },
+      await rt.db.run("INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING", [
+        invite.site_id,
+        user.id,
+        invite.role,
+        Date.now(),
       ]);
     }
     await startSession(c, user.id);
@@ -142,10 +139,13 @@ export function authRoutes() {
 
   app.patch("/account", async (c) => {
     const user = requireUser(c);
-    const body = await readJson<{ name?: string; email?: string }>(c);
+    const body = await readJson<{ name?: string; email?: string; current?: string }>(c);
     const db = c.get("rt").db;
-    if (body.email !== undefined) {
+    if (body.email !== undefined && body.email.toLowerCase() !== user.email) {
       if (!isEmail(body.email)) fail(400, "Invalid email");
+      // Changing the sign-in email needs the password, so a stolen session can't take over the account.
+      const row = await db.first<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = ?", [user.id]);
+      if (!row || !body.current || !(await verifyPassword(body.current, row.password_hash))) fail(400, "Enter your current password to change your email");
       const taken = await db.first<{ id: string }>("SELECT id FROM users WHERE email = ? AND id <> ?", [body.email.toLowerCase(), user.id]);
       if (taken) fail(409, "This email is already used by another account");
     }
@@ -164,7 +164,12 @@ export function authRoutes() {
     const row = await db.first<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = ?", [user.id]);
     if (!row || !body.current || !(await verifyPassword(body.current, row.password_hash))) fail(400, "Current password is incorrect");
     if (!body.password || body.password.length < 8) fail(400, "New password must be at least 8 characters");
-    await db.run("UPDATE users SET password_hash = ? WHERE id = ?", [await hashPassword(body.password), user.id]);
+    // Signs out every other session: a password change is how users cut off someone who got in.
+    await db.batch([
+      { sql: "UPDATE users SET password_hash = ? WHERE id = ?", params: [await hashPassword(body.password), user.id] },
+      { sql: "DELETE FROM auth_sessions WHERE user_id = ?", params: [user.id] },
+    ]);
+    await startSession(c, user.id);
     return c.json({ ok: true });
   });
 
@@ -223,6 +228,7 @@ export function authRoutes() {
     const id = c.req.param("id");
     if (id === user.id) fail(400, "You can't delete your own account here");
     await c.get("rt").db.batch([
+      { sql: "DELETE FROM invites WHERE created_by = ?", params: [id] },
       { sql: "DELETE FROM site_members WHERE user_id = ?", params: [id] },
       { sql: "DELETE FROM auth_sessions WHERE user_id = ?", params: [id] },
       { sql: "DELETE FROM api_keys WHERE user_id = ?", params: [id] },
