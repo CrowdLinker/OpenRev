@@ -5,6 +5,8 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# npm trusted publishing: npm trusts this workflow (set on npmjs.com → create-openrev → Settings), so no token is
+# stored anywhere. The version in packages/create-openrev/package.json must be bumped before each run.
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -17,8 +19,8 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Use npm 11 (trusted publishing needs 11.5.1 or newer)
+        run: npm install -g npm@11
       - name: Publish
         working-directory: packages/create-openrev
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,6 +1,6 @@
 {
   "name": "create-openrev",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Deploy OpenRev — open-source, revenue-first web analytics — in one command (Cloudflare, Docker or Node.js).",
   "license": "MIT",
   "type": "module",
