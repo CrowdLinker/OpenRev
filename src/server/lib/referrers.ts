@@ -201,10 +201,31 @@ const UTM_SOURCE_NAMES: Record<string, string> = {
   discord: "Discord",
   telegram: "Telegram",
   email: "Email",
+  snapchat: "Snapchat",
+  snap: "Snapchat",
+  duckduckgo: "DuckDuckGo",
+  ddg: "DuckDuckGo",
+  yahoo: "Yahoo",
+  gemini: "Gemini",
+  copilot: "Copilot",
+  "perplexity.ai": "Perplexity",
+  "claude.ai": "Claude",
+  deepseek: "DeepSeek",
+  grok: "Grok",
+  "product_hunt": "Product Hunt",
+  "product-hunt": "Product Hunt",
+  ycombinator: "Hacker News",
+  "news.ycombinator.com": "Hacker News",
+  mastodon: "Mastodon",
+  whatsapp: "WhatsApp",
+  substack: "Substack",
+  github: "GitHub",
 };
 
-const SOCIAL_SOURCES = new Set(["X", "Facebook", "Instagram", "LinkedIn", "Reddit", "YouTube", "TikTok", "Pinterest", "Snapchat", "Threads", "Bluesky"]);
-const SEARCH_SOURCES = new Set(["Google", "Bing", "DuckDuckGo", "Yahoo", "Yandex", "Baidu", "Ecosia", "Brave Search"]);
+/** Kind of a source by display name ("ChatGPT" → ai), derived from the known hosts above. */
+const KIND_BY_NAME = new Map<string, Kind>();
+for (const [, src] of KNOWN) if (!KIND_BY_NAME.has(src.name)) KIND_BY_NAME.set(src.name, src.kind);
+KIND_BY_NAME.set("Snapchat", "social");
 
 export interface Attribution {
   referrer: string | null;
@@ -267,19 +288,22 @@ export function classify(input: AttributionInput): Attribution {
     return { referrer, referrerDomain, source: known.name, channel: "Direct" };
   }
 
-  const utmName = utmSource ? UTM_SOURCE_NAMES[utmSource.toLowerCase()] ?? utmSource : null;
+  const utmKey = utmSource.toLowerCase();
+  const utmHost = utmKey.includes(".") ? lookupHost(utmKey.replace(/^https?:\/\//, "").replace(/\/.*$/, "")) : null;
+  const utmName = utmSource ? (UTM_SOURCE_NAMES[utmKey] ?? utmHost?.name ?? utmSource) : null;
   const source = known?.name ?? referrerDomain ?? utmName ?? (input.inApp ? input.inApp : null) ?? (input.ref || null) ?? "Direct";
 
   // Paid traffic
-  const paidMedium = /^(cpc|ppc|paid|paidsearch|paid_search|paid-search|cpv|cpa|cpm|paid_social|paidsocial|paid-social|ads?|sponsored)$/.test(
+  const paidMedium = /^(cpc|ppc|paid|paidsearch|paid_search|paid-search|sem|cpv|cpa|cpm|paid_social|paidsocial|paid-social|ads?|sponsored)$/.test(
     medium,
   );
+  const paidSearchMedium = /^(paid[_-]?search|sem)$/.test(medium);
   const hasSearchClick = clickIds.some((c) => c === "gclid" || c === "gbraid" || c === "wbraid" || c === "msclkid");
   const hasSocialClick = clickIds.some((c) => ["ttclid", "li_fat_id", "twclid", "sccid", "epik", "rdt_cid"].includes(c));
-  const kind = known?.kind ?? (utmName && SOCIAL_SOURCES.has(utmName) ? "social" : utmName && SEARCH_SOURCES.has(utmName) ? "search" : null);
+  const kind: Kind | null = known?.kind ?? utmHost?.kind ?? (utmName ? (KIND_BY_NAME.get(utmName) ?? null) : null);
 
   let channel: Channel;
-  if (hasSearchClick || (paidMedium && kind === "search") || medium === "paidsearch" || medium === "paid_search") {
+  if (hasSearchClick || paidSearchMedium || (paidMedium && kind === "search")) {
     channel = "Paid Search";
   } else if (hasSocialClick || (paidMedium && kind === "social") || /paid[_-]?social/.test(medium)) {
     channel = "Paid Social";

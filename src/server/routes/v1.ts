@@ -5,7 +5,7 @@ import { isValidCurrency, toMinor } from "../lib/currency";
 import { isValidClientId } from "../lib/ids";
 import { clampString, isEmail, sanitizeGoalName, sanitizeProps } from "../lib/validate";
 import { verifyApiKey } from "../services/auth";
-import { ingestEvent, recordServerGoal } from "../services/ingest";
+import { identifyVisitor, recordServerGoal } from "../services/ingest";
 import { deletePayment, recordPayment } from "../services/payments";
 import { notifyPayment } from "../services/notify";
 import type { Site } from "../services/sites";
@@ -39,6 +39,14 @@ export function resolveDimension(name: string): stats.Dimension | null {
   return stats.isDimension(d) ? d : null;
 }
 
+/** Unix seconds, unix milliseconds or ISO 8601 → epoch ms. */
+function parseTimestamp(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  const n = typeof v === "number" ? v : /^\d+$/.test(String(v)) ? Number(v) : NaN;
+  const t = Number.isFinite(n) ? (n < 1e12 ? n * 1000 : n) : Date.parse(String(v));
+  return Number.isFinite(t) ? t : null;
+}
+
 function visitorFrom(body: Record<string, unknown>): string | null {
   for (const k of ["openrev_visitor_id", "visitor_id", "visitorId", "datafast_visitor_id"]) {
     const v = body[k];
@@ -58,11 +66,7 @@ export async function createPaymentFromApi(c: Context<AppEnv>, site: Site, body:
   if (!transactionId) fail(422, "`transaction_id` is required");
   const refunded = body.refunded === true || body.type === "refund";
   const renewal = body.renewal === true || body.type === "renewal";
-  let ts: number | null = null;
-  if (body.timestamp !== undefined) {
-    const t = typeof body.timestamp === "number" ? (body.timestamp < 1e12 ? body.timestamp * 1000 : body.timestamp) : Date.parse(String(body.timestamp));
-    if (Number.isFinite(t)) ts = t;
-  }
+  const ts = parseTimestamp(body.timestamp);
   const provider = clampString(body.provider, 40)?.toLowerCase().replace(/[^a-z0-9_-]/g, "") || "api";
   const { payment, created } = await recordPayment(rt, site, {
     provider,
@@ -215,9 +219,11 @@ export function v1Routes() {
       name,
       visitorId,
       props: sanitizeProps(body.metadata ?? body.props ?? body.properties),
-      timestamp: typeof body.timestamp === "number" ? body.timestamp : null,
+      timestamp: parseTimestamp(body.timestamp),
     });
-    if (!result.ok) fail(422, result.reason);
+    if (!result.ok) {
+      fail(422, result.reason === "unknown_visitor" ? "No visit recorded for this visitor yet — make sure the tracking script runs before sending server-side goals." : result.reason);
+    }
     return c.json({ status: "success", data: { name, visitor_id: visitorId } }, 201);
   });
 
@@ -234,21 +240,15 @@ export function v1Routes() {
     if (!visitorId) fail(422, "`openrev_visitor_id` (or `visitor_id`) is required");
     const { user_id, name, image, email, ...rest } = body as Record<string, unknown>;
     for (const k of ["openrev_visitor_id", "visitor_id", "visitorId", "datafast_visitor_id"]) delete rest[k];
-    const result = await ingestEvent(
-      c.get("rt"),
-      {
-        type: "identify",
-        websiteId: s.id,
-        visitorId,
-        userId: clampString(user_id, 200) ?? undefined,
-        email: isEmail(email) ? email : undefined,
-        image: clampString(image, 250) ?? undefined,
-        props: { ...(rest as Record<string, unknown>), ...(name ? { name } : {}) },
-        href: `https://${s.domain}/`,
-      },
-      { ip: null, userAgent: "api", geo: null, trusted: true },
-    );
-    if (!result.ok) fail(422, result.reason);
+    if (!user_id && !isEmail(email)) fail(422, "`user_id` (or `email`) is required");
+    await identifyVisitor(c.get("rt"), s, {
+      visitorId,
+      userId: clampString(user_id, 200),
+      name: clampString(name, 200),
+      email: isEmail(email) ? email : null,
+      image: clampString(image, 250),
+      props: rest as Record<string, unknown>,
+    });
     return ok(c, { visitor_id: visitorId });
   });
 

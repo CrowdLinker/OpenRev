@@ -91,7 +91,7 @@ async function cookielessVisitorId(rt: Runtime, site: Site, meta: RequestMeta, n
 function isExcluded(site: Site, hostname: string, path: string, meta: RequestMeta, country: string | null): boolean {
   const s = site.settings;
   if (meta.ip && s.excludedIps?.some((rule) => ipMatches(rule, meta.ip!))) return true;
-  if (s.excludedHostnames?.some((h) => h.toLowerCase().trim() === hostname)) return true;
+  if (s.excludedHostnames?.some((h) => h.toLowerCase().trim().replace(/^www\./, "") === hostname)) return true;
   if (s.excludedPaths?.some((p) => p.trim() && matchPath(p.trim(), path))) return true;
   if (country && s.excludedCountries?.some((c) => c.toUpperCase() === country)) return true;
   return false;
@@ -347,6 +347,44 @@ function eventInsert(
   };
 }
 
+/**
+ * Attaches identity (user id, name, email, image, custom properties) to a visitor from the server.
+ * Unlike tracker events it never creates a session, so it doesn't affect traffic stats.
+ */
+export async function identifyVisitor(
+  rt: Runtime,
+  site: Site,
+  input: { visitorId: string; userId?: string | null; name?: string | null; email?: string | null; image?: string | null; props?: Record<string, unknown> | null },
+): Promise<void> {
+  const db = rt.db;
+  const now = Date.now();
+  const email = isEmail(input.email) ? input.email.toLowerCase() : isEmail(input.userId) ? input.userId!.toLowerCase() : null;
+  const existing = await db.first<{ props: string | null }>("SELECT props FROM visitors WHERE site_id = ? AND id = ?", [site.id, input.visitorId]);
+  const custom = sanitizeProps(input.props);
+  const merged = custom || existing?.props ? { ...(existing?.props ? JSON.parse(existing.props) : {}), ...(custom ?? {}) } : null;
+  await db.batch([
+    {
+      sql: `INSERT INTO visitors (site_id, id, first_seen, last_seen, sessions) VALUES (?, ?, ?, ?, 0)
+            ON CONFLICT (site_id, id) DO NOTHING`,
+      params: [site.id, input.visitorId, now, now],
+    },
+    {
+      sql: `UPDATE visitors SET user_id = COALESCE(?, user_id), name = COALESCE(?, name), email = COALESCE(?, email),
+              image = COALESCE(?, image), props = ? WHERE site_id = ? AND id = ?`,
+      params: [
+        clampString(input.userId, 200),
+        clampString(input.name, 200),
+        email,
+        clampString(input.image, 250),
+        merged ? JSON.stringify(merged) : null,
+        site.id,
+        input.visitorId,
+      ],
+    },
+  ]);
+  if (email) await attachVisitorToPayments(rt, site, { visitorId: input.visitorId, email });
+}
+
 /** Records a goal on behalf of a visitor from the server (API, payment providers). */
 export async function recordServerGoal(
   rt: Runtime,
@@ -360,13 +398,8 @@ export async function recordServerGoal(
     "SELECT id, exit_page, hostname FROM sessions WHERE site_id = ? AND visitor_id = ? ORDER BY started_at DESC LIMIT 1",
     [site.id, goal.visitorId],
   );
-  if (!last) {
-    return ingestEvent(
-      rt,
-      { type: "goal", websiteId: site.id, name, props: goal.props ?? undefined, visitorId: goal.visitorId, href: `https://${site.domain}/` },
-      { ip: null, userAgent: "server", geo: null, trusted: true },
-    );
-  }
+  // Goals belong to a visit: without one we'd have to invent a "Direct" session, which would distort stats.
+  if (!last) return { ok: false, reason: "unknown_visitor" };
   const ts = goal.timestamp ?? Date.now();
   await rt.db.batch([
     eventInsert(site.id, last.id, goal.visitorId, ts, "goal", name, last.exit_page ?? "/", last.hostname ?? site.domain, sanitizeProps(goal.props)),

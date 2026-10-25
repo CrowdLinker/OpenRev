@@ -122,6 +122,7 @@ interface Payload {
         if (validId(sid)) setCookie(SESSION_COOKIE, sid!, SESSION_TTL);
       } else if (validId(sid)) {
         sessionStorage.setItem(SESSION_COOKIE, sid!);
+        sessionStorage.setItem(SESSION_COOKIE + "_t", String(Date.now()));
       }
       ["_or_vid", "_or_sid", "_df_vid", "_df_sid"].forEach((p) => url.searchParams.delete(p));
       history.replaceState(history.state, "", url.toString());
@@ -171,7 +172,7 @@ interface Payload {
       /* storage blocked */
     }
     const ua = nav.userAgent || "";
-    if ((nav as Navigator & { webdriver?: boolean }).webdriver || /headless|phantom|selenium|puppeteer|playwright|bot|crawl|spider/i.test(ua) || w._phantom || w.__nightmare)
+    if ((nav as Navigator & { webdriver?: boolean }).webdriver || /headless|phantom|selenium|puppeteer|playwright|\bbot\b|bot\/|crawl|spider/i.test(ua) || w._phantom || w.__nightmare)
       return "bot detected";
     if (/^localhost$|^127(\.\d+){3}$|^\[::1\]$|\.localhost$/.test(loc.hostname) && !flag("allow-localhost")) return "localhost (set data-allow-localhost=\"true\")";
     if (loc.protocol === "file:" && !flag("allow-file-protocol")) return "file:// protocol";
@@ -242,6 +243,7 @@ interface Payload {
     if (lastPage) flushEngagement();
     lastPage = page;
     visibleSince = d.visibilityState === "visible" ? Date.now() : 0;
+    fired.clear();
     send("pageview");
     scanScrollTargets();
     if (!disablePayments) detectPaymentReturn();
@@ -317,7 +319,7 @@ interface Payload {
       if (/(^|\.)buy\.stripe\.com$/.test(host) && !url.searchParams.has("client_reference_id")) {
         url.searchParams.set("client_reference_id", vid);
         changed = true;
-      } else if ((/lemonsqueezy\.com$/.test(host) || /^\/checkout\/buy\//.test(url.pathname)) && /\/checkout/.test(url.pathname) && !url.searchParams.has("checkout[custom][openrev_visitor_id]")) {
+      } else if ((/lemonsqueezy\.com$/.test(host) || (!isOwnHost(host) && /^\/checkout\/buy\//.test(url.pathname))) && /\/checkout/.test(url.pathname) && !url.searchParams.has("checkout[custom][openrev_visitor_id]")) {
         url.searchParams.set("checkout[custom][openrev_visitor_id]", vid);
         url.searchParams.set("checkout[custom][openrev_session_id]", sid);
         changed = true;
@@ -340,7 +342,8 @@ interface Payload {
     const a = target.closest("a[href]") as HTMLAnchorElement | null;
     if (!a) return;
     decorateLink(a);
-    if (e.type === "click" && trackOutbound) {
+    const middleClick = e.type === "auxclick" && (e as MouseEvent).button === 1;
+    if ((e.type === "click" || middleClick) && trackOutbound) {
       try {
         const url = new URL(a.href, loc.href);
         if (/^https?:$/.test(url.protocol) && !isOwnHost(url.hostname) && !isAllowedCrossDomain(url.hostname)) {
@@ -363,7 +366,6 @@ interface Payload {
   let observer: IntersectionObserver | null = null;
   const fired = new Set<string>();
   function scanScrollTargets() {
-    fired.clear();
     if (!("IntersectionObserver" in w)) return;
     const els = d.querySelectorAll("[data-openrev-scroll],[data-fast-scroll]");
     els.forEach((el) => {

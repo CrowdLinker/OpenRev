@@ -67,7 +67,7 @@ curl -X POST "https://analytics.example.com/api/v1/identify" \
 - `user_id`, `email`, `name` and `image` work as in the browser. Every other field becomes a custom property.
 - Response: `{"status":"success","data":{"visitor_id":"…"}}`.
 
-Prefer the browser call when you can: it's tied to the visitor's current session automatically. See the [API reference](../api/README.md) for authentication details.
+Server-side identify only updates the visitor's profile — it never creates a visit, so it doesn't change visitor or session counts. It works even before the visitor's first tracked pageview. Prefer the browser call when you can: it's tied to the visitor's current session automatically. See the [API reference](../api/README.md) for authentication details.
 
 ## Profiles and journeys
 

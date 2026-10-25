@@ -39,9 +39,10 @@ function buildRuntime(env: Env, ctx: ExecutionContextLike): Runtime {
       retentionDays: env.RETENTION_DAYS ? Number(env.RETENTION_DAYS) : undefined,
       trustProxy: true,
     },
-    geo: (_ip, request) => {
+    geo: (_ip, request, proxied) => {
       const cf = (request as CfRequest).cf;
-      if (!cf) return null;
+      // For proxied events request.cf locates the proxy, not the visitor.
+      if (!cf || proxied) return null;
       return {
         country: (cf.country as string) ?? null,
         region: (cf.region as string) ?? null,

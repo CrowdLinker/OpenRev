@@ -132,7 +132,7 @@ export function siteRoutes() {
       if (s.excludedIps !== undefined) next.excludedIps = stringList(s.excludedIps);
       if (s.excludedPaths !== undefined) next.excludedPaths = stringList(s.excludedPaths);
       if (s.excludedCountries !== undefined) next.excludedCountries = stringList(s.excludedCountries).map((x) => x.toUpperCase().slice(0, 2));
-      if (s.excludedHostnames !== undefined) next.excludedHostnames = stringList(s.excludedHostnames).map((h) => h.toLowerCase());
+      if (s.excludedHostnames !== undefined) next.excludedHostnames = stringList(s.excludedHostnames).map((h) => h.toLowerCase().replace(/^www\./, ""));
       if (s.cookieless !== undefined) next.cookieless = !!s.cookieless;
       if (s.allowLocalhost !== undefined) next.allowLocalhost = !!s.allowLocalhost;
       if (s.strictHostnames !== undefined) next.strictHostnames = !!s.strictHostnames;

@@ -93,14 +93,18 @@ async function setupGeo() {
   }
   if (env.GEOIP_AUTO_DOWNLOAD === "false") return;
   const target = join(DATA_DIR, "dbip-city-lite.mmdb");
-  const stale = !existsSync(target) || Date.now() - statSync(target).mtimeMs > 35 * 86_400_000;
   if (existsSync(target)) await loadGeo(target);
-  if (stale) {
-    // download in the background; don't block startup
+  const refresh = () => {
+    const stale = !existsSync(target) || Date.now() - statSync(target).mtimeMs > 35 * 86_400_000;
+    if (!stale) return;
+    // download in the background; don't block startup or requests
     downloadDbIp(target)
       .then((ok) => (ok ? loadGeo(target) : undefined))
       .catch(() => {});
-  }
+  };
+  refresh();
+  // DB-IP publishes a new edition every month: check once a day.
+  setInterval(refresh, 86_400_000).unref();
 }
 
 function lookupGeo(ip: string | null): GeoInfo | null {

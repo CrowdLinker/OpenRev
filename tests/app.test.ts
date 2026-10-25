@@ -94,6 +94,38 @@ describe.each(DATABASES)("HTTP API (%s)", (_name, makeDb) => {
     expect(channels.json.rows[0].value).toBe("Email");
   });
 
+  it("uses the original client IP and location for proxied events", async () => {
+    await call(`/api/sites/${siteId}`, { method: "PATCH", body: { settings: { excludedIps: ["203.0.113.9"], excludedHostnames: ["www.staging.example.com"] } } });
+    const send = (payload: Record<string, unknown>, headers: Record<string, string>) =>
+      call("/api/events", { raw: JSON.stringify({ websiteId: siteId, type: "pageview", ...payload }), headers: { "Content-Type": "text/plain", ...headers } });
+    // proxied through the website (e.g. a Next.js rewrite): the first X-Forwarded-For entry is the visitor
+    const excluded = await send(
+      { href: "https://example.com/", visitorId: "visitor-2222-bbbb", sessionId: "session-2222-bbbb" },
+      { "X-Forwarded-For": "203.0.113.9, 10.0.0.1", "CF-Connecting-IP": "10.0.0.1", "CF-IPCountry": "US" },
+    );
+    expect(excluded.json.reason).toBe("excluded");
+    // the edge location describes the proxy, so it is ignored; X-OpenRev-* headers from the proxy are used
+    await send({ href: "https://example.com/", visitorId: "visitor-3333-cccc", sessionId: "session-3333-cccc" }, { "X-Forwarded-For": "198.51.100.7, 10.0.0.1", "CF-Connecting-IP": "10.0.0.1", "CF-IPCountry": "US" });
+    await send(
+      { href: "https://example.com/", visitorId: "visitor-4444-dddd", sessionId: "session-4444-dddd" },
+      { "X-Forwarded-For": "198.51.100.8, 10.0.0.1", "CF-Connecting-IP": "10.0.0.1", "CF-IPCountry": "US", "X-OpenRev-Country": "DE", "X-OpenRev-City": "Berlin" },
+    );
+    const rows = await rt.db.all<{ visitor_id: string; country: string | null; city: string | null }>(
+      "SELECT visitor_id, country, city FROM sessions WHERE visitor_id IN ('visitor-3333-cccc', 'visitor-4444-dddd') ORDER BY visitor_id",
+    );
+    expect(rows).toEqual([
+      { visitor_id: "visitor-3333-cccc", country: null, city: null },
+      { visitor_id: "visitor-4444-dddd", country: "DE", city: "Berlin" },
+    ]);
+    // www. is ignored in hostname exclusions
+    const staging = await send({ href: "https://staging.example.com/", visitorId: "visitor-5555-eeee" }, {});
+    expect(staging.json.reason).toBe("excluded");
+    await rt.db.run("DELETE FROM sessions WHERE visitor_id IN ('visitor-3333-cccc', 'visitor-4444-dddd')");
+    await rt.db.run("DELETE FROM visitors WHERE id IN ('visitor-3333-cccc', 'visitor-4444-dddd')");
+    await rt.db.run("DELETE FROM events WHERE visitor_id IN ('visitor-3333-cccc', 'visitor-4444-dddd')");
+    await call(`/api/sites/${siteId}`, { method: "PATCH", body: { settings: { excludedIps: [], excludedHostnames: [] } } });
+  });
+
   it("verifies and records Stripe webhooks", async () => {
     const created = await call(`/api/sites/${siteId}/integrations`, { body: { provider: "stripe", config: { webhookSecret: "whsec_test" } } });
     expect(created.status).toBe(200);
@@ -158,10 +190,16 @@ describe.each(DATABASES)("HTTP API (%s)", (_name, makeDb) => {
     const again = await call("/api/v1/payments", { headers: auth, body: { amount: 19.99, currency: "EUR", transaction_id: "ext_1" } });
     expect(again.status).toBe(200);
 
-    const goal = await call("/api/v1/goals", { headers: auth, body: { name: "activated", openrev_visitor_id: "visitor-1111-aaaa", metadata: { plan: "pro" } } });
+    const goal = await call("/api/v1/goals", { headers: auth, body: { name: "activated", openrev_visitor_id: "visitor-1111-aaaa", metadata: { plan: "pro" }, timestamp: Math.floor(Date.now() / 1000) } });
     expect(goal.status).toBe(201);
     const ident = await call("/api/v1/identify", { headers: auth, body: { openrev_visitor_id: "visitor-1111-aaaa", user_id: "u_1", name: "Jane", email: "jane@example.com", plan: "pro" } });
     expect(ident.status).toBe(200);
+    // identifying or tracking goals for unknown visitors never invents sessions
+    const before = await rt.db.first<{ c: number }>("SELECT COUNT(*) AS c FROM sessions");
+    expect((await call("/api/v1/identify", { headers: auth, body: { openrev_visitor_id: "visitor-9999-zzzz", user_id: "u_9" } })).status).toBe(200);
+    expect((await call("/api/v1/goals", { headers: auth, body: { name: "x", openrev_visitor_id: "visitor-9999-zzzz" } })).status).toBe(422);
+    const after = await rt.db.first<{ c: number }>("SELECT COUNT(*) AS c FROM sessions");
+    expect(Number(after?.c)).toBe(Number(before?.c));
     const visitor = await call("/api/v1/visitors/visitor-1111-aaaa", { headers: auth });
     expect(visitor.json.data.visitor).toMatchObject({ name: "Jane", user_id: "u_1" });
     expect(visitor.json.data.payments).toHaveLength(2);

@@ -496,18 +496,41 @@ export const GET: APIRoute = async () => {
 
 ## Where OpenRev is hosted matters
 
-How OpenRev finds the visitor's IP, in order:
+How OpenRev finds the visitor's IP (on Node, only when `TRUST_PROXY` isn't `false`):
 
-1. `CF-Connecting-IP`, `True-Client-IP` or `Fly-Client-IP`;
-2. the first address in `X-Forwarded-For`, then `X-Real-IP` (ignored on Node when `TRUST_PROXY=false`);
-3. the address of the TCP connection.
+1. the **first** address in `X-Forwarded-For` — the original visitor, even when your proxy or Cloudflare appended their own address;
+2. otherwise `CF-Connecting-IP`, `True-Client-IP`, `Fly-Client-IP` or `X-Real-IP`;
+3. otherwise the address of the TCP connection.
+
+A request counts as **proxied** when that first `X-Forwarded-For` address differs from the address of the edge connection (`CF-Connecting-IP` & co.). For proxied requests OpenRev ignores location data that describes the connection (Cloudflare's `request.cf` and `CF-IPCountry`), because it would be your proxy's location.
 
 How it finds the location:
 
-- **Node / Docker:** looks up that IP in the local geolocation database (DB-IP Lite or your MaxMind file). Forwarding the IP is all you need. If the IP isn't found, it falls back to location headers added by Vercel, Netlify, CloudFront, Google Cloud or Cloudflare.
-- **Cloudflare Workers:** uses Cloudflare's location data for the incoming connection.
+- **Node / Docker:** looks up the visitor IP in the local geolocation database (DB-IP Lite or your MaxMind file). Forwarding the IP is all you need.
+- **Cloudflare Workers:** uses Cloudflare's location for direct visits. For proxied visits Workers can't look up an arbitrary IP, so pass the location from your proxy with these headers (all optional except the country):
 
-So there are two setups where a proxy loses the visitor's IP or location:
+  | Header | Example |
+  |---|---|
+  | `X-OpenRev-Country` | `DE` (ISO 3166-1 alpha-2) |
+  | `X-OpenRev-Region` | `Berlin` |
+  | `X-OpenRev-City` | `Berlin` |
+  | `X-OpenRev-Latitude` / `X-OpenRev-Longitude` | `52.52` / `13.40` |
 
-- **OpenRev behind Cloudflare's proxy (orange-cloud DNS) or on Cloudflare Workers.** Cloudflare sets `CF-Connecting-IP` to the address of whatever connected to it, which is your proxy server. OpenRev prefers that header over `X-Forwarded-For`, so it sees your proxy's IP. On Workers, the location also comes from that connection. For a Node instance, point your proxy at a hostname that reaches the server directly (a DNS-only record) instead of the Cloudflare-proxied one. For an instance on Workers there's currently no workaround: proxied events get the proxy's IP and location. Decide whether ad-blocker coverage or location accuracy matters more for you.
-- **A proxy that doesn't forward the IP at all.** Fix the config with one of the examples above.
+  A proxy running on Cloudflare (the Worker example above) can fill them from `request.cf`:
+
+  ```js
+  headers: {
+    "Content-Type": "text/plain",
+    "User-Agent": request.headers.get("User-Agent") || "",
+    "X-Forwarded-For": request.headers.get("CF-Connecting-IP") || "",
+    "X-OpenRev-Country": request.cf?.country || "",
+    "X-OpenRev-Region": request.cf?.region || "",
+    "X-OpenRev-City": request.cf?.city || "",
+    "X-OpenRev-Latitude": String(request.cf?.latitude ?? ""),
+    "X-OpenRev-Longitude": String(request.cf?.longitude ?? ""),
+  },
+  ```
+
+  On Vercel, forward `x-vercel-ip-country`, `x-vercel-ip-country-region`, `x-vercel-ip-city`, `x-vercel-ip-latitude` and `x-vercel-ip-longitude` from your Route Handler instead — OpenRev understands those too. Without any of these headers, proxied visits are recorded without a location (rather than with your proxy's).
+
+If a proxy doesn't forward the IP at all, fix its config with one of the examples above.

@@ -159,7 +159,7 @@ Delete by OpenRev id or `transaction_id` (admin keys).
 { "name": "trial_started", "openrev_visitor_id": "3cff4252-…", "metadata": { "plan": "pro" } }
 ```
 
-Goal names: lowercase letters, numbers, `_`, `-`, `:` (max 64). Up to 10 metadata properties (values ≤ 255 chars).
+Goal names: lowercase letters, numbers, `_`, `-`, `:` (max 64). Up to 10 metadata properties (values ≤ 255 chars). Optional `timestamp` (ISO 8601 or unix seconds/ms). The visitor must have a recorded visit, otherwise `422`.
 
 ### `GET /goals`
 
@@ -173,7 +173,7 @@ Goals with visitors, completions, conversion rate and revenue from visitors who 
 { "openrev_visitor_id": "3cff4252-…", "user_id": "usr_123", "name": "Jane Doe", "email": "jane@example.com", "image": "https://…/avatar.png", "plan": "pro" }
 ```
 
-Extra keys are stored as custom properties (shallow-merged). Identifying with an email links any unattributed payments made with that email.
+Extra keys are stored as custom properties (shallow-merged). Identifying with an email links any unattributed payments made with that email. Identify never creates visits, so it doesn't affect traffic stats.
 
 ## Funnels
 

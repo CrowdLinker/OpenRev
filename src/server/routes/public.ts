@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import { getClientIp, type AppEnv } from "../context";
+import { getClientIpInfo, type AppEnv } from "../context";
 import { geoFromHeaders } from "../lib/geo";
 import { handleWebhook } from "../services/integrations";
 import { ingestEvent, type IncomingEvent } from "../services/ingest";
@@ -31,8 +31,9 @@ export function publicRoutes() {
     } catch {
       return c.json({ ok: false, reason: "invalid_json" }, 400, corsHeaders);
     }
-    const ip = getClientIp(c);
-    const geo = (rt.geo ? await rt.geo(ip, c.req.raw) : null) ?? geoFromHeaders(c.req.raw.headers);
+    const { ip, proxied } = getClientIpInfo(c);
+    const resolved = rt.geo ? await rt.geo(ip, c.req.raw, proxied) : null;
+    const geo = resolved?.country ? resolved : geoFromHeaders(c.req.raw.headers, { proxied });
     const result = await ingestEvent(rt, body, { ip, userAgent: c.req.header("user-agent") ?? "", geo });
     return c.json(result.ok ? { ok: true } : result, 202, corsHeaders);
   };

@@ -60,18 +60,29 @@ export interface ApiKeyAuth {
   siteId: string | null;
 }
 
-export function getClientIp(c: Context<AppEnv>): string | null {
-  const h = (k: string) => c.req.header(k);
+export interface ClientIp {
+  ip: string | null;
+  /**
+   * True when the request reached OpenRev through another proxy (e.g. the tracked website proxies
+   * /api/events to avoid ad blockers): the edge's own geolocation then describes the proxy, not the visitor.
+   */
+  proxied: boolean;
+}
+
+export function getClientIpInfo(c: Context<AppEnv>): ClientIp {
+  const h = (k: string) => c.req.header(k)?.trim() || null;
   const rt = c.get("rt");
-  const direct = h("cf-connecting-ip") || h("true-client-ip") || h("fly-client-ip");
-  if (direct) return direct.trim();
-  if (rt.platform === "cloudflare" || rt.config.trustProxy !== false) {
-    const xff = h("x-forwarded-for");
-    if (xff) return xff.split(",")[0].trim();
-    const real = h("x-real-ip");
-    if (real) return real.trim();
-  }
-  return rt.remoteAddress?.(c) ?? null;
+  const trust = rt.platform === "cloudflare" || rt.config.trustProxy !== false;
+  if (!trust) return { ip: rt.remoteAddress?.(c) ?? null, proxied: false };
+  // The first X-Forwarded-For entry is the original client, even when a proxy (or Cloudflare) appended itself.
+  const forwarded = h("x-forwarded-for")?.split(",")[0].trim() || null;
+  const edge = h("cf-connecting-ip") || h("true-client-ip") || h("fly-client-ip") || h("x-real-ip");
+  const ip = forwarded || edge || rt.remoteAddress?.(c) || null;
+  return { ip, proxied: !!(forwarded && edge && forwarded !== edge) };
+}
+
+export function getClientIp(c: Context<AppEnv>): string | null {
+  return getClientIpInfo(c).ip;
 }
 
 export function publicUrl(c: Context<AppEnv>): string {

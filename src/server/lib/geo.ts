@@ -6,7 +6,11 @@ export interface GeoInfo {
   longitude?: number | null;
 }
 
-export type GeoResolver = (ip: string | null, request: Request) => Promise<GeoInfo | null> | GeoInfo | null;
+/**
+ * Resolves the location of a visitor. `proxied` is true when the request was forwarded by another proxy,
+ * in which case edge-provided locations (Cloudflare `request.cf`) describe the proxy and must not be used.
+ */
+export type GeoResolver = (ip: string | null, request: Request, proxied: boolean) => Promise<GeoInfo | null> | GeoInfo | null;
 
 function decode(v: string | null): string | null {
   if (!v) return null;
@@ -34,8 +38,18 @@ function country(v: string | null | undefined): string | null {
  * Reads geolocation hints that CDNs and hosting platforms attach to requests
  * (Cloudflare, Vercel, CloudFront, Netlify, Google App Engine, Fastly...).
  */
-export function geoFromHeaders(headers: Headers): GeoInfo | null {
+export function geoFromHeaders(headers: Headers, opts: { proxied?: boolean } = {}): GeoInfo | null {
   const h = (k: string) => headers.get(k);
+  // Explicit headers a proxy can set to pass the visitor's location (see docs/tracking/proxy.md).
+  if (h("x-openrev-country")) {
+    return {
+      country: country(h("x-openrev-country")),
+      region: decode(h("x-openrev-region")),
+      city: decode(h("x-openrev-city")),
+      latitude: num(h("x-openrev-latitude")),
+      longitude: num(h("x-openrev-longitude")),
+    };
+  }
   // Vercel
   if (h("x-vercel-ip-country")) {
     return {
@@ -83,8 +97,9 @@ export function geoFromHeaders(headers: Headers): GeoInfo | null {
       longitude: num(lon),
     };
   }
-  // Cloudflare in front of a non-Worker origin (with "Add visitor location headers" managed transform)
-  if (h("cf-ipcountry")) {
+  // Cloudflare in front of a non-Worker origin (with "Add visitor location headers" managed transform).
+  // When the request was proxied, these describe the proxy's location, so they are skipped.
+  if (h("cf-ipcountry") && !opts.proxied) {
     return {
       country: country(h("cf-ipcountry")),
       region: decode(h("cf-region")),

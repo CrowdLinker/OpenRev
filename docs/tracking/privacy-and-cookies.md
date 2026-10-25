@@ -24,7 +24,7 @@ OpenRev uses the IP address while it processes the request, for three things: ge
 
 ### Geolocation
 
-- **Node / Docker:** OpenRev looks up the IP in a local database file. By default it downloads the free [DB-IP](https://db-ip.com) Lite City database (CC BY 4.0) into its data folder on startup, and refreshes it when it's more than 35 days old. You can point it to your own DB-IP or MaxMind GeoLite2 `.mmdb` file, or turn off the download; see the [configuration options](../self-hosting/configuration.md). If no database is loaded, location headers from your host (Vercel, Netlify, CloudFront, Google Cloud, Cloudflare) are used when present.
+- **Node / Docker:** OpenRev looks up the IP in a local database file. By default it downloads the free [DB-IP](https://db-ip.com) Lite City database (CC BY 4.0) into its data folder when the server starts and the file is missing or more than 35 days old. You can point it to your own DB-IP or MaxMind GeoLite2 `.mmdb` file, or turn off the download; see the [configuration options](../self-hosting/configuration.md). If no database is loaded, location headers from your host (Vercel, Netlify, CloudFront, Google Cloud, Cloudflare) are used when present.
 - **Cloudflare Workers:** OpenRev uses the location Cloudflare attaches to each request.
 
 Either way, no IP address is sent to a third-party geolocation API.

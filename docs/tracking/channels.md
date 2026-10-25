@@ -27,15 +27,15 @@ Rules are checked in this order; the first match wins.
 
 | # | Channel | When |
 | --- | --- | --- |
-| 1 | **Paid Search** | Landing URL has `gclid`, `gbraid`, `wbraid` (Google Ads) or `msclkid` (Microsoft Ads); or a paid `utm_medium` (below) with a search engine source; or `utm_medium=paidsearch` / `paid_search` |
+| 1 | **Paid Search** | Landing URL has `gclid`, `gbraid`, `wbraid` (Google Ads) or `msclkid` (Microsoft Ads); or a paid `utm_medium` (below) with a search engine source; or `utm_medium=paidsearch` / `paid_search` / `paid-search` / `sem` (any source) |
 | 2 | **Paid Social** | Landing URL has `ttclid` (TikTok), `li_fat_id` (LinkedIn), `twclid` (X), `sccid` (Snapchat), `epik` (Pinterest) or `rdt_cid` (Reddit); or a paid `utm_medium` with a social source; or `utm_medium` like `paid_social`, `paid-social`, `paidsocial` |
 | 3 | **Display** | `utm_medium` is `display`, `banner`, `cpm` or `programmatic` |
 | 4 | **Paid Other** | Any other paid `utm_medium` |
 | 5 | **Affiliate** | `utm_medium` is `affiliate`, `affiliates`, `partner` or `referral_program` |
 | 6 | **Email** | `utm_medium` contains `email`, `e-mail` or `newsletter`; or `utm_source` is `newsletter` or `email`; or the referrer is webmail (Gmail, Outlook, Yahoo Mail, Proton Mail, Fastmail, iCloud Mail) |
-| 7 | **AI** | The referrer is an AI assistant: ChatGPT, Perplexity, Claude, Gemini, Copilot, DeepSeek, Grok, Meta AI, Mistral, Poe, You.com, Phind, Kimi, Qwen |
-| 8 | **Organic Search** | The referrer is a search engine (Google and its country domains, Bing, DuckDuckGo, Yahoo, Yandex, Baidu, Ecosia, Brave Search, Startpage, Qwant, Naver, Seznam, Sogou, Kagi, AOL, Ask, Mojeek, Daum); or `utm_source` is `google` or `bing`; or `utm_medium=organic` |
-| 9 | **Organic Social** | The referrer is a social network or community (X, Facebook, Instagram, LinkedIn, Reddit, Hacker News, YouTube, TikTok, Pinterest, Threads, Bluesky, Mastodon, Product Hunt, Indie Hackers, Discord, Telegram, WhatsApp, Slack, Medium, Quora, Dev.to, Stack Overflow…); or `utm_source` is `x`, `twitter`, `facebook`, `fb`, `instagram`, `ig`, `linkedin`, `reddit`, `youtube`, `tiktok`, `pinterest`, `threads` or `bluesky`; or `utm_medium` is `social`, `social-media`, `social_media`, `social-network` or `sm` |
+| 7 | **AI** | The referrer (or, without a referrer, the `utm_source`) is an AI assistant: ChatGPT, Perplexity, Claude, Gemini, Copilot, DeepSeek, Grok, Meta AI, Mistral, Poe, You.com, Phind, Kimi, Qwen — e.g. `utm_source=chatgpt.com` |
+| 8 | **Organic Search** | The referrer is a search engine (Google and its country domains, Bing, DuckDuckGo, Yahoo, Yandex, Baidu, Ecosia, Brave Search, Startpage, Qwant, Naver, Seznam, Sogou, Kagi, AOL, Ask, Mojeek, Daum); or `utm_source` names a search engine (`google`, `bing`, `duckduckgo`, `yahoo`… or its domain); or `utm_medium=organic` |
+| 9 | **Organic Social** | The referrer is a social network or community (X, Facebook, Instagram, LinkedIn, Reddit, Hacker News, YouTube, TikTok, Pinterest, Threads, Bluesky, Mastodon, Product Hunt, Indie Hackers, Discord, Telegram, WhatsApp, Slack, Medium, Quora, Dev.to, Stack Overflow…); or `utm_source` names one of them (`x`, `twitter`, `facebook`, `fb`, `instagram`, `ig`, `linkedin`, `reddit`, `hn`, `producthunt`, `youtube`, `tiktok`, `snapchat`, `pinterest`, `threads`, `bluesky`… or its domain); or `utm_medium` is `social`, `social-media`, `social_media`, `social-network` or `sm` |
 | 10 | **Referral** | Any other external referrer |
 | 11 | **Organic Social** | No referrer, but the visit opened in a social app's in-app browser |
 | 12 | **Referral** | No referrer, but the URL has a `utm_source` or a `ref` / `via` / `source` parameter |
@@ -67,8 +67,8 @@ https://example.com/pricing?utm_source=newsletter&utm_medium=email&utm_campaign=
 
 - Tag **paid** links with a paid `utm_medium`. Google Ads and Microsoft Ads auto-tagging (`gclid`, `msclkid`) is enough for those.
 - **Don't** tag links between pages of your own site. Within a session the tags are ignored, but if a visitor clicks one after 30 idle minutes, the new session takes your internal tags as its source.
-- Only the `utm_source` values listed in the channel table set a channel on their own. Others, like `producthunt` or `hn`, give a nice source name but land in **Referral** when the browser sends no referrer. Add `utm_medium=social` to count them as Organic Social.
-- AI assistants often add `utm_source=chatgpt.com` (or similar) to links. When the browser also sends the assistant as referrer, the visit is **AI**. Without a referrer it shows ChatGPT as the source, in the **Referral** channel.
+- A `utm_source` that names a known site (or is its domain, like `news.ycombinator.com`) sets the channel on its own. Unknown values land in **Referral** when the browser sends no referrer — add `utm_medium=social` (or `email`, `cpc`…) to choose the channel.
+- AI assistants often add `utm_source=chatgpt.com` (or similar) to links. The visit is **AI** whether or not the browser also sends the assistant as referrer.
 
 ## The `ref` parameter
 

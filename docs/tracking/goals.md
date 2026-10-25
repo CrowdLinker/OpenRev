@@ -101,13 +101,13 @@ curl -X POST "https://analytics.example.com/api/v1/goals" \
 | `name` | yes | Goal name (`goal` is accepted too). Same [naming rules](#naming-rules). |
 | `openrev_visitor_id` | yes | The visitor id. `visitor_id`, `visitorId` and `datafast_visitor_id` are accepted too. |
 | `metadata` | no | Properties (`props` or `properties` also work). Same [limits](#properties). |
-| `timestamp` | no | Unix time in milliseconds. Defaults to now. |
+| `timestamp` | no | Unix time (seconds or milliseconds) or an ISO 8601 date. Defaults to now. |
 
 Response: `201 {"status":"success","data":{"name":"onboarding_completed","visitor_id":"…"}}`. A missing or invalid key returns `401`, a bad name or visitor id `422`. Account-level API tokens also need `?websiteId=YOUR_WEBSITE_ID`. See the [API reference](../api/README.md).
 
 **Where to get the visitor id:** read the `openrev_visitor_id` cookie in the request your backend receives (the cookie is first-party on your domain), or send `openrev.visitorId()` from the browser along with the form. Save it on the user record if the goal happens later.
 
-The goal is attached to the visitor's most recent session, so it's credited to that session's source.
+The goal is attached to the visitor's most recent session, so it's credited to that session's source. The visitor must have at least one recorded visit (the tracking script ran for them); otherwise the API answers `422` instead of inventing a session that would distort your traffic stats.
 
 ## Naming rules
 
