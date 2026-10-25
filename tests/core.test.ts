@@ -5,7 +5,7 @@ import { ingestEvent, type RequestMeta } from "../src/server/services/ingest";
 import { recordPayment } from "../src/server/services/payments";
 import { invalidateSite, type Site } from "../src/server/services/sites";
 import * as stats from "../src/server/services/stats";
-import { testDb, testRuntime } from "./helpers";
+import { realPostgresDb, TEST_DATABASE_URL, testDb, testRuntime } from "./helpers";
 import { pgliteDb } from "./pglite";
 
 const CHROME = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
@@ -37,10 +37,13 @@ async function createSite(rt: Runtime, overrides: Partial<Site> = {}): Promise<S
 
 const meta = (ua = CHROME, country = "US"): RequestMeta => ({ ip: "1.2.3.4", userAgent: ua, geo: { country, city: "Boston", region: "Massachusetts" } });
 
-describe.each([
+const DATABASES: [string, () => Promise<import("../src/server/db/types").Database>][] = [
   ["sqlite", testDb],
-  ["postgres", pgliteDb],
-])("ingestion + stats (%s)", (_name, makeDb) => {
+  ["pglite", pgliteDb],
+  ...(TEST_DATABASE_URL ? ([["postgres", realPostgresDb]] as [string, () => Promise<import("../src/server/db/types").Database>][]) : []),
+];
+
+describe.each(DATABASES)("ingestion + stats (%s)", (_name, makeDb) => {
   beforeEach(async () => {
     rt = await testRuntime(await makeDb());
     site = await createSite(rt);

@@ -16,12 +16,13 @@ export function toPostgresPlaceholders(sql: string): string {
   return out;
 }
 
-export async function postgresDatabase(url: string): Promise<Database> {
+export async function postgresDatabase(url: string, opts: { schema?: string } = {}): Promise<Database> {
   const { default: postgres } = await import("postgres");
   const toNumber = (x: string) => (x === null ? null : Number(x));
   const sql = postgres(url, {
     max: Number(process.env.DATABASE_POOL_SIZE || 10),
     onnotice: () => {},
+    ...(opts.schema ? { connection: { search_path: opts.schema } } : {}),
     ssl: /sslmode=(require|verify)/.test(url) ? "require" : undefined,
     types: {
       // Return BIGINT / NUMERIC values as JS numbers (analytics counts fit easily).

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Typecheck, test & build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: openrev
+          POSTGRES_PASSWORD: openrev
+          POSTGRES_DB: openrev_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U openrev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: postgres://openrev:openrev@localhost:5432/openrev_test
+      - run: npm run build
+      - name: Smoke test the Node server
+        run: |
+          DATA_DIR=$RUNNER_TEMP/data GEOIP_AUTO_DOWNLOAD=false PORT=3000 node dist/server/node.js &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/api/health && break; sleep 1; done
+          curl -sf http://localhost:3000/js/script.js > /dev/null
+          curl -sf http://localhost:3000/ | grep -q '<div id="root">'
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: openrev:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

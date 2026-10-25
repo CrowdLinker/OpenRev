@@ -12,3 +12,4 @@ coverage/
 .DS_Store
 *.log
 /openrev-*.tgz
+.openrev.json

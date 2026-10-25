@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
 import { hmacHex } from "../src/server/lib/crypto";
-import { testDb, testRuntime } from "./helpers";
+import { realPostgresDb, TEST_DATABASE_URL, testDb, testRuntime } from "./helpers";
 import { pgliteDb } from "./pglite";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
@@ -33,10 +33,13 @@ async function call(path: string, init: { method?: string; body?: unknown; heade
   return { status: res.status, json, res };
 }
 
-describe.each([
+const DATABASES: [string, () => Promise<import("../src/server/db/types").Database>][] = [
   ["sqlite", testDb],
-  ["postgres", pgliteDb],
-])("HTTP API (%s)", (_name, makeDb) => {
+  ["pglite", pgliteDb],
+  ...(TEST_DATABASE_URL ? ([["postgres", realPostgresDb]] as [string, () => Promise<import("../src/server/db/types").Database>][]) : []),
+];
+
+describe.each(DATABASES)("HTTP API (%s)", (_name, makeDb) => {
   let siteId = "";
   let apiKey = "";
 

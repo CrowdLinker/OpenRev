@@ -19,13 +19,14 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build && node scripts/build-tracker.mjs",
     "build:server": "node scripts/build-server.mjs",
-    "start": "node dist/server/node.js",
+    "start": "node --env-file-if-exists=.env dist/server/node.js",
     "deploy": "npm run build:client && wrangler deploy",
     "setup": "node scripts/setup.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "update": "node scripts/setup.mjs update"
   },
   "cloudflare": {
     "bindings": {
