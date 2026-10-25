@@ -231,4 +231,33 @@ describe("account password checks", () => {
     }
     expect((await user("/api/account/password", { body: { current: "supersecret", password: "newsecret1" } })).status).toBe(429);
   });
+
+  it("counts concurrent guesses toward the limits", async () => {
+    rt = await testRuntime();
+    app = createApp(() => rt);
+    const user = client();
+    await user("/api/auth/signup", { body: { email: "burst@example.com", password: "supersecret" } });
+    const guesses = await Promise.all(
+      Array.from({ length: 25 }, () => user("/api/account/password", { body: { current: "wrong-guess", password: "newsecret1" } })),
+    );
+    expect(guesses.filter((r) => r.status === 400)).toHaveLength(10);
+    expect(guesses.filter((r) => r.status === 429)).toHaveLength(15);
+
+    const anon = client();
+    const logins = await Promise.all(
+      Array.from({ length: 25 }, () => anon("/api/auth/login", { body: { email: "burst@example.com", password: "wrong-password" } })),
+    );
+    expect(logins.filter((r) => r.status === 401)).toHaveLength(10);
+    expect(logins.filter((r) => r.status === 429)).toHaveLength(15);
+  });
+
+  it("doesn't count successful logins toward the limits", async () => {
+    rt = await testRuntime();
+    app = createApp(() => rt);
+    const anon = client();
+    await anon("/api/auth/signup", { body: { email: "often@example.com", password: "supersecret" } });
+    for (let i = 0; i < 25; i++) {
+      expect((await anon("/api/auth/login", { body: { email: "often@example.com", password: "supersecret" } })).status).toBe(200);
+    }
+  });
 });

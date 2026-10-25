@@ -49,6 +49,12 @@ function record(key: string) {
   }
 }
 
+/** Gives back an attempt reserved with `record` (used when the attempt succeeds). */
+function release(key: string) {
+  const a = attempts.get(key);
+  if (a && --a.n <= 0) attempts.delete(key);
+}
+
 function tooMany(): never {
   fail(429, "Too many attempts. Try again in a few minutes.");
 }
@@ -57,9 +63,11 @@ function tooMany(): never {
 async function checkCurrentPassword(db: Database, userId: string, password: string | undefined): Promise<boolean> {
   const key = "account-password:" + userId;
   if (limited(key, 10)) tooMany();
+  // Count the attempt before the first await so concurrent guesses can't all pass the check; give it back on success.
+  record(key);
   const row = await db.first<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = ?", [userId]);
   const ok = !!row && !!password && (await verifyPassword(password, row.password_hash));
-  if (!ok) record(key);
+  if (ok) release(key);
   return ok;
 }
 
@@ -127,12 +135,13 @@ export function authRoutes() {
     const ipKey = "login-ip:" + (getPeerIp(c) ?? "unknown");
     const emailKey = "login-email:" + String(body.email).trim().toLowerCase();
     if (limited(ipKey, 20) || limited(emailKey, 10)) tooMany();
+    // Count the attempt before the first await so concurrent guesses can't all pass the check; give it back on success.
+    record(ipKey);
+    record(emailKey);
     const user = await authenticate(rt.db, body.email, body.password);
-    if (!user) {
-      record(ipKey);
-      record(emailKey);
-      fail(401, "Invalid email or password");
-    }
+    if (!user) fail(401, "Invalid email or password");
+    release(ipKey);
+    release(emailKey);
     await startSession(c, user.id);
     return c.json({ user });
   });
