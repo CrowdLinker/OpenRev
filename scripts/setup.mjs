@@ -236,7 +236,8 @@ function readEnv() {
 function quoteEnv(v, key) {
   if (/^[\w.:/@%+,=?&-]*$/.test(v)) return v;
   if (/[\r\n]/.test(v)) {
-    if (v.includes('"') || v.includes("\\n")) throw new Error(`The value of ${key} can't be stored in .env`);
+    // A carriage return wouldn't survive the round trip, so only plain \n line breaks are stored.
+    if (v.includes("\r") || v.includes('"') || v.includes("\\n")) throw new Error(`The value of ${key} can't be stored in .env`);
     return `"${v.replace(/\r?\n/g, "\\n")}"`;
   }
   // Inside double quotes Node turns a literal \n into a newline, so those values can't use them.
