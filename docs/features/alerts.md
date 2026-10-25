@@ -32,7 +32,7 @@ Use **Send test** to check a destination. The last 50 deliveries (and errors) ar
 
 Events: `payment.created`, `payment.refunded`, `goal.completed`, `traffic.spike`, `digest`, `test`. Use it with Zapier, Make, n8n or your own backend.
 
-Slack, Discord and webhook URLs must be public `https://` URLs. `localhost`, internal hostnames (single-label names, `.local`, `.internal`, `.lan`…) and private, loopback or link-local IP addresses are rejected when you save the alert and again before each delivery; on Node/Docker, OpenRev also resolves the hostname before sending and refuses names that point to such addresses. Redirects aren't followed (a `3xx` response counts as an error), deliveries time out after 10 seconds, and errors from your own webhook show only the HTTP status. Telegram bot tokens are checked against BotFather's `<digits>:<key>` format.
+Slack, Discord and webhook URLs must be public `https://` URLs. `localhost`, internal hostnames (single-label names, `.local`, `.internal`, `.lan`…) and private, loopback or link-local IP addresses are rejected when you save the alert and again before each delivery; on Node/Docker, OpenRev also refuses hostnames that resolve to such addresses and connects to the address it checked. Redirects aren't followed (a `3xx` response counts as an error), deliveries time out after 10 seconds, and errors from your own webhook show only the HTTP status. Telegram bot tokens are checked against BotFather's `<digits>:<key>` format.
 
 Text that comes from visitors (names, sources, pages…) is escaped in Slack and Discord messages, so it can't add formatting or masked links, and it can't ping the channel: Slack's `<!channel>` syntax is escaped and Discord mentions are disabled.
 

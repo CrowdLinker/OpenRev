@@ -43,7 +43,7 @@ Nothing to do. When a visitor clicks a `https://<store>.lemonsqueezy.com/checkou
 ?checkout[custom][openrev_visitor_id]=<visitor id>&checkout[custom][openrev_session_id]=<session id>
 ```
 
-`/checkout/buy/…` links on a custom checkout domain are tagged too, unless that domain is your site's own domain or one of its subdomains (e.g. `pay.example.com` when you track `example.com`). In that case, or if you open checkouts from JavaScript (`LemonSqueezy.Url.Open(url)`), add the parameters yourself:
+Links aren't tagged when `data-disable-payments` is set, or in [cookieless mode](../tracking/privacy-and-cookies.md#cookieless-mode), where there is no visitor id. With those exceptions, `/checkout/buy/…` links on a custom checkout domain are tagged too, unless that domain is your site's own domain or one of its subdomains (e.g. `pay.example.com` when you track `example.com`). In that case, or if you open checkouts from JavaScript (`LemonSqueezy.Url.Open(url)`), add the parameters yourself:
 
 ```js
 const url = new URL("https://yourstore.lemonsqueezy.com/checkout/buy/VARIANT_ID");

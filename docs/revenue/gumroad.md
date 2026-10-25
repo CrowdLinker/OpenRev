@@ -37,7 +37,7 @@ Gumroad returns any query parameters of the product URL in the ping's `url_param
 
 ### Product links and the Gumroad overlay
 
-Nothing to do for links to `gumroad.com` (e.g. `https://you.gumroad.com/l/product`) or short `gum.co` links: when a visitor clicks one, the tracker adds `?openrev_visitor_id=<visitor id>`. The `gumroad.js` overlay and embed open the link's URL, so the parameter is passed along.
+Nothing to do for links to `gumroad.com` (e.g. `https://you.gumroad.com/l/product`) or short `gum.co` links: when a visitor clicks one, the tracker adds `?openrev_visitor_id=<visitor id>`. The `gumroad.js` overlay and embed open the link's URL, so the parameter is passed along. Links aren't tagged when `data-disable-payments` is set, or in [cookieless mode](../tracking/privacy-and-cookies.md#cookieless-mode), where there is no visitor id.
 
 Links on a custom domain are not tagged automatically. Use the `gumroad.com` URL, or add the parameter yourself:
 

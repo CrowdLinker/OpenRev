@@ -53,7 +53,7 @@ The script defines `window.openrev`. It also defines `window.datafast` with the 
 | `openrev("goal_name")` | Records a custom goal. See [Goals](goals.md). |
 | `openrev("goal_name", { key: "value" })` | Goal with up to 10 custom properties. |
 | `openrev("identify", { user_id, email, name, image, ...props })` | Attaches a user to the current visitor. See [Identify users](identify.md). |
-| `openrev("payment", { email })` | Tells OpenRev this visitor just paid with this email, so the payment can be matched when the provider reports it (a payment OpenRev already received is only linked if it's less than 2 hours old). Also accepts `ref` (or `transaction_id`): the checkout reference your provider reports, such as a Stripe Checkout Session id. |
+| `openrev("payment", { email })` | Tells OpenRev this visitor just paid with this email, so the payment can be matched when the provider reports it (a payment OpenRev already received is only linked if it's less than 2 hours old). Also accepts `ref`: the checkout reference your provider reports, such as a Stripe Checkout Session id. `transaction_id` is an alias, sent as `ref`. |
 | `openrev("pageview")` | Sends a pageview for the current URL, even if it was already counted. Only needed when your router doesn't use the History API. |
 | `openrev.visitorId()` | Returns the visitor id (also `openrev.getVisitorId()`). Returns `null` in cookieless mode. |
 | `openrev.sessionId()` | Returns the session id (also `openrev.getSessionId()`). |
@@ -163,7 +163,7 @@ The script sends `POST` requests to `/api/events` (`/api/event` is accepted as a
 | `engagedMs` | `engagement` | Visible time on the page |
 | `url` | `outbound` | Destination |
 | `userId`, `email`, `name`, `image`, `props` | `identify` | User data |
-| `email`, `ref`, `provider` | `payment` | Payment hints |
+| `email`, `ref`, `provider` | `payment` | Payment hints. `ref` is the checkout reference (`transaction_id` in `openrev("payment")` is sent as `ref`) |
 
 Responses:
 

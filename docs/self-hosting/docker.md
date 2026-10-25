@@ -10,7 +10,7 @@ Image: `ghcr.io/crowdlinker/openrev:latest` (linux/amd64 and linux/arm64), built
 curl -fsSL https://raw.githubusercontent.com/CrowdLinker/OpenRev/main/install.sh | bash -s -- --target docker
 ```
 
-The wizard asks for your public URL, port and database (SQLite or bundled PostgreSQL), writes `.env` with a random `OPENREV_SECRET`, and runs `docker compose up -d`. `.env` and `.openrev.json` (the wizard's answers, used by `npm run update`) are created readable by your user only (mode `0600`).
+The wizard asks for your public URL, port and database (SQLite or bundled PostgreSQL), writes `.env` with a random `OPENREV_SECRET`, and runs `docker compose up -d`. `.env` and `.openrev.json` (the wizard's answers, used by `npm run update`) are created readable by your user only (mode `0600`). Values containing `#`, spaces or quotes, such as a database password, are quoted in `.env` so they're read back unchanged.
 
 ## docker run
 
@@ -67,7 +67,7 @@ server {
 }
 ```
 
-OpenRev reads the visitor IP from `X-Forwarded-For` (set `TRUST_PROXY=false` if the container is exposed directly to the internet without a proxy). Behind Cloudflare's proxy, the `CF-Connecting-IP` and `CF-IPCountry` headers are used automatically. Login rate limits use the connection's address, or, when the connection comes from a private or loopback address (a proxy on the same host or Docker network), the address that proxy appends (the last `X-Forwarded-For` entry). If another proxy such as Cloudflare sits in front of Nginx, set up Nginx's `realip` module so that address is the visitor's.
+OpenRev reads the visitor IP from `X-Forwarded-For` (set `TRUST_PROXY=false` if the container is exposed directly to the internet without a proxy). Behind Cloudflare's proxy, the `CF-Connecting-IP` and `CF-IPCountry` headers are used automatically. Login rate limits use the connection's address, or, when the connection comes from a private or loopback address (a proxy on the same host or Docker network), the address that proxy appends (the last `X-Forwarded-For` entry). If untrusted clients can also reach the container from the same private network, set `TRUST_PROXY` to the address your proxy connects from (for example `TRUST_PROXY=172.18.0.1`, or a CIDR such as `10.0.0.0/24`; separate several with commas) so only that proxy is trusted. If another proxy such as Cloudflare sits in front of Nginx, set up Nginx's `realip` module so that address is the visitor's.
 
 ## Geolocation
 

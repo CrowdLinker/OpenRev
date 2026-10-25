@@ -274,7 +274,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+// REMOTE_ADDR is the visitor when browsers connect to PHP directly.
 $ip = $_SERVER['REMOTE_ADDR'];
+
+// Behind a reverse proxy you run (Nginx, a load balancer), list the address it connects from. For requests
+// from that proxy only, the visitor is the last X-Forwarded-For entry, the one the proxy appended.
+$trustedProxies = []; // e.g. ['127.0.0.1', '10.0.0.5']
+if (in_array($ip, $trustedProxies, true) && !empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+    $hops = array_map('trim', explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']));
+    $ip = end($hops) ?: $ip;
+}
+
 // Behind Cloudflare, REMOTE_ADDR is Cloudflare's IP and the visitor is in CF-Connecting-IP. Read it only if
 // your server accepts traffic from Cloudflare alone: anyone reaching the server directly can set the header.
 // $ip = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['REMOTE_ADDR'];

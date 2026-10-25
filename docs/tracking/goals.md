@@ -156,7 +156,7 @@ The **Funnels** page shows how many visitors go from one step to the next, for e
 
 ## Reserved goals from payment providers
 
-When a payment provider is connected, OpenRev records these goals automatically from its webhooks, as long as it can find the visitor:
+When a payment provider is connected, OpenRev records these goals automatically from its webhooks, as long as it can find the visitor: from the event's visitor id, the provider's customer, the checkout reference, or the customer's email when exactly one visitor has that email (if several visitors claim it, the goal isn't recorded):
 
 | Goal | Meaning | Providers |
 | --- | --- | --- |

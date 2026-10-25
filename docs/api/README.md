@@ -80,7 +80,7 @@ or shorthand params `filter_<dimension>=<value>` (`filter_source=Google`, `filte
 }
 ```
 
-`conversion_rate` = visitors who made a first purchase ÷ visitors (renewals are excluded). `revenue_per_visitor` = revenue ÷ visitors. In `range`, `from` and `to` are epoch milliseconds and `to` is exclusive. Add `compare=0` to skip the previous period.
+`conversion_rate` = visitors who made a first purchase ÷ visitors (renewals are excluded). `revenue_per_visitor` = revenue ÷ visitors. `kpi` is `null` unless the website has a [#1 KPI](../tracking/goals.md#1-kpi) goal; then `kpi.conversions` = completions of that goal in the range, `kpi.visitors` = distinct visitors who completed it, and `kpi.conversion_rate` = `kpi.visitors` ÷ `visitors`. In `range`, `from` and `to` are epoch milliseconds and `to` is exclusive. Add `compare=0` to skip the previous period.
 
 ### `GET /analytics/timeseries`
 
