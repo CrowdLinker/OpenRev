@@ -39,6 +39,15 @@ export function createApp(resolveRuntime: (c: Context) => Runtime | Promise<Runt
     return c.json({ error: "Internal server error" }, 500);
   });
 
+  // Basic hardening for every response (dashboard assets on Cloudflare get the same from _headers). Public share
+  // pages may be embedded in other sites, so only they can be framed.
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    if (!c.req.path.startsWith("/share/")) c.header("X-Frame-Options", "DENY");
+  });
+
   app.use("*", async (c, next) => {
     const rt = await resolveRuntime(c);
     c.set("rt", rt);

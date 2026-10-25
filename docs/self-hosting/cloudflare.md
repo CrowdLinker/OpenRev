@@ -44,7 +44,7 @@ Open the URL and create your admin account. Database migrations run automaticall
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/CrowdLinker/OpenRev)
 
-Cloudflare copies the repository to your GitHub/GitLab account, provisions the D1 database, prompts for `OPENREV_SECRET` (generate one with `openssl rand -hex 32`) and sets up Workers Builds so every push to your copy redeploys automatically.
+Cloudflare copies the repository to your GitHub/GitLab account, provisions the D1 database, prompts for `OPENREV_SECRET` (generate one with `openssl rand -hex 32` and keep a copy: changing it later means re-entering your payment-provider keys) and sets up Workers Builds so every push to your copy redeploys automatically.
 
 ## Option 3 — manually
 
