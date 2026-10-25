@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in OpenRev doesn't work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Found a security vulnerability? Please don't open an issue: report it privately as described in [SECURITY.md](https://github.com/CrowdLinker/OpenRev/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Where does it run?
+      options:
+        - Cloudflare Workers
+        - Docker
+        - Node.js
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options:
+        - Cloudflare D1
+        - SQLite
+        - PostgreSQL
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The commit you deployed, or the Docker image tag.
+      placeholder: e.g. main at 7576259, or ghcr.io/crowdlinker/openrev:latest
+  - type: input
+    id: provider
+    attributes:
+      label: Payment provider (for revenue issues)
+      placeholder: e.g. Stripe, Paddle, custom webhook
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Server logs, browser console errors or screenshots. Remove secrets, emails and other personal data first.
+      render: shell

@@ -16,7 +16,7 @@ See which channels, pages and campaigns actually make you money, on infrastructu
 [![Runs on Cloudflare, Docker and Node.js](https://img.shields.io/badge/runs%20on-Cloudflare%20%C2%B7%20Docker%20%C2%B7%20Node.js-18181b.svg)](#-self-hosting)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-5b4cf5.svg)](CONTRIBUTING.md)
 
-[**Quick start**](#-quick-start) · [Product tour](#-product-tour) · [Payment providers](#-connect-any-payment-provider) · [API & MCP](#-for-developers-and-ai-agents) · [Docs](docs/README.md)
+[**Quick start**](#-quick-start) · [Website](https://openrev.si) · [Product tour](#-product-tour) · [Payment providers](#-connect-any-payment-provider) · [API & MCP](#-for-developers-and-ai-agents) · [Docs](docs/README.md)
 
 <br />
 
@@ -302,7 +302,8 @@ Migrations run on start-up, and IP geolocation works out of the box (from Cloudf
 | Alerts | Slack, Discord, Telegram, email, webhooks | Email | Telegram |
 | API and MCP server | ✅ | ✅ | Read-only |
 
-<sub>Based on each product's public website in October 2026. Moving over? Follow the [DataFast migration guide](docs/guides/migrate-from-datafast.md).</sub>
+<sub>Based on each product's public website in October 2026. The [full comparison](https://openrev.si/compare) covers
+Plausible, Fathom, Umami, PostHog, Google Analytics and more, with sources. Moving over? Follow the [DataFast migration guide](docs/guides/migrate-from-datafast.md).</sub>
 
 ## 🏗️ Architecture
 

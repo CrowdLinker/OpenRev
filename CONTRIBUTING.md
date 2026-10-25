@@ -46,7 +46,8 @@ Small, focused PRs with a clear description. Include tests for behaviour changes
 publishing, so no npm token is stored anywhere, and every release needs a maintainer's 2FA:
 
 1. Bump `version` in `packages/create-openrev/package.json` and merge the PR.
-2. Run the workflow from the Actions tab on `main`, or push a `v*` tag. It stages the release with `npm stage publish`.
+2. Run the workflow from the Actions tab on `main`. It stages the release with `npm stage publish`. It doesn't run on
+   tags, so publishing an OpenRev release (`v0.1.0`, ...) never republishes the installer.
 3. A package maintainer approves the staged version on npmjs.com (create-openrev → Staged Packages) with 2FA. It goes
    public with a provenance attestation that links it to the workflow run.
 
