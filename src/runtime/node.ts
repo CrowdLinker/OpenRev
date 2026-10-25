@@ -143,6 +143,8 @@ function staticFiles(root: string): MiddlewareHandler<AppEnv> {
   const indexPath = join(root, "index.html");
   return async (c, next) => {
     if (c.req.method !== "GET" && c.req.method !== "HEAD") return next();
+    // Cloudflare's header rules for the same files, not something to serve.
+    if (c.req.path === "/_headers") return c.text("Not found", 404);
     const res = await assets(c, async () => {});
     if (res) return res;
     // SPA fallback

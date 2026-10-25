@@ -1,0 +1,10 @@
+# Response headers for the dashboard and tracking script served by Cloudflare Workers Static Assets.
+# The Worker sets the same headers on API responses and on Node.js (src/server/app.ts).
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+
+# Public share pages may be embedded in other sites.
+/share/*
+  ! X-Frame-Options

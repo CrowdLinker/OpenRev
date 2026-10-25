@@ -7,6 +7,17 @@ import { resolve } from "node:path";
 const REPO = process.env.OPENREV_REPO || "https://github.com/CrowdLinker/OpenRev.git";
 const BRANCH = process.env.OPENREV_BRANCH || "main";
 const argv = process.argv.slice(2);
+
+if (argv.includes("--help") || argv.includes("-h")) {
+  const usage = `Usage: npm create openrev@latest [folder] [-- --target cloudflare|docker|node] [--name <name>] [--yes]
+
+Downloads OpenRev into ./[folder] (default: openrev), installs its dependencies and runs the setup wizard.
+Docs: https://github.com/CrowdLinker/OpenRev#-quick-start
+`;
+  // Wait for the write so piped output isn't cut off by the exit.
+  await new Promise((done) => process.stdout.write(usage, done));
+  process.exit(0);
+}
 const dir = argv[0] && !argv[0].startsWith("-") ? argv.shift() : "openrev";
 const target = resolve(dir);
 

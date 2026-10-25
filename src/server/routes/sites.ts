@@ -387,7 +387,9 @@ export function siteRoutes() {
     if (!row) fail(404, "Integration not found");
     const provider = getProvider(row.provider);
     const body = await readJson<{ name?: string; enabled?: boolean; config?: Record<string, string> }>(c);
-    const config = await decryptConfig(rt, row.config);
+    // Unreadable settings (OPENREV_SECRET changed) start empty, so re-entering the keys repairs the integration.
+    const decrypted = await decryptConfig(rt, row);
+    const config = decrypted ?? {};
     if (body.config && provider) {
       for (const f of provider.fields) {
         const v = body.config[f.key];
@@ -398,10 +400,11 @@ export function siteRoutes() {
         else delete config[f.key];
       }
     }
-    await rt.db.run("UPDATE integrations SET name = ?, enabled = ?, config = ? WHERE id = ?", [
+    await rt.db.run("UPDATE integrations SET name = ?, enabled = ?, config = ?, last_error = ? WHERE id = ?", [
       body.name?.trim() || row.name,
       body.enabled === undefined ? row.enabled : body.enabled ? 1 : 0,
       await encryptConfig(rt, config),
+      decrypted ? row.last_error : null,
       row.id,
     ]);
     const updated = (await rt.db.first<IntegrationRow>("SELECT * FROM integrations WHERE id = ?", [row.id]))!;

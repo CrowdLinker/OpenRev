@@ -5,7 +5,7 @@
 | Variable | Default | Description |
 |---|---|---|
 | `PUBLIC_URL` | derived from requests | Public URL of the instance, used in alert links, emails and webhook URLs shown in the dashboard. |
-| `OPENREV_SECRET` | generated & stored in the DB | Key used to encrypt payment-provider credentials (AES-GCM). Set it explicitly so a database dump alone can't reveal credentials. |
+| `OPENREV_SECRET` | generated & stored in the DB | Key used to encrypt payment-provider credentials (AES-GCM). Set it explicitly so a database dump alone can't reveal credentials, and keep it: if you set it later, keys saved with the generated secret are still read and re-encrypted, but keys saved with a previous `OPENREV_SECRET` can't be read and must be re-entered in **Settings → Revenue**. |
 | `PORT` | `3000` | HTTP port. |
 | `HOST` | `0.0.0.0` | Interface to bind. |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Directory for the SQLite database and the geolocation database. |

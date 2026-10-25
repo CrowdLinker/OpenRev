@@ -34,7 +34,7 @@
         "description": "D1 database that stores your analytics data. It is created automatically."
       },
       "OPENREV_SECRET": {
-        "description": "A long random string used to encrypt provider secrets and sign tokens. Generate one with `openssl rand -hex 32`."
+        "description": "A long random string used to encrypt payment-provider keys. Generate one with `openssl rand -hex 32` and keep a copy: if it changes later, provider keys must be re-entered."
       }
     }
   },
