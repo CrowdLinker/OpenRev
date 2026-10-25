@@ -44,6 +44,17 @@ export function statsRoutes() {
     return c.json({ properties: await stats.goalProperties(c.get("rt").db, q, c.req.param("goal")) });
   });
 
+  /** Lightweight "visitors online" counter for the dashboard header. */
+  app.get("/live", async (c) => {
+    const row = await c
+      .get("rt")
+      .db.first<{ visitors: number }>("SELECT COUNT(DISTINCT visitor_id) AS visitors FROM sessions WHERE site_id = ? AND last_seen_at > ?", [
+        c.get("site").id,
+        Date.now() - stats.REALTIME_WINDOW,
+      ]);
+    return c.json({ visitors: Number(row?.visitors ?? 0) });
+  });
+
   app.get("/realtime", async (c) => {
     const data = await stats.realtime(c.get("rt").db, c.get("site"));
     if (c.get("isPublic")) {

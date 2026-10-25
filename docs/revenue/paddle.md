@@ -5,7 +5,7 @@ OpenRev supports **Paddle Billing** (the current Paddle platform with `txn_…` 
 ## 1. Connect Paddle in OpenRev
 
 1. Open **Settings → Revenue → Connect → Paddle** in OpenRev.
-2. The **Webhook secret key** is created by Paddle in the next step. Type a placeholder for now, click **Connect**, and copy the webhook URL:
+2. The **Webhook secret key** is created by Paddle in the next step. Leave it empty for now, click **Connect**, and copy the webhook URL:
 
    ```
    https://YOUR-OPENREV-DOMAIN/api/webhooks/<integration-id>

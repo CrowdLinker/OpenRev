@@ -349,7 +349,7 @@ export function DashboardPage() {
   const overview = useApi<Overview>(`${statsBase}/overview?${search}`);
   const series = useApi<Timeseries>(`${statsBase}/timeseries?${search}`);
   const notes = useApi<{ notes: Note[] }>(`${statsBase}/notes?${search}`);
-  const realtime = useApi<{ visitors: number }>(`${statsBase}/realtime`, { poll: 15000 });
+  const realtime = useApi<{ visitors: number }>(`${statsBase}/live`, { poll: 15000 });
   const showRevenue = !(meta?.site.hideRevenue ?? site?.settings.hideRevenue);
   const currency = overview.data?.currency ?? meta?.site.currency ?? "USD";
   const effectiveMetric = !showRevenue && (metric === "conversion_rate" || metric === "revenue_per_visitor") ? "visitors" : metric === "conversions" && !overview.data?.current.kpi ? "visitors" : metric;

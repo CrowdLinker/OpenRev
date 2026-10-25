@@ -5,7 +5,7 @@ OpenRev records Creem one-time payments, subscription payments (first charge and
 ## 1. Connect Creem in OpenRev
 
 1. Open **Settings → Revenue → Connect → Creem** in OpenRev.
-2. Paste your Creem **webhook signing secret** (Creem → **Developers → Webhooks**). If you create the webhook first, type a placeholder, click **Connect**, and use **Edit** later.
+2. Paste your Creem **webhook signing secret** (Creem → **Developers → Webhooks**). If you create the webhook first, leave it empty, click **Connect**, and add it later with **Edit**.
 3. Copy the webhook URL:
 
    ```

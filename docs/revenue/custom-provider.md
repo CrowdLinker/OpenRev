@@ -27,7 +27,7 @@ Configure your provider to POST JSON (or `application/x-www-form-urlencoded`) ev
 | **Signature encoding** | `hex` (default; compared case-insensitively) or `base64`. |
 | **Signature prefix** | Text to strip before comparing, e.g. `sha256=` for GitHub-style `X-Hub-Signature-256: sha256=<hex>`. |
 | **Signing secret** | The shared secret. |
-| **URL token** | Required when the algorithm is **None**: add `?token=<value>` to the webhook URL. If set together with an algorithm, both the token and the signature must match. |
+| **URL token** | Leave empty to let OpenRev generate one — the webhook URL shown in the dashboard already includes `?token=<value>`. Required when the algorithm is **None**; with an algorithm, both the token and the signature must match. |
 
 Signatures are compared in constant time. Schemes that sign something other than the raw body (for example `timestamp.body`) are not supported by the custom integration — use a built-in adapter (Option 3) for those.
 

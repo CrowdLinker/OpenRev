@@ -5,7 +5,7 @@ OpenRev records Dodo Payments one-time payments, subscription payments (first ch
 ## 1. Connect Dodo Payments in OpenRev
 
 1. Open **Settings → Revenue → Connect → Dodo Payments** in OpenRev.
-2. Dodo generates the signing secret in the next step. Type a placeholder, click **Connect**, and copy the webhook URL:
+2. Dodo generates the signing secret in the next step. Leave it empty, click **Connect**, and copy the webhook URL:
 
    ```
    https://YOUR-OPENREV-DOMAIN/api/webhooks/<integration-id>

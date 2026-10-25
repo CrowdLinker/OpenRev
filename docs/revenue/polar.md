@@ -5,7 +5,7 @@ OpenRev records Polar orders — one-time purchases, subscription first payments
 ## 1. Connect Polar in OpenRev
 
 1. Open **Settings → Revenue → Connect → Polar** in OpenRev.
-2. Polar generates the webhook secret in the next step. Type a placeholder, click **Connect**, and copy the webhook URL:
+2. Polar generates the webhook secret in the next step. Leave it empty, click **Connect**, and copy the webhook URL:
 
    ```
    https://YOUR-OPENREV-DOMAIN/api/webhooks/<integration-id>

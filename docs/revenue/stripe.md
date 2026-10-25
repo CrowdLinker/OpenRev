@@ -5,7 +5,7 @@ OpenRev records Stripe Checkout Sessions, Payment Links, subscriptions (first pa
 ## 1. Connect Stripe in OpenRev
 
 1. Open your website in OpenRev and go to **Settings → Revenue → Connect → Stripe**.
-2. Paste the **webhook signing secret** (`whsec_…`). If you have not created the Stripe endpoint yet, type a placeholder, click **Connect**, and come back to **Edit** once you have the real secret.
+2. Paste the **webhook signing secret** (`whsec_…`). If you have not created the Stripe endpoint yet, leave it empty, click **Connect**, and come back to **Edit** once you have the real secret.
 3. Copy the webhook URL OpenRev shows. It looks like:
 
    ```

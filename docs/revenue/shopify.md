@@ -15,7 +15,7 @@ On storefront pages the script detects Shopify and stores the visitor id as **ca
 ## 2. Connect Shopify in OpenRev
 
 1. Open **Settings → Revenue → Connect → Shopify**.
-2. Paste the **webhook signing secret** (see below). If you have not created a webhook yet, type a placeholder, click **Connect**, and come back to **Edit**.
+2. Paste the **webhook signing secret** (see below). If you have not created a webhook yet, leave it empty, click **Connect**, and come back to **Edit**.
 3. Copy the webhook URL:
 
    ```

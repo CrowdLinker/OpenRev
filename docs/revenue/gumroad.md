@@ -6,9 +6,8 @@ OpenRev records Gumroad sales and membership renewals (and, optionally, refunds)
 
 Gumroad does not sign its webhooks, so OpenRev protects the endpoint with a secret token in the URL.
 
-1. Generate a long random token, e.g. `openssl rand -hex 24`.
-2. In OpenRev open **Settings → Revenue → Connect → Gumroad** and paste it as **Webhook token**.
-3. Copy the webhook URL and append the token:
+1. In OpenRev open **Settings → Revenue → Connect → Gumroad**. Leave **Webhook token** empty to have OpenRev generate a long random token (or paste your own, e.g. from `openssl rand -hex 24`).
+2. Copy the webhook URL OpenRev shows — it already includes the token:
 
    ```
    https://YOUR-OPENREV-DOMAIN/api/webhooks/<integration-id>?token=<your token>

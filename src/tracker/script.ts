@@ -317,11 +317,11 @@ interface Payload {
       if (/(^|\.)buy\.stripe\.com$/.test(host) && !url.searchParams.has("client_reference_id")) {
         url.searchParams.set("client_reference_id", vid);
         changed = true;
-      } else if (/lemonsqueezy\.com$/.test(host) && /\/checkout/.test(url.pathname) && !url.searchParams.has("checkout[custom][openrev_visitor_id]")) {
+      } else if ((/lemonsqueezy\.com$/.test(host) || /^\/checkout\/buy\//.test(url.pathname)) && /\/checkout/.test(url.pathname) && !url.searchParams.has("checkout[custom][openrev_visitor_id]")) {
         url.searchParams.set("checkout[custom][openrev_visitor_id]", vid);
         url.searchParams.set("checkout[custom][openrev_session_id]", sid);
         changed = true;
-      } else if (/(^|\.)gumroad\.com$/.test(host) && !url.searchParams.has("openrev_visitor_id")) {
+      } else if ((/(^|\.)gumroad\.com$/.test(host) || host === "gum.co") && !url.searchParams.has("openrev_visitor_id")) {
         url.searchParams.set("openrev_visitor_id", vid);
         changed = true;
       }
