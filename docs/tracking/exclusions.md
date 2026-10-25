@@ -33,7 +33,7 @@ The same instructions are in **Settings → Exclusions**.
 | Rule | Format | Examples |
 | --- | --- | --- |
 | IP addresses | Exact IP, a prefix ending in `*`, or IPv4 CIDR | `203.0.113.4`, `192.168.*`, `10.0.0.0/8`, `2001:db8:*` |
-| Paths | Exact path, `*` for one path segment, `**` for anything. A pattern ending in `/*` also matches deeper paths. | `/admin/*`, `/preview/**`, `/blog/*/edit` |
+| Paths | Exact path, `*` for one path segment, `**` for anything. A pattern ending in `/*` also matches deeper paths. Up to 300 characters per pattern. | `/admin/*`, `/preview/**`, `/blog/*/edit` |
 | Countries | Two-letter ISO country codes | `RU`, `CN` |
 | Hostnames | Exact hostname, without `www.` | `staging.example.com` |
 

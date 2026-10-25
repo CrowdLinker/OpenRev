@@ -53,7 +53,7 @@ The script defines `window.openrev`. It also defines `window.datafast` with the 
 | `openrev("goal_name")` | Records a custom goal. See [Goals](goals.md). |
 | `openrev("goal_name", { key: "value" })` | Goal with up to 10 custom properties. |
 | `openrev("identify", { user_id, email, name, image, ...props })` | Attaches a user to the current visitor. See [Identify users](identify.md). |
-| `openrev("payment", { email })` | Tells OpenRev this visitor just paid with this email, so the payment can be matched when the provider reports it. Also accepts `ref` (or `transaction_id`): the checkout reference your provider reports, such as a Stripe Checkout Session id. |
+| `openrev("payment", { email })` | Tells OpenRev this visitor just paid with this email, so the payment can be matched when the provider reports it (a payment OpenRev already received is only linked if it's less than 2 hours old). Also accepts `ref` (or `transaction_id`): the checkout reference your provider reports, such as a Stripe Checkout Session id. |
 | `openrev("pageview")` | Sends a pageview for the current URL, even if it was already counted. Only needed when your router doesn't use the History API. |
 | `openrev.visitorId()` | Returns the visitor id (also `openrev.getVisitorId()`). Returns `null` in cookieless mode. |
 | `openrev.sessionId()` | Returns the session id (also `openrev.getSessionId()`). |
@@ -115,7 +115,7 @@ Cookies are first-party, `SameSite=Lax`, `Secure` on HTTPS, and set on `.example
 
 If there's no `openrev_visitor_id` / `openrev_session_id` cookie yet, the script adopts the value of DataFast's `datafast_visitor_id` / `datafast_session_id` cookies, so visitors stay continuous when you switch.
 
-Ids passed in the URL as `_or_vid` / `_or_sid` (or DataFast's `_df_vid` / `_df_sid`) are stored and then removed from the address bar. See [cross-domain tracking](cross-domain.md).
+Ids passed in the URL as `_or_vid` / `_or_sid` (or DataFast's `_df_vid` / `_df_sid`) are adopted only by a browser that has no `openrev_visitor_id` cookie yet (in cookieless mode the session id is kept for the tab), and always removed from the address bar. See [cross-domain tracking](cross-domain.md).
 
 ## Automatic behavior
 

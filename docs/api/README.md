@@ -33,6 +33,8 @@ Responses use an envelope:
 { "status": "error", "error": { "code": 401, "message": "Missing or invalid API key" } }
 ```
 
+Request bodies are limited to 2 MB; larger ones get `413`.
+
 ## Conventions
 
 **Date range** (all analytics endpoints):
@@ -40,9 +42,11 @@ Responses use an envelope:
 | Param | Example | Notes |
 |---|---|---|
 | `period` | `today`, `yesterday`, `24h`, `7d` (default), `30d`, `90d`, `wtd`, `mtd`, `ytd`, `12m`, `all` | Relative to the website timezone |
-| `from` & `to` | `2026-01-01` & `2026-01-31` | Custom range, inclusive |
+| `from` & `to` | `2026-01-01` & `2026-01-31` | Custom range, inclusive. Years 1970–2100; other dates are ignored |
 | `timezone` | `Europe/Paris` | Override the website timezone |
 | `interval` | `hour`, `day`, `week`, `month` | Timeseries bucket (auto by default) |
+
+A range covers at most 10 years (3,660 days): longer ranges, including `all`, keep the most recent 10 years.
 
 **Filters**: either a JSON array in `filters`
 
@@ -100,7 +104,7 @@ Visitors active in the last 5 minutes, live sessions (current page, source, loca
 
 ### `GET /visitors`
 
-Visitors seen in the range, with identity, first-touch source and lifetime revenue. Params: date range, filters, `search` (name, email, user id or visitor id), `customers=1` (paying only), `goal=<name>` (completed a goal), `limit`, `offset`.
+Visitors seen in the range, with identity, first-touch source and lifetime revenue. Params: date range, filters, `search` (name, email, user id or visitor id), `customers=1` (paying only), `goal=<name>` (completed a goal), `limit` (1–200, default 50), `offset`.
 
 ### `GET /visitors/{visitorId}`
 
@@ -145,7 +149,7 @@ curl -X POST "$OPENREV/api/v1/payments" \
 
 ### `GET /payments`
 
-Payments in the range with the attributed session (`source`, `channel`, `country`, `utm_campaign`…).
+Payments in the range with the attributed session (`source`, `channel`, `country`, `utm_campaign`…). Params: date range, filters, `limit` (1–200, default 50), `offset`.
 
 ### `DELETE /payments/{id}`
 
@@ -173,7 +177,7 @@ Goals with visitors, completions, conversion rate and revenue from visitors who 
 { "openrev_visitor_id": "3cff4252-…", "user_id": "usr_123", "name": "Jane Doe", "email": "jane@example.com", "image": "https://…/avatar.png", "plan": "pro" }
 ```
 
-Extra keys are stored as custom properties (shallow-merged). Identifying with an email links any unattributed payments made with that email. Identify never creates visits, so it doesn't affect traffic stats.
+Extra keys are stored as custom properties (shallow-merged). `image` is kept only if it's an `https://` URL. Identifying with an email links any unattributed payments made with that email (the browser's `identify` only reaches payments from the last 2 hours). Identify never creates visits, so it doesn't affect traffic stats.
 
 ## Funnels
 
@@ -211,4 +215,4 @@ claude mcp add --transport http openrev https://analytics.example.com/mcp --head
 }
 ```
 
-Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website.
+Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.

@@ -27,7 +27,7 @@ window.openrev("identify", {
 | `user_id` | Your internal user id (`userId` also works). Up to 200 characters. Used to merge devices. |
 | `email` | Must be a valid email. If `user_id` is an email address, it's used as the email too. |
 | `name` | Shown instead of the random visitor name. Up to 200 characters. |
-| `image` | Avatar URL. Up to 250 characters. |
+| `image` | Avatar URL. Must start with `https://`, up to 250 characters; other values are ignored. |
 | anything else | Custom properties, shown under **Properties** in the profile. Up to 10, same [limits as goal properties](goals.md#properties). New values overwrite old ones; properties you don't send are kept. |
 
 Either `user_id` or `email` is required. If you call `identify` before the script has loaded, add the [queue snippet](script-reference.md#calling-the-api-before-the-script-loads).
@@ -93,14 +93,14 @@ A payment is attributed when OpenRev knows which visitor made it. It looks, in o
 2. a checkout reference recorded on the success page (for example Stripe's `session_id=cs_…`);
 3. the original payment, for refunds and renewals;
 4. a known customer id from an earlier payment;
-5. the customer's **email**: a visitor identified with that email (or with that email as `user_id`).
+5. the customer's **email**: the visitor of an earlier payment with that email, otherwise the visitor identified with that email (or with that email as `user_id`). If several visitors were identified with it, for example on two devices, the payment stays unattributed rather than guessing.
 
 `identify` with an email powers step 5:
 
 - **Payments that arrive later** with only an email (common with Payment Links, invoices, some providers' webhooks) are matched to the identified visitor.
-- **Payments that already arrived** without a visitor and with the same email are linked as soon as you identify. Their attribution is computed from the visitor's sessions before the payment.
+- **Payments that already arrived** without a visitor and with the same email are linked as soon as you identify. From the browser, only payments from the last 2 hours are linked, and the provider's customer isn't tied to the visitor, since anyone can call `identify` with any email; [server-side identify](#from-your-server) links older payments too. Their attribution is computed from the visitor's sessions that started before the payment.
 
-If you don't want to identify users, `openrev("payment", { email })` on your thank-you page does the same matching for one purchase. Passing the visitor id in the checkout metadata is still the most reliable method; see [Revenue](../revenue/README.md).
+If you don't want to identify users, `openrev("payment", { email })` on your thank-you page does the same matching for one purchase (with the same 2-hour limit for payments already received). Passing the visitor id in the checkout metadata is still the most reliable method; see [Revenue](../revenue/README.md).
 
 ## Privacy
 

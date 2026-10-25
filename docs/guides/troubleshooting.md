@@ -150,9 +150,9 @@ OpenRev couldn't link the payment to a visitor, or that visitor has no recorded 
 - **The buyer's browser blocked the script,** so there are no sessions to credit. A [proxy](../tracking/proxy.md) fixes most of these.
 - **Checkout on another domain** that isn't set up for [cross-domain tracking](../tracking/cross-domain.md).
 - **Cookieless mode**: there's no visitor id in the browser to pass. Rely on the success page (`?session_id={CHECKOUT_SESSION_ID}` for Stripe), [`identify`](../tracking/identify.md) with the customer's email, or `openrev("payment", { email })` on your thank-you page.
-- **The email doesn't match.** Email matching needs the same address in `identify` (or `openrev("payment", { email })`) and in the provider's payment.
+- **The email doesn't match.** Email matching needs the same address in `identify` (or `openrev("payment", { email })`) and in the provider's payment, and only one visitor identified with it: when several visitors share an email, payments matched only by email stay unattributed.
 
-Identifying a visitor with an email later also links earlier unattributed payments with that email.
+Identifying a visitor with an email later also links earlier unattributed payments with that email: from the browser only payments from the last 2 hours, with the [Identify API](../api/README.md#identify) all of them.
 
 ## Numbers look off by a day (timezones)
 

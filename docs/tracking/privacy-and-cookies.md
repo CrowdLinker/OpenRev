@@ -91,7 +91,7 @@ The script also reads DataFast's `datafast_visitor_id` / `datafast_session_id` c
 - **Retention:** by default, data is kept until you delete it. Set `RETENTION_DAYS` on your instance to delete raw events and sessions older than that many days automatically ([configuration](../self-hosting/configuration.md)).
 - **Access and export:** **Settings → Data** exports raw data as CSV. **Visitors** lets you search by name, email or user id to see everything recorded about a person.
 - **Deletion:** **Settings → Data** can reset or delete a whole website's data. There's no per-visitor delete button yet; handle individual erasure requests in the database (rows with that visitor id in `visitors` (column `id`), and with that `visitor_id` in `sessions`, `events`, `payments`, `customers` and `checkout_refs`).
-- **Shared dashboards:** public share links hide names and emails.
+- **Shared dashboards:** public share links hide names and emails, and leave visitor, session, transaction, subscription and checkout ids out of realtime and payment data.
 
 ## Choosing a mode
 

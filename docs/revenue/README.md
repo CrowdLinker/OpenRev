@@ -8,9 +8,9 @@ The tracking script gives each visitor an id, stored in the first-party cookie `
 
 1. **Checkout metadata** — the id you attached when creating the checkout (`metadata.openrev_visitor_id`, Lemon Squeezy `custom_data`, Paddle `custom_data`, Shopify cart attributes…). `datafast_visitor_id` is accepted too.
 2. **Automatic tagging** — the tracker adds the visitor id to Stripe Payment Links (`client_reference_id`), Lemon Squeezy checkout links and Gumroad links, and to Shopify carts.
-3. **Success-page detection** — when the visitor lands back on your site with `?session_id=cs_…` (Stripe Checkout), `?checkout_id=…` (Polar, Creem) or `?payment_id=…&status=succeeded` (Dodo), the tracker reports it and OpenRev links the payment — even if the webhook arrived first.
+3. **Success-page detection** — when the visitor lands back on your site with `?session_id=cs_…` (Stripe Checkout), `?checkout_id=…` (Polar, Creem) or `?payment_id=…&status=succeeded` (Dodo), the tracker reports it and OpenRev links the payment — even if the webhook arrived first, as long as the payment is less than 2 hours old.
 4. **Returning customers** — a refund reuses the visitor of the payment it refunds; otherwise renewals and refunds reuse the first visitor linked to the customer (`customer_id`), from their earliest attributed payment.
-5. **Email** — if you call `openrev("identify", { email })` or `openrev("payment", { email })`, payments with that email are linked.
+5. **Email** — if you call `openrev("identify", { email })` or `openrev("payment", { email })`, payments with that email are linked: those that arrive later, and unattributed ones from the last 2 hours. If several visitors claim the same email and no earlier payment with that email is linked yet, a payment that only matches by email stays unattributed rather than guessing.
 
 Payments that can't be linked still count toward totals and show as **Unattributed**.
 
@@ -23,6 +23,8 @@ Choose per website in **Settings → General** (applies retroactively):
 | **Last non-direct touch** (default) | The most recent visit before the payment that came from a real source (search, social, campaign, referral…). Direct visits — e.g. a customer typing your URL to log in — don't steal the credit. |
 | **Last touch** | The most recent visit before the payment. |
 | **First touch** | The visitor's very first visit. |
+
+In every model, only visits that started before the payment get credit (with an hour of leeway for clock differences between your provider and the tracker).
 
 The **Customer lifetime value** report always groups customers by their first touch.
 

@@ -74,7 +74,7 @@ In WordPress go to **WooCommerce → Settings → Advanced → Webhooks → Add 
 
 For both: Status **Active**, Delivery URL = the OpenRev webhook URL, Secret = the same secret as in OpenRev, API version **WP REST API Integration v3**.
 
-When you save, WooCommerce sends an unsigned `webhook_id=…` ping to check the URL; OpenRev answers it with 200 so the webhook is activated.
+When you save, WooCommerce sends an unsigned `webhook_id=…` ping to check the URL; OpenRev answers it with 200 so the webhook is activated. Because the ping isn't signed, it doesn't clear an error shown on the integration.
 
 ## How payments are counted
 

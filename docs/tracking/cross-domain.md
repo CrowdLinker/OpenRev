@@ -60,7 +60,7 @@ When a visitor clicks a link to an allowed domain, the script appends the visito
 https://example.io/pricing?_or_vid=4f8c2a9e-…&_or_sid=b31d7e02-…
 ```
 
-On arrival, the script on `example.io` saves these ids in its own cookies and removes the parameters from the address bar. The visit continues as the same visitor and session, with its original source.
+On arrival, the script on `example.io` saves these ids in its own cookies and removes the parameters from the address bar. The visit continues as the same visitor and session, with its original source. This only happens for a browser without an OpenRev visitor cookie on `example.io` yet: a browser that already has one keeps its own ids there, so a shared or crafted link can't move a known visitor onto someone else's profile.
 
 - Only `<a href>` links clicked by the visitor are decorated. For redirects done in JavaScript or after a form post, add the parameters yourself:
 

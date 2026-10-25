@@ -59,7 +59,7 @@ Read the ids from the `openrev_visitor_id` / `openrev_session_id` cookies on you
 - Each order id is recorded once (`orders/paid` retries are deduplicated).
 - Orders created by subscription billing attempts (`source_name` `subscription_contract…`) are **renewals**; they inherit the attribution of the customer's first order when they have no cart attributes.
 - `refunds/create` sums the successful `refund` transactions of the refund and links it to the order.
-- Test orders (`test: true`, e.g. Bogus Gateway) are ignored.
+- Test orders (`test: true`, e.g. Bogus Gateway) are ignored, and so are `orders/paid` deliveries whose `financial_status` isn't `paid`, `partially_refunded` or `refunded`.
 
 ## Limitations
 
