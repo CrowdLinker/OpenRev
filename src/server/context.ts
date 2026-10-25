@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import type { Database } from "./db/types";
 import type { GeoResolver } from "./lib/geo";
 import { isPublicIp } from "./lib/net";
+import { ipMatches } from "./lib/validate";
 import type { Site } from "./services/sites";
 
 export const VERSION = "0.1.0";
@@ -18,8 +19,11 @@ export interface AppConfig {
   emailFrom?: string;
   /** Delete raw events older than this many days (0 / unset = keep forever). */
   retentionDays?: number;
-  /** Whether to trust X-Forwarded-For style headers for the client IP. */
-  trustProxy?: boolean;
+  /**
+   * Whether to trust X-Forwarded-For style headers. For rate limits, `true` (the default) trusts them from
+   * private or loopback peers, and a list trusts them only from those proxy addresses (IPs or IPv4 CIDRs).
+   */
+  trustProxy?: boolean | string[];
 }
 
 export interface Runtime {
@@ -34,8 +38,11 @@ export interface Runtime {
   remoteAddress?: (c: Context) => string | null;
   /** Object identifying the underlying connection, used to run migrations once per isolate. */
   dbKey?: object;
-  /** Resolves a hostname and reports whether every address is publicly routable (Node; Workers can't reach private networks). */
-  isPublicHost?: (hostname: string) => Promise<boolean>;
+  /**
+   * POSTs to a user-configured https URL, connecting only to public addresses (Node). Without it, alerts use
+   * plain fetch: Workers can't reach private networks.
+   */
+  postPublic?: (url: URL, body: string, headers: Record<string, string>) => Promise<{ status: number; body: string }>;
 }
 
 export type AppEnv = {
@@ -97,9 +104,14 @@ export function getPeerIp(c: Context<AppEnv>): string | null {
   const rt = c.get("rt");
   if (rt.platform === "cloudflare") return c.req.header("cf-connecting-ip")?.trim() || null;
   const socket = rt.remoteAddress?.(c)?.replace(/^::ffff:/, "") ?? null;
-  // Forwarded headers only count when the connection comes from a proxy on a private network
-  // (same host, Docker network, Fly/Render/Railway edge); a directly exposed server uses the socket.
-  if (rt.config.trustProxy === false || (socket && isPublicIp(socket))) return socket;
+  // Forwarded headers only count when the connection comes from a trusted proxy: one of the configured
+  // addresses, or by default any private-network peer (same host, Docker network, Fly/Render/Railway edge).
+  // A directly exposed server uses the socket.
+  const proxies = rt.config.trustProxy;
+  const trusted = Array.isArray(proxies)
+    ? !!socket && proxies.some((rule) => ipMatches(rule, socket))
+    : proxies !== false && !(socket && isPublicIp(socket));
+  if (!trusted) return socket;
   // A reverse proxy appends the address it received the request from; earlier entries come from the client.
   const chain = (c.req.header("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   return chain[chain.length - 1] ?? socket;

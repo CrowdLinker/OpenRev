@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { getPeerIp, type AppEnv, type Runtime } from "../src/server/context";
 import { isPublicIp, publicHttpsUrl } from "../src/server/lib/net";
 import { matchPath } from "../src/server/lib/validate";
+import { postPublic, publicLookup } from "../src/runtime/public-post";
 
 describe("outbound URL guard", () => {
   it("classifies IP literals", () => {
@@ -57,8 +58,26 @@ describe("peer address for rate limits", () => {
   it("uses the socket when proxy trust is off", async () => {
     expect(await peer({ remoteAddress: () => "10.0.0.2", config: { trustProxy: false } as Runtime["config"] }, xff)).toBe("10.0.0.2");
   });
+  it("only trusts the configured proxies when TRUST_PROXY lists them", async () => {
+    const config = { trustProxy: ["10.0.0.0/24"] } as Runtime["config"];
+    expect(await peer({ remoteAddress: () => "10.0.0.5", config }, xff)).toBe("203.0.113.4");
+    expect(await peer({ remoteAddress: () => "192.168.1.20", config }, xff)).toBe("192.168.1.20");
+  });
   it("uses CF-Connecting-IP on Workers", async () => {
     expect(await peer({ platform: "cloudflare" }, { ...xff, "CF-Connecting-IP": "192.0.2.77" })).toBe("192.0.2.77");
+  });
+});
+
+describe("alert delivery on Node", () => {
+  const resolve = (host: string) =>
+    new Promise<{ err: NodeJS.ErrnoException | null; address: unknown }>((done) => publicLookup(host, {}, (err, address) => done({ err, address })));
+
+  it("refuses names that resolve to internal addresses", async () => {
+    expect((await resolve("localhost")).err?.code).toBe("EPRIVATEADDR");
+    expect((await resolve("93.184.216.34")).address).toBe("93.184.216.34");
+  });
+  it("never connects to an internal address", async () => {
+    await expect(postPublic(new URL("https://localhost:9/hook"), "{}", {})).rejects.toThrow(/private or internal/);
   });
 });
 

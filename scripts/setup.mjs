@@ -224,14 +224,26 @@ function readEnv() {
   if (existsSync(".env")) {
     for (const line of readFileSync(".env", "utf8").split("\n")) {
       const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-      if (m) env[m[1]] = m[2];
+      if (m) env[m[1]] = unquoteEnv(m[2]);
     }
   }
   return env;
 }
+// Values such as a database URL can contain `#` (a comment in .env) or quotes, so quote them the way
+// Node's --env-file parser reads them back: single quotes are literal, double quotes expand \n.
+function quoteEnv(v) {
+  if (/^[\w.:/@%+,=?&-]*$/.test(v)) return v;
+  if (!v.includes("'") && !/[\r\n]/.test(v)) return `'${v}'`;
+  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, "\\n")}"`;
+}
+function unquoteEnv(v) {
+  if (/^'.*'$/.test(v)) return v.slice(1, -1);
+  if (/^".*"$/.test(v)) return v.slice(1, -1).replace(/\\(n|"|\\)/g, (_, c) => (c === "n" ? "\n" : c));
+  return v;
+}
 function writeEnv(env) {
   // Holds OPENREV_SECRET and database credentials: owner read/write only (mode applies to new files, chmod to old ones).
-  writeFileSync(".env", Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n", { mode: 0o600 });
+  writeFileSync(".env", Object.entries(env).map(([k, v]) => `${k}=${quoteEnv(String(v))}`).join("\n") + "\n", { mode: 0o600 });
   chmodSync(".env", 0o600);
 }
 

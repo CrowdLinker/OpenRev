@@ -73,11 +73,9 @@ async function resolveGoalVisitor(rt: Runtime, site: Site, provider: string, g: 
     if (r) return r.visitor_id;
   }
   if (g.email) {
-    const v = await db.first<{ id: string }>("SELECT id FROM visitors WHERE site_id = ? AND LOWER(email) = ? ORDER BY last_seen DESC LIMIT 1", [
-      site.id,
-      g.email.toLowerCase(),
-    ]);
-    if (v) return v.id;
+    // Emails can be claimed from the tracker, so only use one that a single visitor has (as resolveVisitor does).
+    const vs = await db.all<{ id: string }>("SELECT id FROM visitors WHERE site_id = ? AND LOWER(email) = ? LIMIT 2", [site.id, g.email.toLowerCase()]);
+    if (vs.length === 1) return vs[0].id;
   }
   return null;
 }

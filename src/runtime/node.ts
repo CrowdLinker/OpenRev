@@ -8,7 +8,6 @@
  */
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { lookup } from "node:dns/promises";
 import { createWriteStream, existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -24,8 +23,8 @@ import { nodeSqliteDatabase } from "../server/db/sqlite-node";
 import { postgresDatabase } from "../server/db/postgres";
 import type { Database } from "../server/db/types";
 import type { GeoInfo } from "../server/lib/geo";
-import { isPublicIp } from "../server/lib/net";
 import { runScheduled } from "../server/services/scheduler";
+import { postPublic } from "./public-post";
 
 const env = process.env;
 const here = dirname(fileURLToPath(import.meta.url));
@@ -154,6 +153,14 @@ function staticFiles(root: string): MiddlewareHandler<AppEnv> {
   };
 }
 
+/** TRUST_PROXY: "false" ignores forwarded headers; a comma-separated list trusts only those proxy addresses (IPs or IPv4 CIDRs). */
+function parseTrustProxy(value: string | undefined): boolean | string[] {
+  const v = value?.trim();
+  if (!v || v === "true") return true;
+  if (v === "false") return false;
+  return v.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 async function main() {
   const db = await openDatabase();
   await migrate(db);
@@ -170,20 +177,13 @@ async function main() {
       resendApiKey: env.RESEND_API_KEY || undefined,
       emailFrom: env.OPENREV_EMAIL_FROM || undefined,
       retentionDays: env.RETENTION_DAYS ? Number(env.RETENTION_DAYS) : undefined,
-      trustProxy: env.TRUST_PROXY !== "false",
+      trustProxy: parseTrustProxy(env.TRUST_PROXY),
     },
     geo: (ip) => lookupGeo(ip),
     waitUntil: (p) => {
       p.catch((err) => console.error("[openrev] background task failed:", err));
     },
-    isPublicHost: async (hostname) => {
-      try {
-        const addresses = await lookup(hostname, { all: true, verbatim: true });
-        return addresses.length > 0 && addresses.every((a) => isPublicIp(a.address));
-      } catch {
-        return false;
-      }
-    },
+    postPublic: (url, body, headers) => postPublic(url, body, headers),
     remoteAddress: (c) => {
       const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } })?.incoming;
       return incoming?.socket?.remoteAddress ?? null;

@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { getPeerIp, VERSION, type AppEnv } from "../context";
+import type { Database } from "../db/types";
 import { hashPassword, sha256Hex, verifyPassword } from "../lib/crypto";
 import { isEmail } from "../lib/validate";
 import {
@@ -50,6 +51,16 @@ function record(key: string) {
 
 function tooMany(): never {
   fail(429, "Too many attempts. Try again in a few minutes.");
+}
+
+/** Checks a signed-in user's current password, limiting failed guesses (e.g. from a stolen session). */
+async function checkCurrentPassword(db: Database, userId: string, password: string | undefined): Promise<boolean> {
+  const key = "account-password:" + userId;
+  if (limited(key, 10)) tooMany();
+  const row = await db.first<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = ?", [userId]);
+  const ok = !!row && !!password && (await verifyPassword(password, row.password_hash));
+  if (!ok) record(key);
+  return ok;
 }
 
 export function authRoutes() {
@@ -144,8 +155,7 @@ export function authRoutes() {
     if (body.email !== undefined && body.email.toLowerCase() !== user.email) {
       if (!isEmail(body.email)) fail(400, "Invalid email");
       // Changing the sign-in email needs the password, so a stolen session can't take over the account.
-      const row = await db.first<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = ?", [user.id]);
-      if (!row || !body.current || !(await verifyPassword(body.current, row.password_hash))) fail(400, "Enter your current password to change your email");
+      if (!(await checkCurrentPassword(db, user.id, body.current))) fail(400, "Enter your current password to change your email");
       const taken = await db.first<{ id: string }>("SELECT id FROM users WHERE email = ? AND id <> ?", [body.email.toLowerCase(), user.id]);
       if (taken) fail(409, "This email is already used by another account");
     }
@@ -161,8 +171,7 @@ export function authRoutes() {
     const user = requireUser(c);
     const body = await readJson<{ current?: string; password?: string }>(c);
     const db = c.get("rt").db;
-    const row = await db.first<{ password_hash: string }>("SELECT password_hash FROM users WHERE id = ?", [user.id]);
-    if (!row || !body.current || !(await verifyPassword(body.current, row.password_hash))) fail(400, "Current password is incorrect");
+    if (!(await checkCurrentPassword(db, user.id, body.current))) fail(400, "Current password is incorrect");
     if (!body.password || body.password.length < 8) fail(400, "New password must be at least 8 characters");
     // Signs out every other session: a password change is how users cut off someone who got in.
     await db.batch([

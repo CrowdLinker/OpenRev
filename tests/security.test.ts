@@ -219,3 +219,16 @@ describe("security fixes", () => {
     expect(row?.last_error).toBe("Invalid webhook signature");
   });
 });
+
+describe("account password checks", () => {
+  it("limits wrong current-password attempts", async () => {
+    rt = await testRuntime();
+    app = createApp(() => rt);
+    const user = client();
+    await user("/api/auth/signup", { body: { email: "limit@example.com", password: "supersecret" } });
+    for (let i = 0; i < 10; i++) {
+      expect((await user("/api/account/password", { body: { current: "wrong-guess", password: "newsecret1" } })).status).toBe(400);
+    }
+    expect((await user("/api/account/password", { body: { current: "supersecret", password: "newsecret1" } })).status).toBe(429);
+  });
+});

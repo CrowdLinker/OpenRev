@@ -97,13 +97,19 @@ const KNOWN_HOSTS = new Set(["hooks.slack.com", "discord.com", "discordapp.com",
 async function post(rt: Runtime, rawUrl: string, body: unknown) {
   const url = publicHttpsUrl(rawUrl);
   if (!url) throw new Error("The destination must be a public https:// URL");
-  if (rt.isPublicHost && !(await rt.isPublicHost(url.hostname))) throw new Error("The destination resolves to a private or internal address");
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), redirect: "manual", signal: AbortSignal.timeout(10_000) });
+  const payload = JSON.stringify(body);
+  const headers = { "Content-Type": "application/json" };
+  const res = rt.postPublic ? await rt.postPublic(url, payload, headers) : await fetchPost(url, payload, headers);
   if (res.status >= 300 && res.status < 400) throw new Error(`HTTP ${res.status}: redirects are not followed`);
-  if (!res.ok) {
-    const detail = KNOWN_HOSTS.has(url.hostname) ? `: ${(await res.text()).slice(0, 200)}` : "";
+  if (res.status < 200 || res.status >= 300) {
+    const detail = KNOWN_HOSTS.has(url.hostname) ? `: ${res.body.slice(0, 200)}` : "";
     throw new Error(`HTTP ${res.status}${detail}`);
   }
+}
+
+async function fetchPost(url: URL, body: string, headers: Record<string, string>) {
+  const res = await fetch(url, { method: "POST", headers, body, redirect: "manual", signal: AbortSignal.timeout(10_000) });
+  return { status: res.status, body: res.ok ? "" : await res.text() };
 }
 
 export async function deliver(rt: Runtime, channel: AlertChannel, config: AlertConfig, msg: Message, site: Site) {
