@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { VERSION, type AppEnv, type ApiKeyAuth, type Runtime } from "../context";
 import { uuid } from "../lib/ids";
 import { verifyApiKey } from "../services/auth";
-import { getMemberRole, getSite, type Site } from "../services/sites";
+import { getMemberRole, getSite, roleAtLeast, type Role, type Site } from "../services/sites";
 import * as stats from "../services/stats";
 import { buildStatsQuery, rangeInfo } from "./helpers";
 import { resolveDimension } from "./v1";
@@ -71,15 +71,16 @@ const TOOLS = [
   },
 ];
 
-async function resolveSite(rt: Runtime, key: ApiKeyAuth, args: Args): Promise<Site> {
+async function resolveSite(rt: Runtime, key: ApiKeyAuth, args: Args): Promise<{ site: Site; role: Role }> {
   const id = key.siteId ?? (typeof args.websiteId === "string" ? args.websiteId : null);
   if (!id) throw new Error("websiteId is required with account tokens. Call list_websites first.");
   if (key.siteId && key.siteId !== id) throw new Error("This API key belongs to another website");
   const site = await getSite(rt.db, id);
   if (!site) throw new Error("Website not found");
   const user = await rt.db.first<{ is_admin: number }>("SELECT is_admin FROM users WHERE id = ?", [key.userId]);
-  if (!(await getMemberRole(rt.db, id, key.userId)) && !user?.is_admin) throw new Error("Website not found");
-  return site;
+  const role = (await getMemberRole(rt.db, id, key.userId)) ?? (user?.is_admin ? "owner" : null);
+  if (!role) throw new Error("Website not found");
+  return { site, role };
 }
 
 function queryArgs(args: Args): Record<string, string | undefined> {
@@ -98,7 +99,7 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
       ? rt.db.all("SELECT id, domain, name, timezone, currency FROM sites WHERE id = ?", [key.siteId])
       : rt.db.all("SELECT s.id, s.domain, s.name, s.timezone, s.currency FROM sites s JOIN site_members m ON m.site_id = s.id WHERE m.user_id = ?", [key.userId]);
   }
-  const site = await resolveSite(rt, key, args);
+  const { site, role } = await resolveSite(rt, key, args);
   const q = await buildStatsQuery(rt.db, site, queryArgs(args));
   const money = { currency: site.currency, note: "Monetary values are in minor units (cents) of `currency`." };
   switch (name) {
@@ -133,6 +134,7 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
       return { name: row.name, range: rangeInfo(q), results: await stats.funnelResults(rt.db, q, JSON.parse(row.steps)) };
     }
     case "add_note": {
+      if (!roleAtLeast(role, "admin")) throw new Error("Adding notes requires the admin role");
       const text = String(args.text ?? "").trim();
       if (!text) throw new Error("text is required");
       const date = typeof args.date === "string" ? args.date : null;

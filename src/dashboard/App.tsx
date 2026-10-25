@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Redirect, Route, Switch, useLocation } from "wouter";
 import { Shell } from "./components/Shell";
 import { Loading } from "./components/ui";
-import { useApi } from "./lib/api";
+import { api, useApi } from "./lib/api";
 import { AuthContext } from "./lib/context";
 import type { Instance, User } from "./lib/types";
 import { AccountPage } from "./pages/Account";
@@ -41,9 +41,10 @@ export function App() {
   const auth = {
     user,
     instance: instance.data,
-    refresh: () => {
-      me.reload();
-      instance.reload();
+    refresh: async () => {
+      const [m, i] = await Promise.all([api<{ user: User | null }>("/api/auth/me"), api<Instance>("/api/instance")]);
+      me.setData(m);
+      instance.setData(i);
     },
   };
 

@@ -51,7 +51,9 @@ export function Globe({ markers, focus, className }: { markers: GlobeMarker[]; f
     const loop = () => {
       if (!pointer.current) {
         if (targetRef.current !== null) {
-          const diff = targetRef.current - phiRef.current;
+          // Ease along the shortest arc: phi keeps growing while the globe auto-rotates.
+          const TAU = Math.PI * 2;
+          const diff = ((((targetRef.current - phiRef.current + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
           phiRef.current += diff * 0.06;
           if (Math.abs(diff) < 0.001) targetRef.current = null;
         } else {

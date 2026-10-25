@@ -4,9 +4,10 @@ import type { Instance, Role, Site, SiteMeta, User } from "./types";
 export interface AuthState {
   user: User | null;
   instance: Instance | null;
-  refresh: () => void;
+  /** Re-fetches the signed-in user and instance info; resolves once both are updated. */
+  refresh: () => Promise<void>;
 }
-export const AuthContext = createContext<AuthState>({ user: null, instance: null, refresh: () => {} });
+export const AuthContext = createContext<AuthState>({ user: null, instance: null, refresh: async () => {} });
 export const useAuth = () => useContext(AuthContext);
 
 export interface SiteState {

@@ -77,7 +77,13 @@ async function choose(question, options, def = 0) {
 
 function run(cmd, cmdArgs, opts = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, cmdArgs, { stdio: opts.capture ? ["inherit", "pipe", "pipe"] : "inherit", shell: process.platform === "win32", env: { ...process.env, ...(opts.env ?? {}) } });
+    // stdin is piped only when we feed it (e.g. `wrangler secret put`); otherwise the user's terminal is inherited.
+    const stdin = opts.input !== undefined ? "pipe" : "inherit";
+    const child = spawn(cmd, cmdArgs, {
+      stdio: opts.capture ? [stdin, "pipe", "pipe"] : [stdin, "inherit", "inherit"],
+      shell: process.platform === "win32",
+      env: { ...process.env, ...(opts.env ?? {}) },
+    });
     let out = "";
     if (opts.capture) {
       child.stdout.on("data", (d) => {

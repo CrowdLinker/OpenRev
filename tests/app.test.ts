@@ -261,4 +261,67 @@ describe.each(DATABASES)("HTTP API (%s)", (_name, makeDb) => {
     expect(forbidden.status).toBe(403);
     cookie = saved;
   });
+
+  it("enforces roles across the dashboard, the API and MCP", async () => {
+    const owner = cookie;
+    const members = await call(`/api/sites/${siteId}/members`);
+    const ownerId = members.json.members.find((m: { email: string }) => m.email === "owner@example.com").id;
+    const adminInvite = await call(`/api/sites/${siteId}/invites`, { body: { role: "admin" } });
+    cookie = "";
+    await call("/api/auth/signup", { body: { email: "admin@example.com", password: "supersecret", invite: new URL(adminInvite.json.url).pathname.split("/").pop() } });
+    const admin = cookie;
+
+    // admins can't demote or remove owners, or demote them through an invite
+    expect((await call(`/api/sites/${siteId}/members/${ownerId}`, { method: "PATCH", body: { role: "viewer" } })).status).toBe(403);
+    expect((await call(`/api/sites/${siteId}/members/${ownerId}`, { method: "DELETE" })).status).toBe(403);
+    await call(`/api/sites/${siteId}/invites`, { body: { email: "owner@example.com", role: "viewer" } });
+    cookie = owner;
+    const after = await call(`/api/sites/${siteId}/members`);
+    expect(after.json.members.find((m: { id: string }) => m.id === ownerId).role).toBe("owner");
+    // ...and the last owner can't step down
+    expect((await call(`/api/sites/${siteId}/members/${ownerId}`, { method: "PATCH", body: { role: "admin" } })).status).toBe(400);
+
+    // a viewer's account token can read but not write
+    cookie = "";
+    await call("/api/auth/login", { body: { email: "viewer@example.com", password: "supersecret" } });
+    const token = (await call("/api/account/tokens", { body: { name: "viewer" } })).json.key;
+    cookie = "";
+    const auth = { Authorization: `Bearer ${token}` };
+    expect((await call(`/api/v1/analytics/overview?websiteId=${siteId}`, { headers: auth })).status).toBe(200);
+    expect((await call(`/api/v1/payments?websiteId=${siteId}`, { headers: auth, body: { amount: 1, transaction_id: "fake" } })).status).toBe(403);
+    expect((await call(`/api/v1/goals?websiteId=${siteId}`, { headers: auth, body: { name: "x", openrev_visitor_id: "visitor-1111-aaaa" } })).status).toBe(403);
+    expect((await call(`/api/v1/identify?websiteId=${siteId}`, { headers: auth, body: { openrev_visitor_id: "visitor-1111-aaaa", user_id: "x" } })).status).toBe(403);
+    const note = await call("/mcp", { headers: auth, body: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "add_note", arguments: { websiteId: siteId, text: "hi" } } } });
+    expect(note.json.result.isError).toBe(true);
+
+    // alert destinations must be public
+    cookie = admin;
+    for (const url of ["https://127.0.0.1/hook", "https://169.254.169.254/latest", "https://localhost/x", "https://[::1]/x", "https://10.0.0.8/x", "https://intranet/x", "http://example.com/x"]) {
+      const r = await call(`/api/sites/${siteId}/alerts`, { body: { type: "payment", channel: "webhook", config: { url } } });
+      expect(r.status, url).toBe(400);
+    }
+    expect((await call(`/api/sites/${siteId}/alerts`, { body: { type: "payment", channel: "slack", config: { url: "https://hooks.slack.com/services/T0/B0/x" } } })).status).toBe(200);
+
+    // CSV exports neutralise spreadsheet formulas from visitor-controlled fields
+    await call("/api/events", { raw: JSON.stringify({ websiteId: siteId, type: "pageview", href: "https://example.com/?utm_source=%3D1%2B1", visitorId: "visitor-csv1-aaaa", sessionId: "session-csv1-aaaa" }), headers: { "Content-Type": "text/plain" } });
+    const csv = await call(`/api/sites/${siteId}/export/sessions`);
+    expect(csv.json).toContain("'=1+1");
+    expect(csv.json).not.toMatch(/(^|,)=1\+1/m);
+    cookie = owner;
+  });
+
+  it("limits failed logins per account even when the client address changes", async () => {
+    const saved = cookie;
+    cookie = "";
+    const email = `throttle-${_name}@example.com`;
+    for (let i = 0; i < 10; i++) {
+      const r = await call("/api/auth/login", { body: { email, password: "wrong-password" }, headers: { "X-Forwarded-For": `203.0.113.${i}` } });
+      expect(r.status).toBe(401);
+    }
+    const blocked = await call("/api/auth/login", { body: { email, password: "wrong-password" }, headers: { "X-Forwarded-For": "198.51.100.7" } });
+    expect(blocked.status).toBe(429);
+    // other accounts are unaffected
+    expect((await call("/api/auth/login", { body: { email: "viewer@example.com", password: "supersecret" } })).status).toBe(200);
+    cookie = saved;
+  });
 });

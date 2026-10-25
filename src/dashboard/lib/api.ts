@@ -41,6 +41,8 @@ export interface ApiState<T> {
   error: Error | undefined;
   loading: boolean;
   reload: () => void;
+  /** Replaces the data without a request (e.g. after fetching it elsewhere). */
+  setData: (d: T) => void;
 }
 
 /** Fetches `path` (re-fetching when it changes), keeping previous data while reloading. */
@@ -85,21 +87,25 @@ export function useApi<T>(path: string | null, opts: { poll?: number } = {}): Ap
   }, [path, nonce, opts.poll]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
-  return { data, error, loading, reload };
+  return { data, error, loading, reload, setData };
 }
 
 export function useLocalStorage<T>(key: string, initial: T): [T, (v: T) => void] {
-  const [value, setValue] = useState<T>(() => {
+  const read = (k: string): T => {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(k);
       return raw ? (JSON.parse(raw) as T) : initial;
     } catch {
       return initial;
     }
-  });
+  };
+  // Keyed state: when the key changes (e.g. once the site id loads) re-read the stored value.
+  const [state, setState] = useState(() => ({ key, value: read(key) }));
+  const value = state.key === key ? state.value : read(key);
+  if (state.key !== key) setState({ key, value });
   const set = useCallback(
     (v: T) => {
-      setValue(v);
+      setState({ key, value: v });
       try {
         localStorage.setItem(key, JSON.stringify(v));
       } catch {

@@ -1,5 +1,6 @@
 import type { Runtime } from "../context";
 import { fromMinor } from "../lib/currency";
+import { publicHttpsUrl } from "../lib/net";
 import { uuid } from "../lib/ids";
 import { formatLocalDate, localParts, resolveRange } from "../lib/time";
 import { emailEnabled, escapeHtml, sendEmail } from "./email";
@@ -83,23 +84,36 @@ function markdown(msg: Message, bold: (s: string) => string): string {
   return [bold(msg.title), ...msg.lines, msg.url ? msg.url : ""].filter(Boolean).join("\n");
 }
 
-async function post(url: string, body: unknown) {
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+export const TELEGRAM_TOKEN = /^\d{3,15}:[A-Za-z0-9_-]{20,64}$/;
+
+// Services whose error responses are safe and useful to show (e.g. "chat not found").
+const KNOWN_HOSTS = new Set(["hooks.slack.com", "discord.com", "discordapp.com", "api.telegram.org"]);
+
+async function post(rt: Runtime, rawUrl: string, body: unknown) {
+  const url = publicHttpsUrl(rawUrl);
+  if (!url) throw new Error("The destination must be a public https:// URL");
+  if (rt.isPublicHost && !(await rt.isPublicHost(url.hostname))) throw new Error("The destination resolves to a private or internal address");
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), redirect: "manual", signal: AbortSignal.timeout(10_000) });
+  if (res.status >= 300 && res.status < 400) throw new Error(`HTTP ${res.status}: redirects are not followed`);
+  if (!res.ok) {
+    const detail = KNOWN_HOSTS.has(url.hostname) ? `: ${(await res.text()).slice(0, 200)}` : "";
+    throw new Error(`HTTP ${res.status}${detail}`);
+  }
 }
 
 export async function deliver(rt: Runtime, channel: AlertChannel, config: AlertConfig, msg: Message, site: Site) {
   switch (channel) {
     case "slack":
       if (!config.url) throw new Error("Missing Slack webhook URL");
-      return post(config.url, { text: markdown(msg, (s) => `*${s}*`) });
+      return post(rt, config.url, { text: markdown(msg, (s) => `*${s}*`) });
     case "discord":
       if (!config.url) throw new Error("Missing Discord webhook URL");
-      return post(config.url, { content: markdown(msg, (s) => `**${s}**`).slice(0, 1900), username: "OpenRev" });
+      return post(rt, config.url, { content: markdown(msg, (s) => `**${s}**`).slice(0, 1900), username: "OpenRev" });
     case "telegram": {
       if (!config.botToken || !config.chatId) throw new Error("Missing Telegram bot token or chat id");
+      if (!TELEGRAM_TOKEN.test(config.botToken)) throw new Error("Invalid Telegram bot token");
       const html = [`<b>${escapeHtml(msg.title)}</b>`, ...msg.lines.map(escapeHtml), msg.url ? escapeHtml(msg.url) : ""].filter(Boolean).join("\n");
-      return post(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
+      return post(rt, `https://api.telegram.org/bot${config.botToken}/sendMessage`, {
         chat_id: config.chatId,
         text: html,
         parse_mode: "HTML",
@@ -108,7 +122,7 @@ export async function deliver(rt: Runtime, channel: AlertChannel, config: AlertC
     }
     case "webhook":
       if (!config.url) throw new Error("Missing webhook URL");
-      return post(config.url, { event: msg.event, website: { id: site.id, domain: site.domain, name: site.name }, title: msg.title, text: msg.lines.join("\n"), url: msg.url ?? null, data: msg.data });
+      return post(rt, config.url, { event: msg.event, website: { id: site.id, domain: site.domain, name: site.name }, title: msg.title, text: msg.lines.join("\n"), url: msg.url ?? null, data: msg.data });
     case "email": {
       if (!emailEnabled(rt)) throw new Error("Email is not configured on this instance (RESEND_API_KEY)");
       const to = (config.email ?? "").split(",").map((e) => e.trim()).filter(Boolean);

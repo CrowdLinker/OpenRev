@@ -32,8 +32,8 @@ export function Button({
         styles[variant],
         className,
       )}
-      disabled={loading || rest.disabled}
       {...rest}
+      disabled={loading || rest.disabled}
     >
       {loading && <Loader2 className="h-4 w-4 animate-spin" />}
       {children}
@@ -170,10 +170,26 @@ export function CopyButton({ text, label = "Copy", className }: { text: string; 
       variant="secondary"
       className={className}
       onClick={() => {
-        navigator.clipboard.writeText(text).then(() => {
+        const done = () => {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
-        });
+        };
+        // navigator.clipboard only exists in secure contexts; self-hosted instances often run over plain HTTP.
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(text).then(done, () => {});
+          return;
+        }
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          if (document.execCommand("copy")) done();
+        } finally {
+          ta.remove();
+        }
       }}
     >
       {copied ? <Check className="h-3.5 w-3.5 text-money-600" /> : <Copy className="h-3.5 w-3.5" />}

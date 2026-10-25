@@ -195,7 +195,7 @@ export function v1Routes() {
   });
 
   app.post("/payments", async (c) => {
-    const s = await site(c);
+    const s = await site(c, "admin");
     const body = await readJson(c);
     const { payment, created } = await createPaymentFromApi(c, s, body);
     return c.json({ status: "success", data: payment, created }, created ? 201 : 200);
@@ -209,7 +209,7 @@ export function v1Routes() {
   });
 
   app.post("/goals", async (c) => {
-    const s = await site(c);
+    const s = await site(c, "admin");
     const body = await readJson(c);
     const name = sanitizeGoalName(body.name ?? body.goal);
     if (!name) fail(422, "`name` is required (lowercase letters, numbers, _ - :)");
@@ -234,7 +234,7 @@ export function v1Routes() {
   });
 
   app.post("/identify", async (c) => {
-    const s = await site(c);
+    const s = await site(c, "admin");
     const body = await readJson(c);
     const visitorId = visitorFrom(body);
     if (!visitorId) fail(422, "`openrev_visitor_id` (or `visitor_id`) is required");

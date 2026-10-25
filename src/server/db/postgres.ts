@@ -23,7 +23,7 @@ export async function postgresDatabase(url: string, opts: { schema?: string } = 
     max: Number(process.env.DATABASE_POOL_SIZE || 10),
     onnotice: () => {},
     ...(opts.schema ? { connection: { search_path: opts.schema } } : {}),
-    ssl: /sslmode=(require|verify)/.test(url) ? "require" : undefined,
+    // No `ssl` option: postgres.js reads `?sslmode=` from the URL itself (require, verify-ca, verify-full...).
     types: {
       // Return BIGINT / NUMERIC values as JS numbers (analytics counts fit easily).
       bigint: { to: 20, from: [20], serialize: (x: unknown) => String(x), parse: toNumber },

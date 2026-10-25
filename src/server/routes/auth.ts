@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { getClientIp, VERSION, type AppEnv } from "../context";
+import { getPeerIp, VERSION, type AppEnv } from "../context";
 import { hashPassword, sha256Hex, verifyPassword } from "../lib/crypto";
 import { isEmail } from "../lib/validate";
 import {
@@ -18,18 +18,37 @@ import { emailEnabled } from "../services/email";
 import { setInstanceValue } from "../services/instance";
 import { fail, readJson, requireUser } from "./helpers";
 
-// Best-effort, per-isolate login throttling.
+// Best-effort, per-isolate throttling of login and signup attempts.
+const WINDOW = 15 * 60 * 1000;
+const MAX_KEYS = 50_000;
 const attempts = new Map<string, { n: number; at: number }>();
-function throttle(key: string) {
+
+function limited(key: string, max: number): boolean {
+  const a = attempts.get(key);
+  return !!a && Date.now() - a.at < WINDOW && a.n >= max;
+}
+
+function record(key: string) {
   const now = Date.now();
   const a = attempts.get(key);
-  if (a && now - a.at < 15 * 60 * 1000) {
-    if (a.n >= 20) fail(429, "Too many attempts. Try again in a few minutes.");
+  if (a && now - a.at < WINDOW) {
     a.n++;
-  } else {
-    attempts.set(key, { n: 1, at: now });
+    return;
   }
-  if (attempts.size > 10000) attempts.clear();
+  attempts.delete(key);
+  attempts.set(key, { n: 1, at: now });
+  if (attempts.size > MAX_KEYS) {
+    for (const [k, v] of attempts) if (now - v.at >= WINDOW) attempts.delete(k);
+    // Still full: drop the oldest windows (Map iterates in insertion order).
+    for (const k of attempts.keys()) {
+      if (attempts.size <= MAX_KEYS) break;
+      attempts.delete(k);
+    }
+  }
+}
+
+function tooMany(): never {
+  fail(429, "Too many attempts. Try again in a few minutes.");
 }
 
 export function authRoutes() {
@@ -62,7 +81,9 @@ export function authRoutes() {
   app.post("/auth/signup", async (c) => {
     const rt = c.get("rt");
     const body = await readJson<{ email?: string; password?: string; name?: string; invite?: string }>(c);
-    throttle("signup:" + (getClientIp(c) ?? "unknown"));
+    const signupKey = "signup:" + (getPeerIp(c) ?? "unknown");
+    if (limited(signupKey, 20)) tooMany();
+    record(signupKey);
     if (!isEmail(body.email)) fail(400, "Please enter a valid email address");
     if (!body.password || body.password.length < 8) fail(400, "Password must be at least 8 characters");
     const first = (await userCount(rt.db)) === 0;
@@ -93,10 +114,17 @@ export function authRoutes() {
   app.post("/auth/login", async (c) => {
     const rt = c.get("rt");
     const body = await readJson<{ email?: string; password?: string }>(c);
-    throttle("login:" + (getClientIp(c) ?? "unknown"));
     if (!body.email || !body.password) fail(400, "Email and password are required");
+    // Failed attempts are limited per network peer and per account, so rotating addresses doesn't help guessing.
+    const ipKey = "login-ip:" + (getPeerIp(c) ?? "unknown");
+    const emailKey = "login-email:" + String(body.email).trim().toLowerCase();
+    if (limited(ipKey, 20) || limited(emailKey, 10)) tooMany();
     const user = await authenticate(rt.db, body.email, body.password);
-    if (!user) fail(401, "Invalid email or password");
+    if (!user) {
+      record(ipKey);
+      record(emailKey);
+      fail(401, "Invalid email or password");
+    }
     await startSession(c, user.id);
     return c.json({ user });
   });

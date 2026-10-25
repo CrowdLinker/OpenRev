@@ -46,7 +46,9 @@ export const FALLBACK_RATES: Record<string, number> = {
 
 export type Rates = Record<string, number>;
 
-const memory = new Map<string, { rates: Rates; at: number }>();
+// `retryAt` marks fallback rates kept only briefly, so a short outage doesn't disable live rates for the whole day.
+const memory = new Map<string, { rates: Rates; at: number; retryAt?: number }>();
+const FALLBACK_RETRY_MS = 10 * 60 * 1000;
 
 async function fetchRates(): Promise<Rates | null> {
   const sources = [
@@ -79,7 +81,7 @@ async function fetchRates(): Promise<Rates | null> {
 export async function getRates(db: Database, now = Date.now()): Promise<Rates> {
   const day = new Date(now).toISOString().slice(0, 10);
   const cached = memory.get(day);
-  if (cached) return cached.rates;
+  if (cached && !(cached.retryAt && now >= cached.retryAt)) return cached.rates;
 
   const row = await db.first<{ rates: string }>("SELECT rates FROM fx_rates WHERE day = ?", [day]);
   if (row) {
@@ -104,7 +106,7 @@ export async function getRates(db: Database, now = Date.now()): Promise<Rates> {
 
   const latest = await db.first<{ rates: string }>("SELECT rates FROM fx_rates ORDER BY day DESC LIMIT 1");
   const rates = latest ? (JSON.parse(latest.rates) as Rates) : FALLBACK_RATES;
-  memory.set(day, { rates, at: now });
+  memory.set(day, { rates, at: now, retryAt: now + FALLBACK_RETRY_MS });
   return rates;
 }
 

@@ -8,6 +8,7 @@
  */
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { lookup } from "node:dns/promises";
 import { createWriteStream, existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -23,6 +24,7 @@ import { nodeSqliteDatabase } from "../server/db/sqlite-node";
 import { postgresDatabase } from "../server/db/postgres";
 import type { Database } from "../server/db/types";
 import type { GeoInfo } from "../server/lib/geo";
+import { isPublicIp } from "../server/lib/net";
 import { runScheduled } from "../server/services/scheduler";
 
 const env = process.env;
@@ -173,6 +175,14 @@ async function main() {
     geo: (ip) => lookupGeo(ip),
     waitUntil: (p) => {
       p.catch((err) => console.error("[openrev] background task failed:", err));
+    },
+    isPublicHost: async (hostname) => {
+      try {
+        const addresses = await lookup(hostname, { all: true, verbatim: true });
+        return addresses.length > 0 && addresses.every((a) => isPublicIp(a.address));
+      } catch {
+        return false;
+      }
     },
     remoteAddress: (c) => {
       const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } })?.incoming;

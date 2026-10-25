@@ -33,6 +33,8 @@ export interface Runtime {
   remoteAddress?: (c: Context) => string | null;
   /** Object identifying the underlying connection, used to run migrations once per isolate. */
   dbKey?: object;
+  /** Resolves a hostname and reports whether every address is publicly routable (Node; Workers can't reach private networks). */
+  isPublicHost?: (hostname: string) => Promise<boolean>;
 }
 
 export type AppEnv = {
@@ -83,6 +85,21 @@ export function getClientIpInfo(c: Context<AppEnv>): ClientIp {
 
 export function getClientIp(c: Context<AppEnv>): string | null {
   return getClientIpInfo(c).ip;
+}
+
+/**
+ * The address of the nearest peer, for rate limits and other security decisions. Unlike getClientIp
+ * (which honours the visitor address a website's proxy forwards, for analytics), it never uses the
+ * client-supplied start of X-Forwarded-For.
+ */
+export function getPeerIp(c: Context<AppEnv>): string | null {
+  const rt = c.get("rt");
+  if (rt.platform === "cloudflare") return c.req.header("cf-connecting-ip")?.trim() || null;
+  const socket = rt.remoteAddress?.(c) ?? null;
+  if (rt.config.trustProxy === false) return socket;
+  // A reverse proxy appends the address it received the request from; earlier entries come from the client.
+  const chain = (c.req.header("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return chain[chain.length - 1] ?? socket;
 }
 
 export function publicUrl(c: Context<AppEnv>): string {

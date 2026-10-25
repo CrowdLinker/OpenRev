@@ -160,9 +160,10 @@ export async function recordPayment(rt: Runtime, site: Site, input: NormalizedPa
   const amountAbs = Math.abs(Math.round(input.amount));
   const signed = input.type === "refund" ? -amountAbs : amountAbs;
 
+  const txId = input.transactionId.slice(0, 200);
   const existing = await db.first<PaymentRow>(
     "SELECT * FROM payments WHERE site_id = ? AND provider = ? AND transaction_id = ?",
-    [site.id, input.provider, input.transactionId],
+    [site.id, input.provider, txId],
   );
 
   const visitorId = existing?.visitor_id ?? (await resolveVisitor(db, site, input));
@@ -210,7 +211,7 @@ export async function recordPayment(rt: Runtime, site: Site, input: NormalizedPa
         id,
         site.id,
         input.provider,
-        input.transactionId.slice(0, 200),
+        txId,
         input.type,
         signed,
         currency,
@@ -256,8 +257,13 @@ export async function recordPayment(rt: Runtime, site: Site, input: NormalizedPa
   }
   await db.batch(statements);
 
-  const payment = (await db.first<PaymentRow>("SELECT * FROM payments WHERE id = ?", [id])) as PaymentRow;
-  return { payment, created: !existing };
+  // Re-read by the unique key: a concurrent delivery of the same transaction may have inserted the row first.
+  const payment = (await db.first<PaymentRow>("SELECT * FROM payments WHERE site_id = ? AND provider = ? AND transaction_id = ?", [
+    site.id,
+    input.provider,
+    txId,
+  ])) as PaymentRow;
+  return { payment, created: !existing && payment.id === id };
 }
 
 /**

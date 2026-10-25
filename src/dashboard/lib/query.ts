@@ -24,8 +24,20 @@ export function parseQuery(search: string): DashQuery {
     from: p.get("from") || undefined,
     to: p.get("to") || undefined,
     interval: p.get("interval") || undefined,
-    filters: Array.isArray(filters) ? filters : [],
+    filters: Array.isArray(filters) ? filters.filter(isFilter) : [],
   };
+}
+
+// Filters come from shareable URLs: keep only well-formed entries so a bad link can't crash the page.
+function isFilter(f: unknown): f is Filter {
+  const x = f as Filter;
+  return (
+    !!x &&
+    typeof x.dim === "string" &&
+    ["is", "is_not", "contains", "not_contains"].includes(x.op) &&
+    Array.isArray(x.values) &&
+    x.values.every((v) => typeof v === "string")
+  );
 }
 
 export function toSearch(q: DashQuery, extra: Record<string, string | undefined> = {}): string {

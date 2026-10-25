@@ -32,7 +32,7 @@ export function LoginPage() {
     setError(null);
     try {
       await api("/api/auth/login", { body: { email, password } });
-      refresh();
+      await refresh();
       navigate("/");
     } catch (err) {
       setError(err);
@@ -67,7 +67,7 @@ export function LoginPage() {
   );
 }
 
-function SignupForm({ invite, onDone, email: presetEmail }: { invite?: string; onDone: () => void; email?: string | null }) {
+function SignupForm({ invite, onDone, email: presetEmail }: { invite?: string; onDone: () => void | Promise<void>; email?: string | null }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(presetEmail ?? "");
   const [password, setPassword] = useState("");
@@ -79,7 +79,7 @@ function SignupForm({ invite, onDone, email: presetEmail }: { invite?: string; o
     setError(null);
     try {
       await api("/api/auth/signup", { body: { name, email, password, invite } });
-      onDone();
+      await onDone();
     } catch (err) {
       setError(err);
     } finally {
@@ -124,8 +124,8 @@ export function SignupPage() {
       subtitle={first ? "Create the admin account for this instance. You'll add your first website next." : undefined}
     >
       <SignupForm
-        onDone={() => {
-          refresh();
+        onDone={async () => {
+          await refresh();
           navigate(first ? "/sites/new" : "/");
         }}
       />
@@ -190,8 +190,8 @@ export function InvitePage({ token }: { token: string }) {
       <SignupForm
         invite={token}
         email={invite.data?.email}
-        onDone={() => {
-          refresh();
+        onDone={async () => {
+          await refresh();
           navigate("/");
         }}
       />

@@ -5,14 +5,16 @@ import { isValidCurrency } from "../lib/currency";
 import { sha256Hex } from "../lib/crypto";
 import { randomId, randomToken, uuid } from "../lib/ids";
 import { isValidTimezone, resolveRange } from "../lib/time";
+import { publicHttpsUrl } from "../lib/net";
 import { isEmail, sanitizeGoalName } from "../lib/validate";
 import { getProvider, providerCatalog } from "../providers";
-import { ALERT_CHANNELS, ALERT_TYPES, invalidateAlerts, sendTestAlert, type AlertRow } from "../services/alerts";
+import { ALERT_CHANNELS, ALERT_TYPES, invalidateAlerts, sendTestAlert, TELEGRAM_TOKEN, type AlertRow } from "../services/alerts";
 import { createApiKey } from "../services/auth";
 import { emailEnabled, escapeHtml, sendEmail } from "../services/email";
 import { decryptConfig, encryptConfig, importPage, publicIntegration, type IntegrationRow } from "../services/integrations";
 import { recomputeRevenue } from "../services/payments";
 import {
+  getMemberRole,
   getSite,
   invalidateSite,
   isValidDomain,
@@ -223,7 +225,8 @@ export function siteRoutes() {
       const existing = await rt.db.first<{ id: string }>("SELECT id FROM users WHERE email = ?", [email]);
       if (existing) {
         await rt.db.run(
-          "INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO UPDATE SET role = excluded.role",
+          // Existing members keep their role (an invite must not demote an owner); use the members list to change roles.
+          "INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING",
           [site.id, existing.id, role, Date.now()],
         );
         return c.json({ added: true });
@@ -267,16 +270,25 @@ export function siteRoutes() {
     const body = await readJson<{ role?: Role }>(c);
     if (!body.role || !ROLES.includes(body.role)) fail(400, "Invalid role");
     if (body.role === "owner" && myRole !== "owner") fail(403, "Only owners can grant the owner role");
-    await c.get("rt").db.run("UPDATE site_members SET role = ? WHERE site_id = ? AND user_id = ?", [body.role, site.id, c.req.param("userId")]);
+    const db = c.get("rt").db;
+    const target = c.req.param("userId");
+    const current = await getMemberRole(db, site.id, target);
+    if (current === "owner" && body.role !== "owner") {
+      if (myRole !== "owner") fail(403, "Only owners can change an owner's role");
+      const owners = await db.first<{ n: number }>("SELECT COUNT(*) AS n FROM site_members WHERE site_id = ? AND role = 'owner'", [site.id]);
+      if (Number(owners?.n ?? 0) <= 1) fail(400, "A website needs at least one owner");
+    }
+    await db.run("UPDATE site_members SET role = ? WHERE site_id = ? AND user_id = ?", [body.role, site.id, target]);
     return c.json({ ok: true });
   });
 
   app.delete("/sites/:siteId/members/:userId", async (c) => {
     const user = requireUser(c);
     const target = c.req.param("userId");
-    const { site } = await siteForUser(c, c.req.param("siteId"), target === user.id ? "viewer" : "admin");
+    const { site, role: myRole } = await siteForUser(c, c.req.param("siteId"), target === user.id ? "viewer" : "admin");
     const db = c.get("rt").db;
     const owners = await db.all<{ user_id: string }>("SELECT user_id FROM site_members WHERE site_id = ? AND role = 'owner'", [site.id]);
+    if (target !== user.id && myRole !== "owner" && owners.some((o) => o.user_id === target)) fail(403, "Only owners can remove an owner");
     if (owners.length === 1 && owners[0].user_id === target) fail(400, "A website needs at least one owner");
     await db.run("DELETE FROM site_members WHERE site_id = ? AND user_id = ?", [site.id, target]);
     return c.json({ ok: true });
@@ -538,8 +550,9 @@ export function siteRoutes() {
     if (!(ALERT_CHANNELS as readonly string[]).includes(channel)) fail(400, "Invalid channel");
     const cfg = { ...(existing ?? {}), ...((body.config as Record<string, unknown>) ?? {}) } as Record<string, unknown>;
     if (typeof cfg.botToken === "string" && cfg.botToken.startsWith("••••")) cfg.botToken = existing?.botToken;
-    if (["slack", "discord", "webhook"].includes(channel) && !/^https:\/\//.test(String(cfg.url ?? ""))) fail(400, "A valid https:// URL is required");
+    if (["slack", "discord", "webhook"].includes(channel) && !publicHttpsUrl(cfg.url)) fail(400, "A public https:// URL is required");
     if (channel === "telegram" && (!cfg.botToken || !cfg.chatId)) fail(400, "Telegram needs a bot token and a chat id");
+    if (channel === "telegram" && !TELEGRAM_TOKEN.test(String(cfg.botToken))) fail(400, "That doesn't look like a Telegram bot token");
     if (channel === "email" && !String(cfg.email ?? "").split(",").every((e) => isEmail(e.trim()))) fail(400, "Enter valid email addresses");
     if (type === "goal") {
       const g = sanitizeGoalName(cfg.goal);
@@ -617,7 +630,9 @@ export function siteRoutes() {
     const cols = rows.length ? Object.keys(rows[0]) : [];
     const esc = (v: unknown) => {
       if (v === null || v === undefined) return "";
-      const s = String(v);
+      let s = String(v);
+      // Neutralise spreadsheet formulas in visitor-controlled text (paths, referrers, UTM values, goal names).
+      if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const csv = [cols.join(","), ...rows.map((r) => cols.map((k) => esc(r[k])).join(","))].join("\n");
