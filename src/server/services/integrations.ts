@@ -39,6 +39,8 @@ async function tryDecrypt(secret: string, stored: string): Promise<ProviderConfi
 /**
  * Decrypts an integration's settings, or returns null when no key can. Settings saved before OPENREV_SECRET was set
  * are encrypted with the generated per-instance secret: those are still read, and re-encrypted with the current key.
+ * That happens when each integration is next read, so until then a database dump still holds both its keys and the
+ * secret that decrypts them.
  */
 export async function decryptConfig(rt: Runtime, row: Pick<IntegrationRow, "id" | "config">): Promise<ProviderConfig | null> {
   const current = await getSecret(rt);
@@ -47,7 +49,10 @@ export async function decryptConfig(rt: Runtime, row: Pick<IntegrationRow, "id" 
   const generated = await getInstanceValue(rt.db, "secret");
   const old = generated && generated !== current ? await tryDecrypt(generated, row.config) : null;
   if (old) {
-    await rt.db.run("UPDATE integrations SET config = ? WHERE id = ?", [await encryptConfig(rt, old), row.id]).catch(() => {});
+    // Only if the row still holds what was read: keys saved meanwhile (PATCH) must not be overwritten.
+    await rt.db
+      .run("UPDATE integrations SET config = ? WHERE id = ? AND config = ?", [await encryptConfig(rt, old), row.id, row.config])
+      .catch(() => {});
     return old;
   }
   console.error(`[openrev] integration ${row.id}: ${UNREADABLE_CONFIG_ERROR}`);

@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
 import { hmacHex } from "../src/server/lib/crypto";
-import { UNREADABLE_CONFIG_ERROR } from "../src/server/services/integrations";
+import { decryptConfig, UNREADABLE_CONFIG_ERROR, type IntegrationRow } from "../src/server/services/integrations";
 import { testRuntime } from "./helpers";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
@@ -79,6 +79,20 @@ describe("integration keys when OPENREV_SECRET changes", () => {
     });
     expect(repaired.json.integration).toMatchObject({ missing: [], last_error: null });
     expect((await stripeWebhook(webhookPath, "whsec_two")).status).toBe(200);
+  });
+
+  it("doesn't overwrite keys saved after the old settings were read", async () => {
+    rt.config = { ...rt.config, secret: undefined };
+    const created = await call(`/api/sites/${siteId}/integrations`, { body: { provider: "stripe", config: { webhookSecret: "whsec_old" } } });
+    const id = created.json.integration.id;
+
+    rt.config = { ...rt.config, secret: "set-later" };
+    const stale = (await rt.db.first<IntegrationRow>("SELECT * FROM integrations WHERE id = ?", [id]))!; // a slow request's read
+    await call(`/api/sites/${siteId}/integrations/${id}`, { method: "PATCH", body: { config: { webhookSecret: "whsec_new" } } });
+
+    expect(await decryptConfig(rt, stale)).toMatchObject({ webhookSecret: "whsec_old" });
+    const saved = (await rt.db.first<IntegrationRow>("SELECT * FROM integrations WHERE id = ?", [id]))!;
+    expect(await decryptConfig(rt, saved)).toMatchObject({ webhookSecret: "whsec_new" });
   });
 });
 
