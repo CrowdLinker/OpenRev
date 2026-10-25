@@ -2,7 +2,7 @@
 
 ## Overview
 
-The top row shows **Visitors, Revenue, Conversion rate** (visitors who paid ÷ visitors), **Revenue per visitor, Bounce rate, Session time** and **Online now**, each compared with the previous period of the same length. Click a metric to plot it; click **Revenue** to toggle the revenue bars.
+The top row shows **Visitors, Revenue, Conversion rate** (visitors who made a first purchase ÷ visitors), **Revenue per visitor, Bounce rate, Session time** and **Online now**, each compared with the previous period of the same length. Click a metric to plot it; click **Revenue** to toggle the revenue bars.
 
 Below the chart, every panel shows visitors **and** revenue:
 

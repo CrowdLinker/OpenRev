@@ -179,6 +179,18 @@ npm run dev:cf     # run the Cloudflare Worker locally with wrangler
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Adding a payment provider is a single file: [docs/revenue/custom-provider.md](docs/revenue/custom-provider.md).
 
+## 🗺️ Roadmap
+
+Planned (contributions welcome):
+
+- Google Search Console integration (keywords → revenue)
+- Social mentions and 𝕏 post/link-in-bio attribution
+- Import from Plausible and Google Analytics
+- React Native / mobile SDK and web-to-app funnels
+- AI crawler (bot) traffic reports via server middleware
+- Historical import for more providers (Polar, Paddle, Dodo…)
+- Analytics CLI for terminals and AI agents (the MCP server already covers agents)
+
 ## 📄 License
 
 MIT © [Crowdlinker](https://crowdlinker.com). IP geolocation by [DB-IP](https://db-ip.com) (CC BY 4.0).

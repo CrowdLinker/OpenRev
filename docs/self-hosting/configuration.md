@@ -11,7 +11,7 @@
 | `DATA_DIR` | `./data` (`/data` in Docker) | Directory for the SQLite database and the geolocation database. |
 | `DATABASE_URL` | `$DATA_DIR/openrev.db` | SQLite file path or `postgres://…` URL. Add `?sslmode=require` for managed Postgres. |
 | `DATABASE_POOL_SIZE` | `10` | PostgreSQL connection pool size. |
-| `DISABLE_SIGNUP` | `false` | `true` = invite-only. The very first account (admin) can always be created. Admins can also toggle sign-ups in **Account → Instance administration**. |
+| `DISABLE_SIGNUP` | `false` | Public sign-ups are closed by default once the first (admin) account exists — people join with invitations, and admins can open sign-ups in **Account → Instance administration**. `true` keeps sign-ups closed regardless of that toggle. |
 | `RESEND_API_KEY` | — | Enables emails (invitations, email alerts, digests) via [Resend](https://resend.com). |
 | `OPENREV_EMAIL_FROM` | `OpenRev <onboarding@resend.dev>` | Sender address (must be a domain verified in Resend). |
 | `RETENTION_DAYS` | — (keep forever) | Delete raw events and sessions older than N days. Payments are kept. |

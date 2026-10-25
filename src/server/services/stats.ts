@@ -130,7 +130,8 @@ export function attributionColumn(site: Site, override?: string | null): string 
 }
 
 const BOUNCE = "CASE WHEN s.pageviews <= 1 AND s.goals = 0 THEN 1 ELSE 0 END";
-const PAYING = "CASE WHEN p.type <> 'refund' AND p.visitor_id IS NOT NULL THEN p.visitor_id END";
+/** Visitors who became customers (first purchases only — renewals of older customers don't inflate conversion rates). */
+const PAYING = "CASE WHEN p.type = 'new' AND p.visitor_id IS NOT NULL THEN p.visitor_id END";
 
 export interface StatsQuery {
   site: Site;

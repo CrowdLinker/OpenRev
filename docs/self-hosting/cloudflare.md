@@ -80,7 +80,7 @@ Set variables in `wrangler.jsonc` → `vars`, and secrets with `npx wrangler sec
 |---|---|---|
 | `OPENREV_SECRET` | secret | Encrypts provider credentials. Set by the wizard. |
 | `PUBLIC_URL` | var | Public URL of the instance. |
-| `DISABLE_SIGNUP` | var | `true` forces invite-only (the first account can always be created). |
+| `DISABLE_SIGNUP` | var | Sign-ups close after the first (admin) account; `true` keeps them closed even if an admin re-opens them. |
 | `RESEND_API_KEY` | secret | Enables emails (invites, email alerts, digests) via [Resend](https://resend.com). |
 | `OPENREV_EMAIL_FROM` | var | Sender, e.g. `OpenRev <analytics@example.com>`. |
 | `RETENTION_DAYS` | var | Delete raw events/sessions older than N days. |

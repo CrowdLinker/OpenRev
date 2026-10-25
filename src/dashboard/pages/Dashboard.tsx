@@ -88,7 +88,7 @@ export function KpiRow({ overview, metric, setMetric, online, showRevenue, reven
             onClick={toggleRevenue}
             hint="Toggle revenue bars"
           />
-          <Kpi label="Conversion rate" value={pct(c.conversion_rate, 2)} delta={d("conversion_rate")} active={metric === "conversion_rate"} onClick={() => setMetric("conversion_rate")} hint="Paying visitors ÷ visitors" />
+          <Kpi label="Conversion rate" value={pct(c.conversion_rate, 2)} delta={d("conversion_rate")} active={metric === "conversion_rate"} onClick={() => setMetric("conversion_rate")} hint="Visitors who made a first purchase ÷ visitors" />
           <Kpi label="Revenue/visitor" value={money(c.revenue_per_visitor, cur, { cents: true })} delta={d("revenue_per_visitor")} active={metric === "revenue_per_visitor"} onClick={() => setMetric("revenue_per_visitor")} />
         </>
       ) : (

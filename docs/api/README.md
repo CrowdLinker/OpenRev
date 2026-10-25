@@ -76,7 +76,7 @@ or shorthand params `filter_<dimension>=<value>` (`filter_source=Google`, `filte
 }
 ```
 
-`conversion_rate` = visitors who paid ÷ visitors. `revenue_per_visitor` = revenue ÷ visitors. Add `compare=0` to skip the previous period.
+`conversion_rate` = visitors who made a first purchase ÷ visitors (renewals are excluded). `revenue_per_visitor` = revenue ÷ visitors. Add `compare=0` to skip the previous period.
 
 ### `GET /analytics/timeseries`
 
