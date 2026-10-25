@@ -230,15 +230,20 @@ function readEnv() {
   return env;
 }
 // Values such as a database URL can contain `#` (a comment in .env) or quotes, so quote them the way
-// Node's --env-file parser reads them back: single quotes are literal, double quotes expand \n.
+// Node's --env-file parser reads them back. It decodes no escapes except \n inside double quotes,
+// so pick a quote character the value doesn't contain.
 function quoteEnv(v) {
   if (/^[\w.:/@%+,=?&-]*$/.test(v)) return v;
-  if (!v.includes("'") && !/[\r\n]/.test(v)) return `'${v}'`;
-  return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, "\\n")}"`;
+  if (/[\r\n]/.test(v)) {
+    if (v.includes('"') || v.includes("\\n")) throw new Error("This value can't be stored in .env: " + JSON.stringify(v));
+    return `"${v.replace(/\r?\n/g, "\\n")}"`;
+  }
+  for (const q of ["'", "`", '"']) if (!v.includes(q)) return q + v + q;
+  throw new Error("This value contains every quote character and can't be stored in .env");
 }
 function unquoteEnv(v) {
-  if (/^'.*'$/.test(v)) return v.slice(1, -1);
-  if (/^".*"$/.test(v)) return v.slice(1, -1).replace(/\\(n|"|\\)/g, (_, c) => (c === "n" ? "\n" : c));
+  if (/^(['`]).*\1$/.test(v)) return v.slice(1, -1);
+  if (/^".*"$/.test(v)) return v.slice(1, -1).replace(/\\n/g, "\n");
   return v;
 }
 function writeEnv(env) {
