@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 # npm trusted publishing: npm trusts this workflow (set on npmjs.com → create-openrev → Settings), so no token is
-# stored anywhere. The version in packages/create-openrev/package.json must be bumped before each run.
+# stored anywhere. The run stages the release; a maintainer approves it with 2FA on npmjs.com (create-openrev →
+# Staged Packages) before it goes public. Bump the version in packages/create-openrev/package.json before each run.
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -19,8 +20,8 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: Use npm 11 (trusted publishing needs 11.5.1 or newer)
-        run: npm install -g npm@11
-      - name: Publish
+      - name: Use npm 11.15 or newer (staged publishing)
+        run: npm install -g npm@^11.15.0
+      - name: Stage the release
         working-directory: packages/create-openrev
-        run: npm publish --provenance --access public
+        run: npm stage publish
