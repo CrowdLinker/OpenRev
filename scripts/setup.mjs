@@ -232,14 +232,17 @@ function readEnv() {
 // Values such as a database URL can contain `#` (a comment in .env) or quotes, so quote them the way
 // Node's --env-file parser reads them back. It decodes no escapes except \n inside double quotes,
 // so pick a quote character the value doesn't contain.
-function quoteEnv(v) {
+/** Quotes a .env value so Node reads it back unchanged. Errors name the key, never the value (it may be a secret). */
+function quoteEnv(v, key) {
   if (/^[\w.:/@%+,=?&-]*$/.test(v)) return v;
   if (/[\r\n]/.test(v)) {
-    if (v.includes('"') || v.includes("\\n")) throw new Error("This value can't be stored in .env: " + JSON.stringify(v));
+    // A carriage return wouldn't survive the round trip, so only plain \n line breaks are stored.
+    if (v.includes("\r") || v.includes('"') || v.includes("\\n")) throw new Error(`The value of ${key} can't be stored in .env`);
     return `"${v.replace(/\r?\n/g, "\\n")}"`;
   }
-  for (const q of ["'", "`", '"']) if (!v.includes(q)) return q + v + q;
-  throw new Error("This value contains every quote character and can't be stored in .env");
+  // Inside double quotes Node turns a literal \n into a newline, so those values can't use them.
+  for (const q of ["'", "`", '"']) if (!v.includes(q) && (q !== '"' || !v.includes("\\n"))) return q + v + q;
+  throw new Error(`The value of ${key} can't be stored in .env`);
 }
 function unquoteEnv(v) {
   if (/^(['`]).*\1$/.test(v)) return v.slice(1, -1);
@@ -248,7 +251,7 @@ function unquoteEnv(v) {
 }
 function writeEnv(env) {
   // Holds OPENREV_SECRET and database credentials: owner read/write only (mode applies to new files, chmod to old ones).
-  writeFileSync(".env", Object.entries(env).map(([k, v]) => `${k}=${quoteEnv(String(v))}`).join("\n") + "\n", { mode: 0o600 });
+  writeFileSync(".env", Object.entries(env).map(([k, v]) => `${k}=${quoteEnv(String(v), k)}`).join("\n") + "\n", { mode: 0o600 });
   chmodSync(".env", 0o600);
 }
 

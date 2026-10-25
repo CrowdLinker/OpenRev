@@ -294,12 +294,12 @@ Migrations run on start-up, and IP geolocation works out of the box (from Cloudf
 |---|:-:|:-:|:-:|
 | Pricing | **Free and open source (MIT)** | Subscription | One-time license |
 | Self-hosted | ✅ Cloudflare, Docker, Node.js | — | ✅ Cloudflare |
-| Database | D1, SQLite or PostgreSQL | Managed | D1 |
+| Where your data lives | Your D1, SQLite or PostgreSQL | DataFast's service | Your Cloudflare D1 |
 | Revenue attribution | ✅ | ✅ | ✅ |
 | Payment providers | 11 built in + custom webhook + API | Stripe, Lemon Squeezy, Polar, Paddle, Shopify and more + API | Stripe, Polar, Dodo |
-| Goals, funnels and journeys | ✅ | ✅ | Journeys |
+| Goals, funnels and journeys | ✅ | ✅ | ✅ |
 | Alerts | Slack, Discord, Telegram, email, webhooks | Email | Telegram |
-| REST API and MCP server | ✅ | ✅ | — |
+| API and MCP server | ✅ | ✅ | Read-only |
 
 <sub>Based on each product's public website in October 2026. Moving over? Follow the [DataFast migration guide](docs/guides/migrate-from-datafast.md).</sub>
 

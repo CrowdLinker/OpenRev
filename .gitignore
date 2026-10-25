@@ -13,3 +13,6 @@ coverage/
 *.log
 /openrev-*.tgz
 .openrev.json
+
+# Internal notes are kept outside this public repository.
+DECISIONS.md

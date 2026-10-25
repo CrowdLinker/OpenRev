@@ -153,7 +153,13 @@ export function Shell({ children }: { children: ReactNode }) {
                   onClick={async () => {
                     close();
                     await api("/api/auth/logout", { method: "POST", body: {} });
-                    refresh();
+                    try {
+                      await refresh();
+                    } catch {
+                      // The session is gone either way; a full page load re-reads it.
+                      window.location.assign("/login");
+                      return;
+                    }
                     navigate("/login");
                   }}
                 >
