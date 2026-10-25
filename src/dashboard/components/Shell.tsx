@@ -1,20 +1,46 @@
 import { BookOpen, ChevronDown, LogOut, Moon, Plus, Sun, UserCircle } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { api, useApi } from "../lib/api";
 import { useAuth } from "../lib/context";
 import type { SiteSummary } from "../lib/types";
 import { Dropdown, Favicon, MenuItem } from "./ui";
 
+/** The OpenRev mark: a rev counter whose needle points into the green revenue zone. */
+export function LogoMark({ className = "h-7 w-7" }: { className?: string }) {
+  const id = useId().replace(/[^\w-]/g, "");
+  return (
+    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id={`${id}bg`} x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#7c6bff" />
+          <stop offset=".55" stopColor="#5b4cf5" />
+          <stop offset="1" stopColor="#3f2fd0" />
+        </linearGradient>
+        <linearGradient id={`${id}hl`} x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#fff" stopOpacity=".22" />
+          <stop offset=".5" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="16" fill={`url(#${id}bg)`} />
+      <rect width="64" height="64" rx="16" fill={`url(#${id}hl)`} />
+      <g fill="none" strokeLinecap="round" strokeWidth="5.5">
+        <path d="M19.27 46.73A18 18 0 0 1 36.35 16.53" stroke="#fff" />
+        <path d="M43.57 20.21A18 18 0 0 1 44.73 46.73" stroke="#34d399" />
+        <path d="M32 34L43.48 27.9" stroke="#fff" strokeWidth="5" />
+      </g>
+      <circle cx="32" cy="34" r="4.5" fill="#fff" />
+    </svg>
+  );
+}
+
 export function Logo({ className = "" }: { className?: string }) {
   return (
     <span className={`inline-flex items-center gap-2 font-semibold tracking-tight ${className}`}>
-      <svg viewBox="0 0 64 64" className="h-7 w-7">
-        <rect width="64" height="64" rx="14" fill="#5b4cf5" />
-        <path d="M16 42 L28 30 L36 37 L48 22" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="48" cy="22" r="5" fill="#34d399" />
-      </svg>
-      <span>OpenRev</span>
+      <LogoMark />
+      <span>
+        Open<span className="text-brand-600 dark:text-brand-400">Rev</span>
+      </span>
     </span>
   );
 }
