@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.env
+data/
+*.db
+*.db-shm
+*.db-wal
+*.mmdb
+coverage/
+.DS_Store
+*.log
+/openrev-*.tgz

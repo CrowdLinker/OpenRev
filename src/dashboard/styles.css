@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --color-brand-50: #f1efff;
+  --color-brand-100: #e4e0ff;
+  --color-brand-200: #cbc4ff;
+  --color-brand-300: #a99cff;
+  --color-brand-400: #8a78ff;
+  --color-brand-500: #6d5afb;
+  --color-brand-600: #5b4cf5;
+  --color-brand-700: #4a3bd8;
+  --color-brand-800: #3c31ad;
+  --color-brand-900: #332d88;
+  --color-money-50: #ecfdf5;
+  --color-money-100: #d1fae5;
+  --color-money-200: #a7f3d0;
+  --color-money-300: #6ee7b7;
+  --color-money-400: #34d399;
+  --color-money-500: #10b981;
+  --color-money-600: #059669;
+  --color-money-700: #047857;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-zinc-800 dark:bg-zinc-900;
+  }
+  .input {
+    @apply w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100;
+  }
+  .label {
+    @apply mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300;
+  }
+  .help {
+    @apply mt-1 text-xs text-zinc-500 dark:text-zinc-400;
+  }
+  .code {
+    @apply rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[0.85em] text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: pulse-ring 1.6s ease-out infinite;
+}
