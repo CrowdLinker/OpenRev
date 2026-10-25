@@ -238,8 +238,9 @@ function quoteEnv(v) {
     if (v.includes('"') || v.includes("\\n")) throw new Error("This value can't be stored in .env: " + JSON.stringify(v));
     return `"${v.replace(/\r?\n/g, "\\n")}"`;
   }
-  for (const q of ["'", "`", '"']) if (!v.includes(q)) return q + v + q;
-  throw new Error("This value contains every quote character and can't be stored in .env");
+  // Inside double quotes Node turns a literal \n into a newline, so those values can't use them.
+  for (const q of ["'", "`", '"']) if (!v.includes(q) && (q !== '"' || !v.includes("\\n"))) return q + v + q;
+  throw new Error("This value can't be stored in .env: " + JSON.stringify(v));
 }
 function unquoteEnv(v) {
   if (/^(['`]).*\1$/.test(v)) return v.slice(1, -1);
