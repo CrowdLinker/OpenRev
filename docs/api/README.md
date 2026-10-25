@@ -140,7 +140,7 @@ curl -X POST "$OPENREV/api/v1/payments" \
 | `currency` | ✓ | ISO 4217. Converted to the website currency. |
 | `transaction_id` | ✓ | Unique per payment; re-sending is a no-op (`200` instead of `201`). |
 | `openrev_visitor_id` | | Value of the `openrev_visitor_id` cookie. `visitor_id` and `datafast_visitor_id` are accepted. Without it, OpenRev tries the customer id and email. |
-| `openrev_session_id` | | Optional, the `openrev_session_id` cookie. |
+| `openrev_session_id` | | Optional, the `openrev_session_id` cookie. `datafast_session_id` is accepted. |
 | `email`, `name`, `customer_id` | | Used to link renewals and identify customers. |
 | `renewal` | | `true` for recurring charges. |
 | `refunded` | | `true` for refunds (`amount` = refunded amount). Use `related_transaction_id` to inherit the original attribution. |

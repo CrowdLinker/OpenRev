@@ -68,7 +68,7 @@ Historical DataFast analytics aren't imported. OpenRev starts counting from the 
 
 ## 5. Update your checkout code
 
-OpenRev's payment adapters (Stripe, Lemon Squeezy, Polar, Paddle, Creem, Dodo, Paystack, Razorpay, Gumroad, Shopify, WooCommerce and custom webhooks) and its Payments, Goals and Identify APIs all accept `datafast_visitor_id` (and `datafast_session_id`) as the visitor id key. **Your metadata keys can stay as they are.**
+OpenRev's payment adapters (Stripe, Lemon Squeezy, Polar, Paddle, Creem, Dodo, Paystack, Razorpay, Gumroad, Shopify, WooCommerce and custom webhooks) and its Payments, Goals and Identify APIs all accept `datafast_visitor_id` as the visitor id key. The payment adapters and the Payments API also accept `datafast_session_id` in place of `openrev_session_id`. **Your metadata keys can stay as they are.**
 
 What must change is where the **value** comes from. Visitors who arrive after the switch only get the `openrev_visitor_id` cookie. Read it first:
 
