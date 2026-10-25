@@ -27,7 +27,7 @@ If you use another script variant (`script.hash.js`, `script.cookieless.js`…),
 ## Rules every proxy must follow
 
 1. **Keep the visitor's `User-Agent`.** OpenRev drops events whose user agent is missing, very short or looks like a bot or HTTP library (`node-fetch`, `undici`, `python-requests`, `curl`, `Go-http-client`…). Many server HTTP clients send their own user agent unless you pass the visitor's. The events endpoint then answers `{"ok":false,"reason":"bot"}`.
-2. **Forward the visitor's IP in `X-Forwarded-For`.** Without it, OpenRev sees your server's IP. On self-hosted (Node/Docker) instances the IP is used to look up the country and city, so every visitor would appear to be where your server is. IP [exclusions](exclusions.md) and visitor counting in cookieless mode also depend on it. OpenRev reads the **first** address in `X-Forwarded-For`.
+2. **Forward the visitor's IP in `X-Forwarded-For`.** Without it, OpenRev sees your server's IP. On self-hosted (Node/Docker) instances the IP is used to look up the country and city, so every visitor would appear to be where your server is. IP [exclusions](exclusions.md) and visitor counting in cookieless mode also depend on it. OpenRev reads the **first** address in `X-Forwarded-For`. Take the address from your platform or framework (the connection's address, `CF-Connecting-IP` on Cloudflare…) rather than copying an incoming `X-Forwarded-For`, whose first entry the browser can set. Behind a proxy you run, use the entry that proxy adds, or your framework's trusted-proxy setting, as in the examples below.
 3. **Send the body unchanged.** It's JSON sent as `text/plain`. Mount the proxy before any body parser (`express.json()`, `express.text()`…) or forward the raw body.
 4. **Don't cache `POST /api/events`.** Caching `GET /js/script.js` for up to an hour is fine.
 
@@ -71,20 +71,31 @@ If you have a `middleware.ts` (auth, i18n…), exclude these two paths from its 
 
 ```ts
 // app/api/events/route.ts
+// Location headers Vercel adds; an OpenRev instance on Cloudflare Workers needs them (see below).
+const LOCATION_HEADERS = ["x-vercel-ip-country", "x-vercel-ip-country-region", "x-vercel-ip-city", "x-vercel-ip-latitude", "x-vercel-ip-longitude"];
+
 export async function POST(request: Request) {
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? request.headers.get("x-real-ip") ?? "";
+  const headers: Record<string, string> = {
+    "Content-Type": "text/plain",
+    "User-Agent": request.headers.get("user-agent") ?? "",
+    // Vercel sets x-real-ip to the visitor's address and overwrites values sent by the browser.
+    "X-Forwarded-For": request.headers.get("x-real-ip") ?? "",
+  };
+  for (const name of LOCATION_HEADERS) {
+    const value = request.headers.get(name);
+    if (value) headers[name] = value;
+  }
   const res = await fetch("https://analytics.example.com/api/events", {
     method: "POST",
-    headers: {
-      "Content-Type": "text/plain",
-      "User-Agent": request.headers.get("user-agent") ?? "",
-      "X-Forwarded-For": ip,
-    },
+    headers,
     body: await request.text(),
+    signal: AbortSignal.timeout(5000),
   });
   return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/json" } });
 }
 ```
+
+When you self-host Next.js, put it behind a reverse proxy that sets `X-Real-IP` to the address it received the request from (Nginx: `proxy_set_header X-Real-IP $remote_addr;`).
 
 ## Vercel (any framework)
 
@@ -216,21 +227,25 @@ import express from "express";
 import { createProxyMiddleware } from "http-proxy-middleware";
 
 const app = express();
+// Behind a load balancer or reverse proxy, uncomment so req.ip is the visitor (1 = one proxy in front):
+// app.set("trust proxy", 1);
 
 // Mount before express.json() / express.text() so the body isn't consumed.
 app.use(
   createProxyMiddleware({
     target: "https://analytics.example.com",
     changeOrigin: true,
-    xfwd: true, // adds X-Forwarded-For with the client IP
     pathFilter: ["/js/script.js", "/api/events"],
+    on: {
+      proxyReq: (proxyReq, req) => proxyReq.setHeader("X-Forwarded-For", req.ip ?? ""),
+    },
   }),
 );
 
 // ... your routes
 ```
 
-This is for `http-proxy-middleware` v3. Use `pathFilter` rather than `app.use("/api/events", …)`: with a mount path, Express strips it and the proxy would request `/` instead. If Express runs behind a load balancer, the existing `X-Forwarded-For` is kept and your server's view of the client is appended, so the first address is still the visitor.
+This is for `http-proxy-middleware` v3. Use `pathFilter` rather than `app.use("/api/events", …)`: with a mount path, Express strips it and the proxy would request `/` instead. `req.ip` is the connection's address, or the visitor's once `trust proxy` is set; don't pass the incoming `X-Forwarded-For` through (`xfwd: true` keeps it and appends), since its first entry can come from the browser.
 
 ## PHP
 
@@ -259,8 +274,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// Behind Cloudflare, REMOTE_ADDR is Cloudflare's IP; the visitor is in CF-Connecting-IP.
-$ip = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['REMOTE_ADDR'];
+$ip = $_SERVER['REMOTE_ADDR'];
+// Behind Cloudflare, REMOTE_ADDR is Cloudflare's IP and the visitor is in CF-Connecting-IP. Read it only if
+// your server accepts traffic from Cloudflare alone: anyone reaching the server directly can set the header.
+// $ip = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['REMOTE_ADDR'];
 
 $ch = curl_init($openrev . '/api/events');
 curl_setopt_array($ch, [
@@ -337,11 +354,15 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 OPENREV = "https://analytics.example.com"
+# True if Django runs behind one reverse proxy you control (Nginx, a load balancer) that appends to X-Forwarded-For.
+BEHIND_PROXY = False
 
 
 def client_ip(request):
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    return forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
+    if BEHIND_PROXY:
+        # Your proxy appends the address it received the request from; earlier entries come from the browser.
+        return request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[-1].strip()
+    return request.META.get("REMOTE_ADDR", "")
 
 
 @cache_page(60 * 60)
@@ -378,15 +399,18 @@ urlpatterns = [
 ]
 ```
 
-Only trust `X-Forwarded-For` if your app is behind a proxy that sets it; otherwise use `REMOTE_ADDR`.
+`REMOTE_ADDR` is the visitor when Django is reached directly. Behind a proxy it's the proxy's address: set `BEHIND_PROXY = True` only if that proxy is yours and appends to `X-Forwarded-For` (Nginx's `$proxy_add_x_forwarded_for` does).
 
 ## Flask
 
 ```python
 import requests
 from flask import Flask, Response, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
+# Behind one reverse proxy you control (Nginx, a load balancer), uncomment so request.remote_addr is the visitor:
+# app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 OPENREV = "https://analytics.example.com"
 
 
@@ -399,14 +423,13 @@ def openrev_script():
 
 @app.post("/api/events")
 def openrev_events():
-    ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr or "")
     r = requests.post(
         f"{OPENREV}/api/events",
         data=request.get_data(),
         headers={
             "Content-Type": "text/plain",
             "User-Agent": request.headers.get("User-Agent", ""),
-            "X-Forwarded-For": ip,
+            "X-Forwarded-For": request.remote_addr or "",
         },
         timeout=5,
     )
@@ -433,8 +456,9 @@ async def openrev_script():
 
 @app.post("/api/events")
 async def openrev_events(request: Request):
-    forwarded = request.headers.get("x-forwarded-for", "")
-    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "")
+    # The connecting address. Behind a reverse proxy, start Uvicorn with --forwarded-allow-ips set to the
+    # proxy's address (127.0.0.1 and ::1 are trusted by default) so it takes the visitor from X-Forwarded-For.
+    ip = request.client.host if request.client else ""
     async with httpx.AsyncClient(timeout=5) as client:
         r = await client.post(
             f"{OPENREV}/api/events",
@@ -467,6 +491,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
       "X-Forwarded-For": clientAddress,
     },
     body: await request.text(),
+    signal: AbortSignal.timeout(5000),
   });
   return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/json" } });
 };
@@ -479,7 +504,7 @@ import type { APIRoute } from "astro";
 export const prerender = false;
 
 export const GET: APIRoute = async () => {
-  const res = await fetch("https://analytics.example.com/js/script.js");
+  const res = await fetch("https://analytics.example.com/js/script.js", { signal: AbortSignal.timeout(5000) });
   return new Response(await res.text(), {
     status: res.status,
     headers: { "Content-Type": "application/javascript", "Cache-Control": "public, max-age=3600" },
@@ -531,6 +556,6 @@ How it finds the location:
   },
   ```
 
-  On Vercel, forward `x-vercel-ip-country`, `x-vercel-ip-country-region`, `x-vercel-ip-city`, `x-vercel-ip-latitude` and `x-vercel-ip-longitude` from your Route Handler instead — OpenRev understands those too. Without any of these headers, proxied visits are recorded without a location (rather than with your proxy's).
+  On Vercel, forward `x-vercel-ip-country`, `x-vercel-ip-country-region`, `x-vercel-ip-city`, `x-vercel-ip-latitude` and `x-vercel-ip-longitude` from your Route Handler instead, as the [Next.js example](#nextjs) does — OpenRev understands those too. Without any of these headers, proxied visits are recorded without a location (rather than with your proxy's).
 
 If a proxy doesn't forward the IP at all, fix its config with one of the examples above.

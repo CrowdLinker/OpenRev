@@ -64,7 +64,7 @@ When a returning visitor has a `datafast_visitor_id` cookie and no OpenRev cooki
 - the same person keeps the same visitor id in both tools;
 - subscriptions created while you used DataFast, whose metadata carries `datafast_visitor_id`, point at a visitor id OpenRev also uses. Renewals are attributed once that visitor has been seen by OpenRev.
 
-Historical DataFast analytics aren't imported. OpenRev starts counting from the moment the new script is live, so returning visitors appear as new on their first OpenRev visit.
+Historical DataFast analytics aren't imported. OpenRev starts counting from the moment the new script is live: a returning visitor keeps the same visitor id, but their first visit after the switch is the first one OpenRev records, so it counts as a new visitor.
 
 ## 5. Update your checkout code
 

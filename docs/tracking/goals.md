@@ -103,9 +103,9 @@ curl -X POST "https://analytics.example.com/api/v1/goals" \
 | `metadata` | no | Properties (`props` or `properties` also work). Same [limits](#properties). |
 | `timestamp` | no | Unix time (seconds or milliseconds) or an ISO 8601 date. Defaults to now. |
 
-Response: `201 {"status":"success","data":{"name":"onboarding_completed","visitor_id":"…"}}`. A missing or invalid key returns `401`, a bad name or visitor id `422`. Account-level API tokens also need `?websiteId=YOUR_WEBSITE_ID`. See the [API reference](../api/README.md).
+Response: `201 {"status":"success","data":{"name":"onboarding_completed","visitor_id":"…"}}`. A missing or invalid key returns `401`, a key of a viewer (rather than an admin) `403`, a bad name or visitor id `422`. Account-level API tokens also need `?websiteId=YOUR_WEBSITE_ID`. See the [API reference](../api/README.md).
 
-**Where to get the visitor id:** read the `openrev_visitor_id` cookie in the request your backend receives (the cookie is first-party on your domain), or send `openrev.visitorId()` from the browser along with the form. Save it on the user record if the goal happens later.
+**Where to get the visitor id:** read the `openrev_visitor_id` cookie in the request your backend receives (the cookie is first-party on your domain), or send `openrev.visitorId()` from the browser along with the form. Save it on the user record if the goal happens later. In [cookieless mode](privacy-and-cookies.md#cookieless-mode) the browser has no visitor id to send, so server-side goals need cookie mode; track the goal from the browser instead.
 
 The goal is attached to the visitor's most recent session, so it's credited to that session's source. The visitor must have at least one recorded visit (the tracking script ran for them); otherwise the API answers `422` instead of inventing a session that would distort your traffic stats.
 

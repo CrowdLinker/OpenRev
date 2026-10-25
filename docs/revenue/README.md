@@ -1,6 +1,6 @@
 # Revenue attribution
 
-OpenRev links every payment to the visitor who made it, then credits the traffic source, campaign, landing page, country and device of that visitor's visit. You get revenue, conversion rate and revenue per visitor next to every row of the dashboard — not just traffic.
+OpenRev links each payment to the visitor who made it when it can find them, then credits the traffic source, campaign, landing page, country and device of that visitor's visit. You get revenue, conversion rate and revenue per visitor next to every row of the dashboard — not just traffic.
 
 ## How a payment finds its visitor
 
@@ -9,7 +9,7 @@ The tracking script gives each visitor an id, stored in the first-party cookie `
 1. **Checkout metadata** — the id you attached when creating the checkout (`metadata.openrev_visitor_id`, Lemon Squeezy `custom_data`, Paddle `custom_data`, Shopify cart attributes…). `datafast_visitor_id` is accepted too.
 2. **Automatic tagging** — the tracker adds the visitor id to Stripe Payment Links (`client_reference_id`), Lemon Squeezy checkout links and Gumroad links, and to Shopify carts.
 3. **Success-page detection** — when the visitor lands back on your site with `?session_id=cs_…` (Stripe Checkout), `?checkout_id=…` (Polar, Creem) or `?payment_id=…&status=succeeded` (Dodo), the tracker reports it and OpenRev links the payment — even if the webhook arrived first.
-4. **Returning customers** — renewals and refunds reuse the visitor of the customer's previous payments (`customer_id`).
+4. **Returning customers** — a refund reuses the visitor of the payment it refunds; otherwise renewals and refunds reuse the first visitor linked to the customer (`customer_id`), from their earliest attributed payment.
 5. **Email** — if you call `openrev("identify", { email })` or `openrev("payment", { email })`, payments with that email are linked.
 
 Payments that can't be linked still count toward totals and show as **Unattributed**.

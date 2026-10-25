@@ -126,7 +126,7 @@ Ids passed in the URL as `_or_vid` / `_or_sid` (or DataFast's `_df_vid` / `_df_s
 | Outbound links | Clicks on `http(s)` links to other sites. Records the destination without its query string. Shown as **Exit links**. | `data-disable-outbound` |
 | Cross-domain links | Adds `_or_vid` and `_or_sid` to links pointing at `data-allowed-hostnames`. | remove the attribute |
 | Stripe Payment Links | Adds `client_reference_id=<visitor id>` to `buy.stripe.com` links (unless one is already set). | `data-disable-payments` |
-| Lemon Squeezy checkouts | Adds `checkout[custom][openrev_visitor_id]` and `checkout[custom][openrev_session_id]` to checkout links on `*.lemonsqueezy.com`, and to `/checkout/buy/…` links on any domain (Lemon Squeezy custom checkout domains). | `data-disable-payments` |
+| Lemon Squeezy checkouts | Adds `checkout[custom][openrev_visitor_id]` and `checkout[custom][openrev_session_id]` to checkout links on `*.lemonsqueezy.com`, and to `/checkout/buy/…` links on any domain other than your site's (Lemon Squeezy custom checkout domains). | `data-disable-payments` |
 | Gumroad | Adds `openrev_visitor_id` to `gumroad.com` and `gum.co` links. | `data-disable-payments` |
 | Shopify cart | On Shopify storefronts, saves `openrev_visitor_id` and `openrev_session_id` as cart attributes. | `data-disable-payments` |
 | Checkout success pages | When the URL has `session_id=cs_…` (Stripe Checkout), `checkout_id=…`, or `payment_id=…` with `status=succeeded`, `success` or `paid`, records the checkout reference so the provider's webhook can be matched to this visitor. | `data-disable-payments` |
@@ -156,7 +156,7 @@ The script sends `POST` requests to `/api/events` (`/api/event` is accepted as a
 | `websiteId` | all | `data-website-id` |
 | `href` | all | Full page URL |
 | `referrer` | all | `document.referrer` |
-| `visitorId`, `sessionId` | all | Ids from the cookies (`visitorId` is `null` in cookieless mode) |
+| `visitorId`, `sessionId` | all | Ids from the cookies. In cookieless mode `visitorId` is `null` and `sessionId` comes from `sessionStorage` |
 | `screenWidth`, `language` | all | Used for device type and language |
 | `hash` | all | `true` in hash-routing mode |
 | `name`, `props` | `goal` | Goal name and properties |

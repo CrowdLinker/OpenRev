@@ -124,7 +124,7 @@ On Node/Docker, also check the server log for `Geolocation database loaded`. If 
 - **Name changed:** names are normalized: `Sign Up` is recorded as `sign_up`, `checkout.started` as `checkoutstarted` ([rules](../tracking/goals.md#naming-rules)).
 - **`data-openrev-goal` on a `<form>`:** goals fire on clicks, not on submit. Put the attribute on the submit button.
 - **Scroll goal never fires:** with the default threshold of `0.5`, an element more than twice the screen height can never be half visible. Lower `data-openrev-scroll-threshold` or put the attribute on a smaller element.
-- **Server-side goals:** `POST /api/v1/goals` needs a valid API key and `openrev_visitor_id`. A `401` means the key is wrong; a `422` names the missing field.
+- **Server-side goals:** `POST /api/v1/goals` needs a valid API key from a website admin and `openrev_visitor_id` (`datafast_visitor_id` is still accepted for migrated integrations). A `401` means the key is wrong, a `403` that the key belongs to a viewer; a `422` names the missing field.
 
 ## Revenue isn't attributed
 
@@ -145,7 +145,7 @@ Provider-specific steps are in [Revenue](../revenue/README.md).
 
 OpenRev couldn't link the payment to a visitor, or that visitor has no recorded sessions.
 
-- **No visitor id in the checkout metadata.** Pass `openrev_visitor_id` (the value of the `openrev_visitor_id` cookie) in your checkout metadata. Payment Links, Lemon Squeezy checkout links, Gumroad links and Shopify carts are tagged automatically by the script, unless `data-disable-payments` is set.
+- **No visitor id in the checkout metadata.** Pass `openrev_visitor_id` (the value of the `openrev_visitor_id` cookie) in your checkout metadata; `datafast_visitor_id` is still accepted for migrated integrations. Payment Links, Lemon Squeezy checkout links, Gumroad links and Shopify carts are tagged automatically by the script, unless `data-disable-payments` is set.
 - **Reading the wrong cookie after migrating from DataFast.** New visitors only have `openrev_visitor_id`; see [Migrate from DataFast](migrate-from-datafast.md#5-update-your-checkout-code).
 - **The buyer's browser blocked the script,** so there are no sessions to credit. A [proxy](../tracking/proxy.md) fixes most of these.
 - **Checkout on another domain** that isn't set up for [cross-domain tracking](../tracking/cross-domain.md).

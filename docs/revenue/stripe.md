@@ -88,7 +88,7 @@ In the browser, `window.openrev.visitorId()` returns the same id if you create c
 
 ## How payments are counted
 
-- Amount: `amount_total` / `amount_paid` in the payment currency, converted to your site currency.
+- Amount: `amount_total` for Checkout Sessions, `amount_paid` for invoices and `amount_received` for PaymentIntents, converted from the payment currency to your site currency.
 - A subscription's first payment arrives as both `checkout.session.completed` and `invoice.paid`; both use the invoice id as the transaction id, so it is counted once. `invoice.paid` with `billing_reason=subscription_cycle` is a **renewal**.
 - One-time Checkout payments are keyed by the PaymentIntent id, so `payment_intent.succeeded` for the same payment is not counted twice.
 - `charge.refunded` reports the cumulative refunded amount; OpenRev updates the refund instead of adding a new one. Refunds inherit the original payment's attribution.

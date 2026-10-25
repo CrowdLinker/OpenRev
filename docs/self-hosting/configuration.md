@@ -9,13 +9,13 @@
 | `PORT` | `3000` | HTTP port. |
 | `HOST` | `0.0.0.0` | Interface to bind. |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Directory for the SQLite database and the geolocation database. |
-| `DATABASE_URL` | `$DATA_DIR/openrev.db` | SQLite file path or `postgres://…` URL. Add `?sslmode=require` for managed Postgres. |
+| `DATABASE_URL` | `$DATA_DIR/openrev.db` | SQLite file path or `postgres://…` URL. For managed Postgres add `?sslmode=`: it's passed to the driver as-is, so `require` encrypts the connection and `verify-ca` / `verify-full` also verify the server certificate against Node's trusted CAs (add a private CA with `NODE_EXTRA_CA_CERTS`). |
 | `DATABASE_POOL_SIZE` | `10` | PostgreSQL connection pool size. |
 | `DISABLE_SIGNUP` | `false` | Public sign-ups are closed by default once the first (admin) account exists — people join with invitations, and admins can open sign-ups in **Account → Instance administration**. `true` keeps sign-ups closed regardless of that toggle. |
 | `RESEND_API_KEY` | — | Enables emails (invitations, email alerts, digests) via [Resend](https://resend.com). |
 | `OPENREV_EMAIL_FROM` | `OpenRev <onboarding@resend.dev>` | Sender address (must be a domain verified in Resend). |
 | `RETENTION_DAYS` | — (keep forever) | Delete raw events and sessions older than N days. Payments are kept. |
-| `TRUST_PROXY` | `true` | Read the client IP from `X-Forwarded-For` / `X-Real-IP`. Set `false` if OpenRev is exposed without a reverse proxy. |
+| `TRUST_PROXY` | `true` | Read the client IP from `X-Forwarded-For` / `X-Real-IP`. Analytics use the first `X-Forwarded-For` address (the visitor, also when a website proxies the tracker); login rate limits use the last one, which your reverse proxy appends. Set `false` if OpenRev is exposed without a reverse proxy: both then use the connection's address. |
 | `GEOIP_DB` | — | Path to a MaxMind GeoLite2 / DB-IP `.mmdb` file. |
 | `GEOIP_AUTO_DOWNLOAD` | `true` | Download the free DB-IP Lite city database into `DATA_DIR` and refresh it monthly. |
 | `PUBLIC_DIR` | `dist/public` | Location of the built dashboard (advanced). |

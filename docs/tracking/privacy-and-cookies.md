@@ -85,7 +85,7 @@ The script also reads DataFast's `datafast_visitor_id` / `datafast_session_id` c
 
 ## GDPR notes
 
-- **Where data lives:** on your OpenRev server and database. Your hosting provider is the only processor involved.
+- **Where data lives:** on your OpenRev server and database. For the tracking data OpenRev collects, your hosting provider is the only processor involved. Services you connect are separate: assess your payment providers on their own, and note that alerts (Slack, Discord, Telegram, webhooks, email via Resend) can include customer names and emails.
 - **Personal data:** in cookie mode the visitor id is a pseudonymous identifier. Data you send with `identify` (names, emails) and payment data from providers is personal data. Mention OpenRev in your privacy policy and have a legal basis for it.
 - **Minimization:** don't put personal data in goal properties or URLs. Query strings are dropped, but paths are stored as they are.
 - **Retention:** by default, data is kept until you delete it. Set `RETENTION_DAYS` on your instance to delete raw events and sessions older than that many days automatically ([configuration](../self-hosting/configuration.md)).

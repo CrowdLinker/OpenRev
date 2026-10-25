@@ -1,6 +1,6 @@
 # Deploy OpenRev on Cloudflare (Workers + D1)
 
-Cloudflare is the recommended way to run OpenRev: it is serverless, global, needs no maintenance and fits comfortably in the **free tier** for most sites (100,000 Worker requests per day, 5 GB of D1 storage). Each pageview or event is one request.
+Cloudflare is the recommended way to run OpenRev: it is serverless, global, needs no maintenance and fits comfortably in the **free tier** for most sites (100,000 Worker requests per day, D1 databases up to 500 MB). Each pageview or event is one request.
 
 What gets deployed to **your** Cloudflare account:
 
@@ -97,7 +97,7 @@ If you used the Deploy button, pull upstream changes into your copy of the repos
 
 ## Limits & scaling
 
-- D1 databases can grow to 10 GB on paid plans (5 GB on free). Use `RETENTION_DAYS` to cap raw data.
+- D1 databases can grow to 10 GB on the Workers Paid plan. On the free plan each database is limited to 500 MB, and 5 GB is the total D1 storage for the account. Use `RETENTION_DAYS` to cap raw data.
 - The free Workers plan allows 100k requests/day. Sites with more traffic should use the Workers Paid plan ($5/month for 10M requests).
 - Queries run directly on D1; dashboards stay fast up to several million events per month. For very large sites, consider [PostgreSQL on Node/Docker](docker.md).
 
@@ -107,7 +107,7 @@ If you used the Deploy button, pull upstream changes into your copy of the repos
 npx wrangler d1 export openrev --remote --output openrev-backup.sql
 ```
 
-D1 also has built-in point-in-time recovery ([Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)) for the last 30 days.
+D1 also has built-in point-in-time recovery ([Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/)) for the last 30 days on the Workers Paid plan (7 days on the free plan).
 
 ## Local development of the Worker
 

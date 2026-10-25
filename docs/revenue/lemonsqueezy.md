@@ -43,12 +43,14 @@ Nothing to do. When a visitor clicks a `https://<store>.lemonsqueezy.com/checkou
 ?checkout[custom][openrev_visitor_id]=<visitor id>&checkout[custom][openrev_session_id]=<session id>
 ```
 
-If you open checkouts from JavaScript (`LemonSqueezy.Url.Open(url)`) or use a custom checkout domain, add the parameters yourself:
+`/checkout/buy/…` links on a custom checkout domain are tagged too, unless that domain is your site's own domain or one of its subdomains (e.g. `pay.example.com` when you track `example.com`). In that case, or if you open checkouts from JavaScript (`LemonSqueezy.Url.Open(url)`), add the parameters yourself:
 
 ```js
 const url = new URL("https://yourstore.lemonsqueezy.com/checkout/buy/VARIANT_ID");
 const vid = window.openrev?.visitorId?.();
+const sid = window.openrev?.sessionId?.();
 if (vid) url.searchParams.set("checkout[custom][openrev_visitor_id]", vid);
+if (sid) url.searchParams.set("checkout[custom][openrev_session_id]", sid);
 LemonSqueezy.Url.Open(url.toString());
 ```
 

@@ -23,7 +23,7 @@ docker run -d --name openrev --restart unless-stopped \
   ghcr.io/crowdlinker/openrev:latest
 ```
 
-Everything (SQLite database, generated secrets, geolocation database) lives in the `/data` volume — back it up.
+Everything (SQLite database, generated secrets, geolocation database) lives in the `/data` volume — back it up. An `OPENREV_SECRET` you set yourself (with `-e` or in `.env`) isn't in the volume: keep it with your backups and pass the same value when you recreate the container, or the stored payment-provider credentials can't be decrypted.
 
 ## Docker Compose
 
@@ -41,7 +41,7 @@ PostgreSQL ([`docker-compose.postgres.yml`](../../docker-compose.postgres.yml)):
 docker compose -f docker-compose.postgres.yml up -d
 ```
 
-To use an existing PostgreSQL server (Neon, Supabase, RDS…), set `DATABASE_URL=postgres://user:password@host:5432/db?sslmode=require`.
+To use an existing PostgreSQL server (Neon, Supabase, RDS…), set `DATABASE_URL=postgres://user:password@host:5432/db?sslmode=require` (or `sslmode=verify-full` to also verify the server certificate, see [configuration](configuration.md)).
 
 ## HTTPS with a reverse proxy
 
@@ -67,7 +67,7 @@ server {
 }
 ```
 
-OpenRev reads the visitor IP from `X-Forwarded-For` (set `TRUST_PROXY=false` if the container is exposed directly to the internet without a proxy). Behind Cloudflare's proxy, the `CF-Connecting-IP` and `CF-IPCountry` headers are used automatically.
+OpenRev reads the visitor IP from `X-Forwarded-For` (set `TRUST_PROXY=false` if the container is exposed directly to the internet without a proxy). Behind Cloudflare's proxy, the `CF-Connecting-IP` and `CF-IPCountry` headers are used automatically. Login rate limits use the address your proxy appends (the last `X-Forwarded-For` entry); if another proxy such as Cloudflare sits in front of Nginx, set up Nginx's `realip` module so that address is the visitor's.
 
 ## Geolocation
 

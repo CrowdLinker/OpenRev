@@ -36,7 +36,7 @@ The installer downloads OpenRev and asks where to run it:
 
 | Target | What happens | Cost |
 |---|---|---|
-| **Cloudflare** (recommended) | Logs you in with Wrangler, creates the D1 database, deploys the Worker, stores a secret. | Free tier: 100k requests/day, 5 GB |
+| **Cloudflare** (recommended) | Logs you in with Wrangler, creates the D1 database, deploys the Worker, stores a secret. | Free tier: 100k requests/day, 500 MB D1 database |
 | **Docker** | Writes `.env`, starts `docker compose` (SQLite or bundled PostgreSQL). | Any $5 VPS |
 | **Node.js** | Builds and runs the server (SQLite file or `postgres://` URL). | — |
 

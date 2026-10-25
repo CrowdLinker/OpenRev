@@ -24,7 +24,7 @@ curl https://analytics.example.com/api/v1/analytics/overview \
 | Website key | `or_` | Website → Settings → API & MCP | One website (inferred). |
 | Account token | `ort_` | Account → Account tokens | Every website you can access — add `websiteId=<id>` to each request. |
 
-Keys inherit the permissions of the user who created them (viewers can read; deleting payments requires admin). Keep keys server-side.
+Keys act with the current role of the user who created them on each website. Viewers can only read: sending payments, goals and identities (`POST /payments`, `/goals`, `/identify`), deleting payments and the MCP `add_note` tool require the **admin** role (the REST API answers `403` otherwise). Keep keys server-side.
 
 Responses use an envelope:
 
@@ -54,7 +54,7 @@ or shorthand params `filter_<dimension>=<value>` (`filter_source=Google`, `filte
 
 **Dimensions**: `channel`, `source` (referrer name), `referrer` (domain), `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `ref`, `page`, `entry_page`, `exit_page`, `hostname`, `outbound`, `country`, `region`, `city`, `device`, `browser`, `os`, `goal`.
 
-**Money**: amounts are integers in **minor units** (cents) of the website currency, which is returned as `currency`. Payment inputs use major units (`29.99`).
+**Money**: amounts are integers in **minor units** (cents) of the website currency, which is returned as `currency`. Ratios such as `revenue_per_visitor` are in minor units too but can have decimals (`269.1` = $2.69 per visitor). Payment inputs use major units (`29.99`).
 
 ## Analytics
 
@@ -72,11 +72,11 @@ or shorthand params `filter_<dimension>=<value>` (`filter_source=Google`, `filte
     "currency": "USD"
   },
   "previous": { "...": "same metrics for the previous period" },
-  "range": { "period": "30d", "from": 1790000000000, "to": 1792600000000, "fromDate": "2026-09-26", "toDate": "2026-10-25", "interval": "day", "timezone": "America/New_York" }
+  "range": { "period": "30d", "from": 1790395200000, "to": 1792987200000, "fromDate": "2026-09-26", "toDate": "2026-10-25", "interval": "day", "timezone": "America/New_York" }
 }
 ```
 
-`conversion_rate` = visitors who made a first purchase ÷ visitors (renewals are excluded). `revenue_per_visitor` = revenue ÷ visitors. Add `compare=0` to skip the previous period.
+`conversion_rate` = visitors who made a first purchase ÷ visitors (renewals are excluded). `revenue_per_visitor` = revenue ÷ visitors. In `range`, `from` and `to` are epoch milliseconds and `to` is exclusive. Add `compare=0` to skip the previous period.
 
 ### `GET /analytics/timeseries`
 
@@ -211,4 +211,4 @@ claude mcp add --transport http openrev https://analytics.example.com/mcp --head
 }
 ```
 
-Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first).
+Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website.

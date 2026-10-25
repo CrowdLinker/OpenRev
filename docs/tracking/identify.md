@@ -48,7 +48,7 @@ export function IdentifyUser({ user }: { user: { id: string; email: string; name
 
 ## From your server
 
-Use `POST /api/v1/identify` when the browser isn't involved, for example after email verification or from a webhook. Create an API key in **Settings → API & MCP**.
+Use `POST /api/v1/identify` when the browser isn't involved, for example after email verification or from a webhook. Create an API key in **Settings → API & MCP** (an account token only works for websites where you're an admin).
 
 ```bash
 curl -X POST "https://analytics.example.com/api/v1/identify" \
@@ -63,7 +63,7 @@ curl -X POST "https://analytics.example.com/api/v1/identify" \
   }'
 ```
 
-- `openrev_visitor_id` is required (`visitor_id`, `visitorId` and `datafast_visitor_id` are accepted). Read it from the `openrev_visitor_id` cookie on the request, or store it on the user at signup.
+- `openrev_visitor_id` is required (`visitor_id`, `visitorId` and `datafast_visitor_id` are accepted). Read it from the `openrev_visitor_id` cookie on the request, or store it on the user at signup. In [cookieless mode](privacy-and-cookies.md#cookieless-mode) there is no visitor id to read (OpenRev derives it on its side and never gives it to the browser), so server-side identify needs cookie mode; use the browser call instead.
 - `user_id`, `email`, `name` and `image` work as in the browser. Every other field becomes a custom property.
 - Response: `{"status":"success","data":{"visitor_id":"…"}}`.
 

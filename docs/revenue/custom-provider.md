@@ -2,7 +2,7 @@
 
 There are three ways to send revenue from a payment system that has no built-in OpenRev integration:
 
-1. **Custom webhook** (no code): point the provider's webhooks at OpenRev and tell OpenRev where the amount, currency, transaction id and visitor id are in the payload.
+1. **Custom webhook** (no code): point the provider's webhooks at OpenRev and tell OpenRev where the amount, currency and transaction id are in the payload, plus the visitor id or customer email when the provider sends them.
 2. **Payments API**: call OpenRev from your backend after a successful charge (Settings → Revenue → *Any other payment system: Payments API*).
 3. **Built-in adapter** (code): add a provider to OpenRev itself and contribute it back.
 
@@ -13,7 +13,7 @@ There are three ways to send revenue from a payment system that has no built-in 
 Open **Settings → Revenue → Connect → Custom webhook**. After saving, OpenRev shows the webhook URL:
 
 ```
-https://YOUR-OPENREV-DOMAIN/api/webhooks/<integration-id>
+https://YOUR-OPENREV-DOMAIN/api/webhooks/<integration-id>?token=<url-token>
 ```
 
 Configure your provider to POST JSON (or `application/x-www-form-urlencoded`) events to it.
@@ -49,7 +49,7 @@ Paths are dotted JSON paths. Array items use their index: `data.items.0.price`.
 | **Visitor id path** | `data.metadata.openrev_visitor_id` | Optional. When empty, `openrev_visitor_id` (or `datafast_visitor_id`) is looked up in `metadata`, `custom_data`, `notes`, `data`, `data.metadata`, `data.object.metadata`, `object.metadata`, `payload.metadata` and `meta.custom_data`. |
 | **Session id path** | `data.metadata.openrev_session_id` | Optional. |
 | **Customer email path** | `data.customer.email` | Used to attribute payments without a visitor id. |
-| **Customer id path** | `data.customer.id` | Renewals and refunds inherit the attribution of the customer's first payment. |
+| **Customer id path** | `data.customer.id` | Renewals and refunds without a visitor id (or original payment) reuse the first visitor linked to this customer, from their earliest attributed payment. |
 | **Timestamp path** | `data.created_at` | Unix seconds, unix milliseconds or ISO 8601. Defaults to the time of receipt. |
 | **Checkout reference path** | `data.checkout_id` | Matched with `?checkout_id=` on your success page (detected by the tracker) or with `openrev("payment", { ref })`. |
 | **Renewal flag path** / **Renewal value** | `data.billing_reason` / `subscription_cycle` | If the value at the path equals the renewal value (case-insensitive), the payment is a renewal. With an empty renewal value, any truthy value (`true`, `1`, `"yes"`) means renewal. |
@@ -59,7 +59,7 @@ Paths are dotted JSON paths. Array items use their index: `data.items.0.price`.
 A provider sends:
 
 ```http
-POST /api/webhooks/abc123
+POST /api/webhooks/abc123?token=<url-token>
 X-Acme-Signature: 5d41402abc4b2a76b9719d911017c592...
 
 {
@@ -99,20 +99,24 @@ Create `src/server/providers/acme.ts`:
 ```ts
 import type { NormalizedPayment } from "../services/payments";
 import type { PaymentProvider, ProviderResult } from "./types";
-import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
+import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, truthy, verifyHmacSignature } from "./util";
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export function parseAcmeEvent(event: Obj): ProviderResult {
   const d: Obj = event.data ?? {};
+  const id = str(d.id)?.trim(); // unique + stable across retries (idempotency key)
+  const amount = num(d.amount); // MINOR units
   const payments: NormalizedPayment[] = [];
   switch (event.type) {
     case "payment.succeeded":
+      if (!id) return { payments, ignored: "missing payment id" };
+      if (!amount || amount < 0) return { payments, ignored: "invalid amount" };
       payments.push({
         provider: "acme",
-        transactionId: String(d.id), // unique + stable across retries (idempotency key)
-        type: d.renewal ? "renewal" : "new",
-        amount: num(d.amount) ?? 0, // MINOR units, always positive
+        transactionId: id,
+        type: truthy(d.renewal) ? "renewal" : "new", // "false" or "0" strings are not renewals
+        amount, // always positive
         currency: currencyCode(d.currency) ?? "USD",
         timestamp: toMs(d.created_at),
         visitorId: pickVisitorId(d.metadata),
@@ -123,11 +127,13 @@ export function parseAcmeEvent(event: Obj): ProviderResult {
       });
       break;
     case "refund.created":
+      if (!id) return { payments, ignored: "missing refund id" };
+      if (!amount || amount < 0) return { payments, ignored: "invalid amount" };
       payments.push({
         provider: "acme",
-        transactionId: `refund_${d.id}`,
+        transactionId: `refund_${id}`,
         type: "refund",
-        amount: num(d.amount) ?? 0,
+        amount,
         currency: currencyCode(d.currency) ?? "USD",
         relatedTransactionId: str(d.payment_id), // inherits the payment's attribution
       });

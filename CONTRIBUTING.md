@@ -26,7 +26,7 @@ CI runs all of the above plus a Docker build.
 
 ## Ground rules
 
-- **Runtime-agnostic server code.** Everything under `src/server` must run on Cloudflare Workers and Node.js: use Web APIs (`fetch`, `crypto.subtle`), no Node built-ins. Node-only code lives in `src/runtime/node.ts` and `src/server/db/sqlite-node.ts` / `postgres.ts`.
+- **Runtime-agnostic server code.** Shared code under `src/server` must run on Cloudflare Workers and Node.js: use Web APIs (`fetch`, `crypto.subtle`), no Node built-ins. The only Node-only code is `src/runtime/node.ts` and the database adapters `src/server/db/sqlite-node.ts` / `postgres.ts`.
 - **Portable SQL.** Queries run on D1, SQLite and PostgreSQL. Use `?` placeholders, `COALESCE` (not `IFNULL`), `CASE` (not `MAX(a,b)`), `ON CONFLICT … DO UPDATE`, and no dialect-specific functions. D1 allows at most 100 bound parameters per statement. Tests run every query on both engines.
 - **Migrations are append-only.** Add a new entry to `src/server/db/migrations.ts`; never edit a shipped one.
 - **Tracker size matters.** Keep `src/tracker/script.ts` dependency-free and small.

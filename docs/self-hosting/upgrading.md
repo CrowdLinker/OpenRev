@@ -15,14 +15,14 @@ Database migrations run automatically when the new version starts (or on the fir
 | Database | Backup |
 |---|---|
 | SQLite | Copy `data/openrev.db` (use `sqlite3 data/openrev.db ".backup backup.db"` while running), or snapshot the Docker volume. |
-| PostgreSQL | `pg_dump $DATABASE_URL > openrev.sql` |
+| PostgreSQL | `pg_dump "$DATABASE_URL" > openrev.sql` |
 | Cloudflare D1 | `npx wrangler d1 export openrev --remote --output openrev.sql` (and D1 Time Travel). |
 
 Keep `OPENREV_SECRET` with your backups — it's needed to decrypt stored payment-provider credentials (you can always re-enter them).
 
 ## Exporting data
 
-Every website can export raw sessions, events, payments and visitors as CSV from **Settings → Data**, or programmatically with the [API](../api/README.md).
+Every website can export raw sessions, events, payments and visitors as CSV from **Settings → Data**, or programmatically with the [API](../api/README.md). Text cells that start with `=`, `+`, `-` or `@` are prefixed with an apostrophe (`'`) so spreadsheet apps don't run them as formulas.
 
 ## Moving between databases
 

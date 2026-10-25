@@ -52,7 +52,7 @@ Rules are checked in this order; the first match wins.
 
 ## Tagging links: best practices
 
-Use UTM parameters on every link you control: newsletters, ads, social posts, partner links.
+Use UTM parameters on every external or campaign link you control: newsletters, ads, social posts, partner links. Leave internal links untagged (see below).
 
 ```text
 https://example.com/pricing?utm_source=newsletter&utm_medium=email&utm_campaign=2026-10-launch
