@@ -3,6 +3,7 @@
 Query analytics and revenue, and send payments, goals and identities from your backend. The API is part of every OpenRev instance at `https://YOUR-OPENREV/api/v1`. A machine-readable OpenAPI 3.1 spec is served at `/api/v1/openapi.json`.
 
 - [Authentication](#authentication)
+- [Keys without revenue](#keys-without-revenue)
 - [Conventions](#conventions) — date ranges, filters, money
 - [Analytics](#analytics) — overview, timeseries, breakdowns, realtime
 - [Visitors](#visitors)
@@ -34,6 +35,28 @@ Responses use an envelope:
 ```
 
 Request bodies are limited to 2 MB; larger ones get `413`.
+
+## Keys without revenue
+
+Keys also follow their user's **Can see revenue** on each website
+([who sees revenue](../features/team-and-sharing.md#who-sees-revenue)). Owners always have it. A key whose user doesn't
+gets the same answers as everyone else, without the revenue data:
+
+- These fields are left out wherever they appear: `revenue`, `refunds`, `new_revenue`, `renewal_revenue`,
+  `revenue_per_visitor`, `payments` (a count or a list), `recent_payments`, `customers`, `credited_revenue`,
+  `organic_revenue` and `ai_revenue`. So is `conversion_rate` in the overview and in breakdowns other than goals,
+  where it's the share of visitors who paid. Goal, KPI and funnel conversion rates stay.
+- `GET /payments`, `GET /ltv`, `GET /analytics/mrr`, `GET /analytics/mrr/breakdown` and `GET /visitors?customers=1`
+  answer `403`.
+- Nothing is sorted by revenue: `sort=revenue` sorts by visitors (by clicks for keywords), and breakdowns have no rows
+  that only payments brought in, such as `__unattributed__`. With `period=all`, payments don't move the start.
+- Funnels stop before their first payment step: that step and the ones after it count customers.
+- Visitor profiles have no `payments` or `revenue`.
+- `POST /payments` still records the payment, but returns only its `id` and `transaction_id`.
+- Over MCP, `list_payments`, `get_ltv`, `get_mrr`, `get_mrr_breakdown` and `list_visitors` with `customers_only`
+  return an error, and the other tools leave out the same fields.
+
+Public share links with **Hide revenue on share links** get the same answers from `/api/share/<token>/stats/…`.
 
 ## Conventions
 

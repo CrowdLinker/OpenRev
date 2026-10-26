@@ -10,6 +10,21 @@
 
 Database migrations run automatically when the new version starts (or on the first request on Cloudflare). They are additive and safe to run concurrently.
 
+## Upgrade notes
+
+### Upgrading from 0.2 or earlier: who sees revenue
+
+Team members now need **Can see revenue** to see revenue
+([who sees revenue](../features/team-and-sharing.md#who-sees-revenue)). After the update, only owners see it: admins
+and viewers who saw revenue before don't, in the dashboard, their API keys, the CLI, MCP, exports or emailed alerts,
+until an owner or admin turns it on for them. **After updating, grant "Can see revenue" in Settings → Team to the
+members who should keep seeing it.** A notice there reminds each owner and admin once. Invitations that were pending
+start without it too.
+
+**Hide revenue** is now **Hide revenue on share links**. It keeps its value, but only applies to public share links,
+where it now removes revenue on the server. Owners and members with **Can see revenue** see revenue in the dashboard
+even when it's on.
+
 ## Backups
 
 | Database | Backup |
