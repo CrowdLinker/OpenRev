@@ -36,6 +36,8 @@ Turn on **Watch Hacker News** and select **Start watching**. That's all: OpenRev
 - It finds stories that link to your domain, comments that mention it, and stories and comments with your keywords.
   The first check looks back 30 days.
 - It checks every hour, and refreshes the points and comment counts of the last 3 days.
+- On an instance with many websites, each background run checks as many as fit in one run, starting from a
+  different website each time, so a check can come a little later than the hour.
 
 ### 𝕏
 

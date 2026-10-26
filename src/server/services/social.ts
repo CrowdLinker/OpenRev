@@ -1,5 +1,5 @@
 import type { Runtime } from "../context";
-import type { Database, Statement } from "../db/types";
+import type { Database, SqlValue, Statement } from "../db/types";
 import { decryptString, encryptString } from "../lib/crypto";
 import { getSecret } from "./instance";
 import { getSite, siteHosts, type Site } from "./sites";
@@ -242,16 +242,25 @@ export function sitePaths(urls: (string | null | undefined)[], hosts: string[]):
   return [...out];
 }
 
-function postStatements(siteId: string, posts: SocialPost[], now: number): Statement[] {
+const POSTS_PER_INSERT = 6; // 16 parameters each: D1 allows 100 per statement
+const LINKS_PER_INSERT = 16; // 6 parameters each
+const IDS_PER_DELETE = 90;
+
+const chunks = <T>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
+
+/** Saves posts and the website paths they link to, several rows per statement. */
+function postStatements(siteId: string, list: SocialPost[], now: number): Statement[] {
+  // One row per post: an upsert can't touch the same row twice in one statement.
+  const posts = [...new Map(list.map((p) => [`${p.platform}\u0000${p.id}`, p])).values()];
   const out: Statement[] = [];
-  for (const p of posts) {
+  for (const part of chunks(posts, POSTS_PER_INSERT)) {
     out.push({
       sql: `INSERT INTO social_posts (site_id, platform, id, kind, url, author, author_name, author_image, text, created_at, likes, reposts, replies, views, links, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES ${part.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")}
             ON CONFLICT (site_id, platform, id) DO UPDATE SET url = excluded.url, author = excluded.author, author_name = excluded.author_name,
               author_image = excluded.author_image, text = excluded.text, likes = excluded.likes, reposts = excluded.reposts,
               replies = excluded.replies, views = excluded.views, links = excluded.links, updated_at = excluded.updated_at`,
-      params: [
+      params: part.flatMap((p): SqlValue[] => [
         siteId,
         p.platform,
         p.id,
@@ -268,15 +277,24 @@ function postStatements(siteId: string, posts: SocialPost[], now: number): State
         p.views,
         JSON.stringify(p.paths),
         now,
-      ],
+      ]),
     });
-    out.push({ sql: "DELETE FROM social_links WHERE site_id = ? AND platform = ? AND post_id = ?", params: [siteId, p.platform, p.id] });
-    for (const path of p.paths) {
+  }
+  // A post's links are replaced, so a link removed from an edited post or a bio goes away.
+  for (const platform of new Set(posts.map((p) => p.platform))) {
+    for (const part of chunks(posts.filter((p) => p.platform === platform), IDS_PER_DELETE)) {
       out.push({
-        sql: "INSERT INTO social_links (site_id, platform, post_id, path, kind, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
-        params: [siteId, p.platform, p.id, path, p.kind, p.kind === "bio" ? 0 : p.createdAt],
+        sql: `DELETE FROM social_links WHERE site_id = ? AND platform = ? AND post_id IN (${part.map(() => "?").join(", ")})`,
+        params: [siteId, platform, ...part.map((p) => p.id)],
       });
     }
+  }
+  const links = posts.flatMap((p) => p.paths.map((path) => [siteId, p.platform, p.id, path, p.kind, p.kind === "bio" ? 0 : p.createdAt] as SqlValue[]));
+  for (const part of chunks(links, LINKS_PER_INSERT)) {
+    out.push({
+      sql: `INSERT INTO social_links (site_id, platform, post_id, path, kind, created_at) VALUES ${part.map(() => "(?, ?, ?, ?, ?, ?)").join(", ")} ON CONFLICT DO NOTHING`,
+      params: part.flat(),
+    });
   }
   return out;
 }
@@ -497,26 +515,54 @@ export async function searchHackerNews(site: Site, keywords: string[], since: nu
 // Sync
 // ---------------------------------------------------------------------------
 
+/**
+ * Statements a sync may still write. The first write against a budget goes through even when it's larger, so one big
+ * check can't be held up forever. The scheduler shares one budget between all websites.
+ */
+export interface SyncBudget {
+  left: number;
+  wrote: boolean;
+}
+
+/** Statements one scheduled run spends on social posts: a Worker invocation may run 1,000 queries, and the other jobs need some. */
+const RUN_BUDGET = 600;
+/** Room an 𝕏 check needs before it starts: its reads cost money, so what it finds is always stored. */
+const X_ROOM = 120;
+/** What visiting a website costs a scheduled run besides the posts it writes. */
+const VISIT_COST = 3;
+
+const spend = (budget: SyncBudget, statements: number) => {
+  budget.left -= statements;
+  budget.wrote = true;
+};
+
 /** Looks for new posts: Hacker News every hour, 𝕏 every 6 hours (`force` checks now), within the monthly limit. */
 export async function syncSocial(
   rt: Runtime,
   site: Site,
   row: SocialConfigRow,
-  opts: { now?: number; fetchFn?: FetchFn; force?: boolean } = {},
-): Promise<{ x: number | null; hn: number | null; error: string | null }> {
+  opts: { now?: number; fetchFn?: FetchFn; force?: boolean; budget?: SyncBudget } = {},
+): Promise<{ x: number | null; hn: number | null; error: string | null; stopped: boolean }> {
   const now = opts.now ?? Date.now();
   const fetchFn = opts.fetchFn ?? fetch;
+  const budget = opts.budget ?? { left: Infinity, wrote: false };
   const keywords = list(row.keywords);
   const handles = list(row.handles);
-  const result = { x: null as number | null, hn: null as number | null, error: null as string | null };
+  const result = { x: null as number | null, hn: null as number | null, error: null as string | null, stopped: false };
   const errors: string[] = [];
 
   if (Number(row.hn) && (opts.force || !row.hn_checked_at || now - Number(row.hn_checked_at) >= HN_EVERY_MS)) {
     try {
       // The first look goes back 30 days; later ones re-read the last 3 days to update points and comments.
       const posts = await searchHackerNews(site, keywords, row.hn_checked_at ? now - 3 * DAY : now - 30 * DAY, fetchFn);
-      await rt.db.batch([...postStatements(site.id, posts, now), { sql: "UPDATE social_config SET hn_checked_at = ? WHERE site_id = ?", params: [now, site.id] }]);
-      result.hn = posts.length;
+      const statements = [...postStatements(site.id, posts, now), { sql: "UPDATE social_config SET hn_checked_at = ? WHERE site_id = ?", params: [now, site.id] }];
+      // No room left in this run: the check stays due, and runs again next time.
+      if (budget.wrote && statements.length > budget.left) result.stopped = true;
+      else {
+        await rt.db.batch(statements);
+        spend(budget, statements.length);
+        result.hn = posts.length;
+      }
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
     }
@@ -524,7 +570,8 @@ export async function syncSocial(
 
   const sinceX = row.x_checked_at ? now - Number(row.x_checked_at) : Infinity;
   const xDue = sinceX >= X_EVERY_MS || (opts.force && sinceX >= X_FORCE_MIN_MS);
-  if (row.config && xDue) {
+  if (row.config && xDue && budget.wrote && budget.left < X_ROOM) result.stopped = true;
+  else if (row.config && xDue) {
     const month = monthKey(now);
     let reads = row.x_reads_month === month ? Number(row.x_reads) : 0;
     const left = Number(row.x_monthly_cap) - reads;
@@ -535,11 +582,15 @@ export async function syncSocial(
       if (left <= 0) throw new SocialError(`Paused: ${reads.toLocaleString("en-US")} 𝕏 posts read this month, the limit you set. Raise it to keep looking.`);
       const { xToken } = JSON.parse(await decryptString(await getSecret(rt), row.config)) as { xToken: string };
       if (handles.length && (opts.force || !usersCheckedAt || now - Number(usersCheckedAt) >= X_USERS_EVERY_MS)) {
-        await rt.db.batch(postStatements(site.id, await lookupXProfiles(site, xToken, handles, fetchFn), now));
+        const profiles = postStatements(site.id, await lookupXProfiles(site, xToken, handles, fetchFn), now);
+        await rt.db.batch(profiles);
+        spend(budget, profiles.length);
         usersCheckedAt = now;
       }
       const res = await searchX(site, xToken, keywords, { sinceId, now, maxReads: Math.min(left, 100 * X_PAGES_PER_RUN), fetchFn });
-      await rt.db.batch(postStatements(site.id, res.posts, now));
+      const posts = postStatements(site.id, res.posts, now);
+      await rt.db.batch(posts);
+      spend(budget, posts.length);
       reads += res.reads;
       found = res.posts.length;
       sinceId = res.newestId ?? sinceId;
@@ -559,13 +610,20 @@ export async function syncSocial(
 }
 
 /** Scheduler entry: every website with social monitoring set up. */
-export async function syncAllSocial(rt: Runtime, now = Date.now()) {
-  const rows = await rt.db.all<SocialConfigRow>("SELECT * FROM social_config");
-  for (const row of rows) {
+/**
+ * Called by the scheduler: the checks that are due for each website, within one statement budget for the whole run.
+ * Each run starts from a different website, so on an instance with many of them none waits behind the others.
+ */
+export async function syncAllSocial(rt: Runtime, now = Date.now(), budget: SyncBudget = { left: RUN_BUDGET, wrote: false }) {
+  const rows = await rt.db.all<SocialConfigRow>("SELECT * FROM social_config ORDER BY site_id");
+  const start = rows.length ? Math.floor(now / 600_000) % rows.length : 0;
+  for (let i = 0; i < rows.length && budget.left > 0; i++) {
+    const row = rows[(start + i) % rows.length];
+    budget.left -= VISIT_COST;
     const site = await getSite(rt.db, row.site_id);
     if (!site) continue;
     try {
-      await syncSocial(rt, site, row, { now });
+      if ((await syncSocial(rt, site, row, { now, budget })).stopped) break;
     } catch (err) {
       console.error(`[openrev] social sync failed for ${site.id}:`, err);
     }

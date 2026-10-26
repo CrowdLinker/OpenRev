@@ -1,10 +1,10 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
 import type { Database } from "../src/server/db/types";
 import { classify } from "../src/server/lib/referrers";
 import { getSite, type Site } from "../src/server/services/sites";
-import { getSocialConfig, parseHandles, parseKeywords, sitePaths, syncSocial, xQuery } from "../src/server/services/social";
+import { getSocialConfig, parseHandles, parseKeywords, sitePaths, syncAllSocial, syncSocial, xQuery } from "../src/server/services/social";
 import { testDb, testRuntime } from "./helpers";
 import { pgliteDb } from "./pglite";
 
@@ -158,7 +158,7 @@ describe.each([
     const site = (await getSite(rt.db, siteId))!;
     const { calls, fetchFn } = fakeApis();
     const result = await syncSocial(rt, site, (await getSocialConfig(rt.db, siteId))!, { now: NOW, fetchFn });
-    expect(result).toEqual({ x: 2, hn: 3, error: null });
+    expect(result).toEqual({ x: 2, hn: 3, error: null, stopped: false });
     const search = new URL(calls.find((c) => c.includes("/tweets/search/recent"))!);
     expect(search.searchParams.get("query")).toBe('(url:"example.com" OR "OpenRev") -is:retweet');
     expect(search.searchParams.get("post.fields")).toBe("created_at,public_metrics,entities");
@@ -237,5 +237,42 @@ describe.each([
     // Disconnecting removes the posts too.
     await call(`/api/sites/${siteId}/social`, { method: "DELETE" });
     expect(await rt.db.first("SELECT 1 AS found FROM social_posts WHERE site_id = ?", [siteId])).toBeFalsy();
+  });
+
+  it("stores many posts in few statements, within one budget per scheduled run", async () => {
+    const ids: string[] = [];
+    for (const domain of ["a.example.com", "b.example.com", "c.example.com"]) {
+      const id = (await call("/api/sites", { body: { domain, timezone: "UTC", currency: "USD" } })).json.site.id;
+      await rt.db.run("INSERT INTO social_config (site_id, created_at) VALUES (?, ?)", [id, 0]);
+      ids.push(id);
+    }
+    // Hacker News finds 100 stories linking to each website.
+    const searched: string[] = [];
+    vi.stubGlobal("fetch", async (input: string) => {
+      const host = new URL(input).searchParams.get("query")!;
+      searched.push(host);
+      const hits = Array.from({ length: 100 }, (_, i) => ({ objectID: `${host}-${i}`, created_at_i: Math.floor((NOW - DAY) / 1000), title: `Post ${i}`, url: `https://${host}/p/${i}` }));
+      return Response.json({ hits });
+    });
+    const batch = rt.db.batch;
+    let written = 0;
+    rt.db.batch = (async (statements) => {
+      written += statements.length;
+      return batch.call(rt.db, statements);
+    }) as typeof batch;
+    try {
+      await syncAllSocial(rt, NOW, { left: 50, wrote: false });
+      // A website's 100 posts and links take 27 statements, so the second website waits for the next run.
+      expect(written).toBeLessThanOrEqual(50);
+      const counts = await Promise.all(ids.map(async (id) => Number((await rt.db.first<{ n: number }>("SELECT COUNT(*) AS n FROM social_posts WHERE site_id = ?", [id]))!.n)));
+      expect(counts.sort()).toEqual([0, 0, 100]);
+      const first = searched[0];
+      searched.length = 0;
+      await syncAllSocial(rt, NOW + 600_000, { left: 50, wrote: false });
+      expect(searched[0]).not.toBe(first);
+    } finally {
+      rt.db.batch = batch;
+      vi.unstubAllGlobals();
+    }
   });
 });
