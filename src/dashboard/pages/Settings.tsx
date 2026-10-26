@@ -1018,8 +1018,11 @@ const ALERT_TYPE_LABELS: Record<string, string> = {
   digest: "Daily / weekly digest",
 };
 const CHANNEL_LABELS: Record<string, string> = { slack: "Slack", discord: "Discord", telegram: "Telegram", email: "Email", webhook: "Webhook" };
+/** Alerts that send revenue, which only members with "Can see revenue" can set up or change. */
+const REVENUE_ALERT_TYPES = ["payment", "digest"];
 
 function AlertSettings({ site }: { site: Site }) {
+  const { canSeeRevenue } = useSite();
   const { data, reload } = useApi<{ alerts: Row[]; history: Row[]; emailEnabled: boolean }>(`/api/sites/${site.id}/alerts`);
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
@@ -1050,43 +1053,50 @@ function AlertSettings({ site }: { site: Site }) {
                   <div className="text-xs text-zinc-500">
                     {a.enabled ? "Active" : "Paused"} · {a.last_triggered_at ? `last sent ${timeAgo(Number(a.last_triggered_at))}` : "never sent"}
                   </div>
+                  {!canSeeRevenue && REVENUE_ALERT_TYPES.includes(String(a.type)) && (
+                    <div className="mt-0.5 text-xs text-zinc-500">Only members who can see revenue can change this alert.</div>
+                  )}
                   {testResult && testResult.id === a.id && (
                     <div className={cx("mt-1 flex items-center gap-1 text-xs", testResult.ok ? "text-money-600" : "text-red-600")}>
                       {testResult.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />} {testResult.ok ? "Test sent" : testResult.message}
                     </div>
                   )}
                 </div>
-                <Button
-                  size="sm"
-                  loading={testing === a.id}
-                  onClick={async () => {
-                    setTesting(String(a.id));
-                    try {
-                      await api(`/api/sites/${site.id}/alerts/${a.id}/test`, { body: {} });
-                      setTestResult({ id: String(a.id), ok: true });
-                    } catch (err) {
-                      setTestResult({ id: String(a.id), ok: false, message: (err as Error).message });
-                    } finally {
-                      setTesting(null);
-                      reload();
-                    }
-                  }}
-                >
-                  Send test
-                </Button>
-                <Button size="sm" onClick={() => setEditing(a)}>
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={async () => {
-                    await api(`/api/sites/${site.id}/alerts/${a.id}`, { method: "PATCH", body: { enabled: !a.enabled } });
-                    reload();
-                  }}
-                >
-                  {a.enabled ? "Pause" : "Resume"}
-                </Button>
+                {(canSeeRevenue || !REVENUE_ALERT_TYPES.includes(String(a.type))) && (
+                  <>
+                    <Button
+                      size="sm"
+                      loading={testing === a.id}
+                      onClick={async () => {
+                        setTesting(String(a.id));
+                        try {
+                          await api(`/api/sites/${site.id}/alerts/${a.id}/test`, { body: {} });
+                          setTestResult({ id: String(a.id), ok: true });
+                        } catch (err) {
+                          setTestResult({ id: String(a.id), ok: false, message: (err as Error).message });
+                        } finally {
+                          setTesting(null);
+                          reload();
+                        }
+                      }}
+                    >
+                      Send test
+                    </Button>
+                    <Button size="sm" onClick={() => setEditing(a)}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        await api(`/api/sites/${site.id}/alerts/${a.id}`, { method: "PATCH", body: { enabled: !a.enabled } });
+                        reload();
+                      }}
+                    >
+                      {a.enabled ? "Pause" : "Resume"}
+                    </Button>
+                  </>
+                )}
                 <button
                   className="text-zinc-400 hover:text-red-500"
                   onClick={async () => {
@@ -1121,8 +1131,9 @@ function AlertSettings({ site }: { site: Site }) {
 }
 
 function AlertEditor({ site, alert, emailEnabled, onClose, onSaved }: { site: Site; alert: Row | null; emailEnabled: boolean; onClose: () => void; onSaved: () => void }) {
-  const { meta } = useSite();
-  const [type, setType] = useState<string>(alert?.type ?? "payment");
+  const { meta, canSeeRevenue } = useSite();
+  const types = Object.entries(ALERT_TYPE_LABELS).filter(([k]) => canSeeRevenue || !REVENUE_ALERT_TYPES.includes(k));
+  const [type, setType] = useState<string>(alert?.type ?? types[0][0]);
   const [channel, setChannel] = useState<string>(alert?.channel ?? "slack");
   const [config, setConfig] = useState<Record<string, unknown>>(alert?.config ?? { includeRefunds: true, frequency: "daily", hour: 8, multiplier: 4, minVisitors: 20 });
   const [error, setError] = useState<unknown>(null);
@@ -1176,7 +1187,7 @@ function AlertEditor({ site, alert, emailEnabled, onClose, onSaved }: { site: Si
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="When">
             <select className="input" value={type} onChange={(e) => setType(e.target.value)} disabled={!!alert}>
-              {Object.entries(ALERT_TYPE_LABELS).map(([k, v]) => (
+              {types.map(([k, v]) => (
                 <option key={k} value={k}>
                   {v}
                 </option>

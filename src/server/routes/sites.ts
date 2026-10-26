@@ -6,10 +6,10 @@ import { sha256Hex } from "../lib/crypto";
 import { randomId, randomToken, uuid } from "../lib/ids";
 import { isValidTimezone, resolveRange } from "../lib/time";
 import { publicHttpsUrl } from "../lib/net";
-import { REVENUE_GRANT, REVENUE_HIDDEN, withoutRevenue } from "../lib/revenue";
+import { REVENUE_ALERT, REVENUE_GRANT, REVENUE_HIDDEN, withoutRevenue } from "../lib/revenue";
 import { isEmail, sanitizeGoalName } from "../lib/validate";
 import { getProvider, providerCatalog } from "../providers";
-import { ALERT_CHANNELS, ALERT_TYPES, invalidateAlerts, sendTestAlert, TELEGRAM_TOKEN, type AlertRow } from "../services/alerts";
+import { ALERT_CHANNELS, ALERT_TYPES, invalidateAlerts, REVENUE_ALERT_TYPES, sendTestAlert, TELEGRAM_TOKEN, type AlertRow } from "../services/alerts";
 import { createApiKey } from "../services/auth";
 import { clearBadgeCache } from "../services/badge";
 import { emailEnabled, escapeHtml, sendEmail } from "../services/email";
@@ -630,10 +630,13 @@ export function siteRoutes() {
     return { type, channel, config: JSON.stringify(cfg) };
   };
 
+  // Payment alerts and digests send revenue wherever they're sent to, so only members who can see revenue set them up,
+  // change or test them. Anyone who manages alerts can still delete them.
   app.post("/sites/:siteId/alerts", async (c) => {
-    const { site } = await siteForUser(c, c.req.param("siteId"), "admin");
+    const { site, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"), "admin");
     const body = await readJson(c);
     const a = cleanAlert(body);
+    if (!canSeeRevenue && REVENUE_ALERT_TYPES.includes(a.type)) fail(403, REVENUE_ALERT);
     const id = uuid();
     await c.get("rt").db.run("INSERT INTO alerts (id, site_id, type, channel, config, enabled, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)", [
       id,
@@ -649,12 +652,13 @@ export function siteRoutes() {
   });
 
   app.patch("/sites/:siteId/alerts/:alertId", async (c) => {
-    const { site } = await siteForUser(c, c.req.param("siteId"), "admin");
+    const { site, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"), "admin");
     const db = c.get("rt").db;
     const row = await db.first<AlertRow>("SELECT * FROM alerts WHERE id = ? AND site_id = ?", [c.req.param("alertId"), site.id]);
     if (!row) fail(404, "Alert not found");
     const body = await readJson(c);
     const a = cleanAlert({ type: row.type, channel: row.channel, ...body }, JSON.parse(row.config || "{}"));
+    if (!canSeeRevenue && (REVENUE_ALERT_TYPES.includes(row.type) || REVENUE_ALERT_TYPES.includes(a.type))) fail(403, REVENUE_ALERT);
     const enabled = body.enabled === undefined ? row.enabled : body.enabled ? 1 : 0;
     await db.run("UPDATE alerts SET type = ?, channel = ?, config = ?, enabled = ? WHERE id = ?", [a.type, a.channel, a.config, enabled, row.id]);
     invalidateAlerts(site.id);
@@ -669,10 +673,11 @@ export function siteRoutes() {
   });
 
   app.post("/sites/:siteId/alerts/:alertId/test", async (c) => {
-    const { site } = await siteForUser(c, c.req.param("siteId"), "admin");
+    const { site, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"), "admin");
     const rt = c.get("rt");
     const row = await rt.db.first<AlertRow>("SELECT * FROM alerts WHERE id = ? AND site_id = ?", [c.req.param("alertId"), site.id]);
     if (!row) fail(404, "Alert not found");
+    if (!canSeeRevenue && REVENUE_ALERT_TYPES.includes(row.type)) fail(403, REVENUE_ALERT);
     try {
       await sendTestAlert(rt, row, site);
     } catch (err) {

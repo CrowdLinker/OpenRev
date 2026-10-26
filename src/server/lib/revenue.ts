@@ -52,6 +52,8 @@ const FIELDS = new Set<string>(REVENUE_FIELDS);
 export const REVENUE_HIDDEN = "You can't see revenue on this website. An owner, or an admin who can see revenue, can turn on “Can see revenue” for you in Settings → Team.";
 /** Why a member without "Can see revenue" can't change it for anyone, themselves included. */
 export const REVENUE_GRANT = "Only members who can see revenue can change who sees it";
+/** Why a member without "Can see revenue" can't set up an alert that sends revenue. */
+export const REVENUE_ALERT = "Only members who can see revenue can set up payment alerts and digests";
 /** The same, on a public share link with "Hide revenue on share links". */
 export const REVENUE_HIDDEN_PUBLIC = "Revenue is hidden on this dashboard";
 

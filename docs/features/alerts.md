@@ -12,6 +12,9 @@
 Use **Send test** to check a destination. The last 50 deliveries (and errors) are listed under the alerts. Admins
 without **Can see revenue** don't see the deliveries of payment alerts there, since they carry the amount.
 
+New sale / refund alerts and digests send revenue wherever they go, so only members who can see revenue can set them
+up, change, pause or test them. Admins without it can still add goal and traffic spike alerts, and delete any alert.
+
 ## Email and “Can see revenue”
 
 Email alerts follow each recipient's **Can see revenue** ([who sees revenue](team-and-sharing.md#who-sees-revenue)).
@@ -23,8 +26,8 @@ Recipients who are members of the website without it:
 - get goal and traffic spike alerts as usual.
 
 Other recipients get every alert in full: owners, members with **Can see revenue**, and addresses that aren't members
-of the website. Slack, Discord, Telegram and webhooks don't change either: admins choose where those go. When no
-recipient of a payment alert can see revenue, **Send test** says so.
+of the website. Slack, Discord, Telegram and webhooks don't change either: whoever set up the alert, who can see
+revenue, chose where those go. When no recipient of a payment alert can see revenue, **Send test** says so.
 
 ## Channels
 

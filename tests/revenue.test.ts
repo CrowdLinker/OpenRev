@@ -382,6 +382,25 @@ describe.each(DATABASES)("revenue visibility (%s)", (_name, makeDb) => {
     expect((await viewer.call(overview)).json.current.revenue).toBe(14700);
   });
 
+  it("leaves alerts that send revenue to members who can see it", async () => {
+    const admin = await join(app, owner, siteId, "admin-alerts@example.com", { role: "admin" });
+    const alerts = `/api/sites/${siteId}/alerts`;
+    const hook = (type: string, config: Record<string, unknown> = {}) => ({ body: { type, channel: "webhook", config: { url: "https://example.com/hook", ...config } } });
+    // An admin without it can't send payments or digests to a channel they control, nor change or test one.
+    for (const type of ["payment", "digest"]) expect((await admin.call(alerts, hook(type))).status).toBe(403);
+    const spike = (await admin.call(alerts, hook("traffic_spike"))).json.alert.id as string;
+    expect((await admin.call(`${alerts}/${spike}`, { method: "PATCH", body: { type: "payment" } })).status).toBe(403);
+    const payment = (await owner(alerts, hook("payment"))).json.alert.id as string;
+    expect((await admin.call(`${alerts}/${payment}`, { method: "PATCH", body: { config: { url: "https://attacker.example/hook" } } })).status).toBe(403);
+    expect((await admin.call(`${alerts}/${payment}`, { method: "PATCH", body: { enabled: false } })).status).toBe(403);
+    expect((await admin.call(`${alerts}/${payment}/test`, { body: {} })).status).toBe(403);
+    // They can still remove one.
+    expect((await admin.call(`${alerts}/${payment}`, { method: "DELETE" })).status).toBe(200);
+
+    await owner(`/api/sites/${siteId}/members/${admin.id}`, { method: "PATCH", body: { can_see_revenue: true } });
+    expect((await admin.call(alerts, hook("payment"))).status).toBe(200);
+  });
+
   describe("emailed alerts", () => {
     let sent: { url: string; body: Json }[] = [];
     afterEach(() => {

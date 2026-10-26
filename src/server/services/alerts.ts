@@ -11,6 +11,8 @@ import * as stats from "./stats";
 
 export const ALERT_TYPES = ["payment", "goal", "traffic_spike", "digest"] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
+/** Alerts that send revenue: payment alerts carry the amount, digests the revenue figures. */
+export const REVENUE_ALERT_TYPES: readonly string[] = ["payment", "digest"];
 export const ALERT_CHANNELS = ["slack", "discord", "telegram", "webhook", "email"] as const;
 export type AlertChannel = (typeof ALERT_CHANNELS)[number];
 
