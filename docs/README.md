@@ -30,7 +30,7 @@
 - [Live badge](features/live-badge.md) (visitors online and today, linking to your public dashboard)
 
 ## Developers
-- [REST API](api/README.md) · [MCP server](api/README.md#mcp-server)
+- [REST API](api/README.md) · [MCP server](api/README.md#mcp-server) · [CLI](guides/cli.md)
 - [Contributing](../CONTRIBUTING.md)
 
 ## Guides

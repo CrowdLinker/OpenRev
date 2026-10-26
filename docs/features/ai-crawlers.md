@@ -119,8 +119,11 @@ curl -X POST https://analytics.example.com/api/v1/crawls \
   ]}'
 ```
 
-This script reads an nginx or Apache log in the default "combined" format and sends the crawler requests in it. Run it
-once a day on the previous day's log (sending the same log twice counts its requests twice):
+The [openrev CLI](../guides/cli.md) does it for you: `npx openrev crawls send /var/log/nginx/access.log.1` reads a log
+in the default "combined" format (nginx and Apache) and sends its crawler requests. Run it once a day on the previous
+day's log: sending the same log twice counts its requests twice.
+
+Without Node.js packages, this script does the same:
 
 ```js
 // node send-crawls.mjs /var/log/nginx/access.log.1
