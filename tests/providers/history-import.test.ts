@@ -127,19 +127,29 @@ describe("dodo.importHistory", () => {
     const calls = fakeApi([
       [/\/payments\?.*page_number=0/, { items: full }],
       [/\/payments\?.*page_number=1/, { items: [payment("pay_100", "renewal")] }],
+      [/\/subscriptions\/sub_9$/, { subscription_id: "sub_9", payment_frequency_interval: "Year", payment_frequency_count: 1 }],
       [/\/refunds\?/, { items: [{ refund_id: "ref_1", payment_id: "pay_0", amount: 1500, currency: "USD", status: "succeeded", created_at: "2026-05-02T00:00:00Z", is_partial: false }] }],
     ]);
     const first = await dodo.importHistory!({ apiKey: "dodo_key", environment: "test" }, null);
     expect(calls[0].url).toBe("https://test.dodopayments.com/payments?page_size=100&page_number=0&status=succeeded");
     expect(first.payments).toHaveLength(100);
     expect(first.payments[0]).toMatchObject({ transactionId: "pay_0", type: "new", email: "linus@example.com", visitorId: VISITOR });
+    // The list has no billing interval: it comes from the subscription, read once for the page's 100 payments.
+    expect(first.payments.every((p) => p.interval?.unit === "year" && p.interval.count === 1)).toBe(true);
+    expect(calls.map((c) => c.url)).toEqual([calls[0].url, "https://test.dodopayments.com/subscriptions/sub_9"]);
     expect(first.nextCursor).toBe("payments:1");
     const second = await dodo.importHistory!({ apiKey: "dodo_key" }, first.nextCursor);
-    expect(calls[1].url.startsWith("https://live.dodopayments.com/payments?")).toBe(true);
+    expect(calls[2].url.startsWith("https://live.dodopayments.com/payments?")).toBe(true);
     expect(second.nextCursor).toBe("refunds:0");
     const third = await dodo.importHistory!({ apiKey: "dodo_key" }, second.nextCursor);
     expect(third.payments).toEqual([expect.objectContaining({ transactionId: "ref_1", type: "refund", amount: 1500, relatedTransactionId: "pay_0" })]);
     expect(third.nextCursor).toBeNull();
+  });
+
+  it("keeps a payment whose subscription is gone, without an interval", async () => {
+    fakeApi([[/\/payments\?/, { items: [payment("pay_1")] }]]);
+    const page = await dodo.importHistory!({ apiKey: "dodo_key" }, null);
+    expect(page.payments).toEqual([expect.objectContaining({ transactionId: "pay_1", subscriptionId: "sub_9", interval: null })]);
   });
 
   it("reports API errors with the provider's name", async () => {
@@ -165,8 +175,20 @@ describe("paystack.importHistory", () => {
     const calls = fakeApi([
       [/\/transaction\?.*page=1&/, { status: true, data: [charge("ref_1")], meta: { total: 2, perPage: 100, page: 1, pageCount: 2 } }],
       [/\/transaction\?.*page=2&/, { status: true, data: [charge("ref_2", { plan: { plan_code: "PLN_1", interval: "monthly" }, metadata: null })], meta: { pageCount: 2 } }],
-      [/\/refund\?/, { status: true, data: [{ id: 77, transaction: 1, amount: 500000, currency: "NGN", status: "processed", createdAt: "2026-02-12T00:00:00.000Z" }], meta: { pageCount: 1 } }],
+      [
+        /\/refund\?/,
+        {
+          status: true,
+          data: [
+            { id: 77, transaction: 1, amount: 500000, currency: "NGN", status: "processed", createdAt: "2026-02-12T00:00:00.000Z" },
+            { id: 78, transaction: 3, amount: 500000, currency: "NGN", status: "processed", createdAt: "2026-02-13T00:00:00.000Z" },
+          ],
+          meta: { pageCount: 1 },
+        },
+      ],
       [/\/transaction\/1$/, { status: true, data: charge("ref_1") }],
+      // Refunded in full before the import, so it's reversed and not among the successful transactions.
+      [/\/transaction\/3$/, { status: true, data: charge("ref_3", { status: "reversed" }) }],
     ]);
     const first = await paystack.importHistory!({ secretKey: "sk_test_x" }, null);
     expect(calls[0]).toEqual({ url: "https://api.paystack.co/transaction?perPage=100&page=1&status=success", auth: "Bearer sk_test_x" });
@@ -176,7 +198,12 @@ describe("paystack.importHistory", () => {
     expect(second.payments[0]).toMatchObject({ transactionId: "ref_2", type: "renewal", interval: { unit: "month", count: 1 } });
     expect(second.nextCursor).toBe("refunds:1");
     const third = await paystack.importHistory!({ secretKey: "sk_test_x" }, second.nextCursor);
-    expect(third.payments).toEqual([expect.objectContaining({ transactionId: "refund_77", type: "refund", relatedTransactionId: "ref_1", email: "chika@example.com" })]);
+    expect(third.payments).toEqual([
+      expect.objectContaining({ transactionId: "refund_77", type: "refund", relatedTransactionId: "ref_1", email: "chika@example.com" }),
+      // The reversed charge comes first, so its refund inherits its attribution.
+      expect.objectContaining({ transactionId: "ref_3", type: "new", amount: 500000, visitorId: VISITOR }),
+      expect.objectContaining({ transactionId: "refund_78", type: "refund", relatedTransactionId: "ref_3" }),
+    ]);
     expect(third.nextCursor).toBeNull();
   });
 });

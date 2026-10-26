@@ -258,13 +258,13 @@ export function currencyCode(v: unknown): string | null {
   return typeof v === "string" && /^[A-Za-z]{3}$/.test(v.trim()) ? v.trim().toUpperCase() : null;
 }
 
-/** GETs a provider API with a bearer key, for history imports. Errors carry the provider's name and status. */
+/** GETs a provider API with a bearer key, for history imports. Errors carry the provider's name and `status`. */
 export async function apiGet<T = Record<string, unknown>>(provider: string, url: string, key: string): Promise<T> {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
   if (!res.ok) {
     const body = await res.text();
     const hint = res.status === 401 || res.status === 403 ? " Check the API key and its permissions." : "";
-    throw new Error(`${provider} API error ${res.status}: ${body.slice(0, 300)}${hint}`);
+    throw Object.assign(new Error(`${provider} API error ${res.status}: ${body.slice(0, 300)}${hint}`), { status: res.status });
   }
   return res.json() as Promise<T>;
 }

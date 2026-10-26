@@ -16,8 +16,9 @@ type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
  *   Each payment fires once, so a subscription's first payment is never double counted.
  * - `refund.succeeded`: `amount` refunded, `payment_id` of the original payment.
  * - `ref` is the payment id: Dodo appends `?payment_id=…&status=succeeded` to the return URL, which the tracker reports.
- * - History import lists succeeded payments, then succeeded refunds (100 per page) with an API key. Refunds in the
- *   list have no customer; they inherit the attribution of the payment they refund.
+ * - History import lists succeeded payments, then succeeded refunds (100 per page) with an API key. Listed payments
+ *   have no billing interval, so it's read from their subscription. Refunds in the list have no customer; they inherit
+ *   the attribution of the payment they refund.
  */
 
 const RENEWAL_CHARGES = new Set(["renewal", "plan_change", "on_demand"]);
@@ -146,10 +147,25 @@ export const dodo: PaymentProvider = {
     const list = await apiGet<Obj>("Dodo Payments", `${base}/${phase}?page_size=100&page_number=${page}&status=succeeded`, key);
     const items = (list.items ?? []) as Obj[];
     const payments: NormalizedPayment[] = [];
+    // Listed payments don't carry the billing interval, so it's read from each subscription (once per page).
+    const subscriptions = new Map<string, Obj | null>();
     for (const d of items) {
       if (phase === "payments") {
         const p = paymentFrom(d);
-        if (p) payments.push(p);
+        if (!p) continue;
+        if (p.subscriptionId && !p.interval) {
+          if (!subscriptions.has(p.subscriptionId)) {
+            const url = `${base}/subscriptions/${encodeURIComponent(p.subscriptionId)}`;
+            const sub = await apiGet<Obj>("Dodo Payments", url, key).catch((err) => {
+              if ((err as { status?: number }).status === 404) return null;
+              throw err;
+            });
+            subscriptions.set(p.subscriptionId, sub);
+          }
+          const sub = subscriptions.get(p.subscriptionId);
+          p.interval = parseInterval(sub?.payment_frequency_interval, sub?.payment_frequency_count);
+        }
+        payments.push(p);
       } else {
         payments.push(...parseDodoEvent({ type: "refund.succeeded", data: d }).payments);
       }

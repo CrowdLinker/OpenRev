@@ -18,7 +18,8 @@ type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
  * - Subscriptions: Paystack does not flag renewals explicitly. A charge on a plan whose metadata carries no
  *   OpenRev visitor id (renewal charges are created by Paystack, not by your checkout code) is treated as a renewal.
  * - History import uses the same secret key: successful transactions (100 per page), then refunds. Listed refunds
- *   name the transaction by id, so each one's transaction is fetched for its reference and customer.
+ *   name the transaction by id, so each one's transaction is fetched for its reference and customer. A charge
+ *   refunded in full is marked reversed, which the successful list leaves out, so it's imported with its refund.
  */
 
 const API = "https://api.paystack.co";
@@ -36,7 +37,8 @@ function metadataBags(meta: unknown): Obj[] {
 }
 
 function chargePayment(d: Obj): NormalizedPayment | null {
-  if (d.status && d.status !== "success") return null;
+  // A charge refunded in full is marked reversed later (history import): it was still paid.
+  if (d.status && d.status !== "success" && d.status !== "reversed") return null;
   const amount = num(d.amount) ?? 0;
   if (amount <= 0) return null;
   const reference = str(d.reference) ?? str(d.id);
@@ -165,6 +167,11 @@ export const paystack: PaymentProvider = {
       if (item.status && item.status !== "processed") continue;
       let tx = asObject(item.transaction);
       if (!tx?.reference && item.transaction) tx = (await apiGet<Obj>("Paystack", `${API}/transaction/${encodeURIComponent(String(item.transaction))}`, key)).data ?? null;
+      // A charge refunded in full is reversed, so the successful transactions skipped it: import it before its refund.
+      if (tx?.status === "reversed") {
+        const original = chargePayment(tx);
+        if (original) payments.push(original);
+      }
       const refund = { ...item, transaction_reference: tx?.reference, customer: item.customer ?? tx?.customer, metadata: item.metadata ?? tx?.metadata };
       payments.push(...parsePaystackEvent({ event: "refund.processed", data: refund }).payments);
     }
