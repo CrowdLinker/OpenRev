@@ -194,7 +194,7 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 - **MRR and churn**: MRR, ARR, new, expansion, contraction and churned MRR, churn rates and net revenue retention, with MRR by the channel that brought each subscriber in ([docs](docs/features/mrr.md)).
 - **Google Search Console** (beta): the searches that bring visitors, with clicks, position and an estimate of the revenue each keyword earns ([docs](docs/features/search-console.md)).
 - **Mobile apps** (beta): a React Native and Expo SDK, with screens, goals and revenue on the same dashboard, and web-to-app funnels that follow a visitor from the website into the app ([guide](docs/tracking/mobile-apps.md)).
-- **CLI**: `npx openrev stats`, `top pages`, `live`, `mrr` and more in your terminal, with `--json` for scripts ([guide](docs/guides/cli.md)).
+- **CLI**: `npx openrev-cli stats`, `top pages`, `live`, `mrr` and more in your terminal, with `--json` for scripts ([guide](docs/guides/cli.md)).
 - **Social**: posts on 𝕏 (beta) and Hacker News that mention or link to you, with the visitors and revenue each one brings, link-in-bio attribution for 𝕏 profiles, and link-in-bio pages like Linktree as sources ([docs](docs/features/social.md)).
 - **AI crawlers**: which AI crawlers (GPTBot, ClaudeBot, ChatGPT-User…) read which pages, reported by a few lines of server middleware, next to the visitors and revenue that AI assistants send ([docs](docs/features/ai-crawlers.md)).
 - **Team and sharing**: unlimited websites and members (owner, admin, viewer), a "Can see revenue" permission per member, invitation links, and public read-only dashboards that hide personal data, and revenue too if you choose.

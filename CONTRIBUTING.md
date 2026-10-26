@@ -56,7 +56,8 @@ OpenRev itself (server, dashboard and tracker) is versioned with Git tags, separ
 Three packages live in `packages/`:
 
 - [`create-openrev`](https://www.npmjs.com/package/create-openrev), the installer behind `npm create openrev`;
-- [`openrev`](https://www.npmjs.com/package/openrev), the [CLI](docs/guides/cli.md);
+- [`openrev-cli`](https://www.npmjs.com/package/openrev-cli), the [CLI](docs/guides/cli.md), in `packages/openrev`
+  (the command is `openrev`, but npm refuses that package name as too close to `opener`);
 - [`openrev-react-native`](https://www.npmjs.com/package/openrev-react-native), the
   [mobile SDK](docs/tracking/mobile-apps.md), in `packages/react-native`.
 
