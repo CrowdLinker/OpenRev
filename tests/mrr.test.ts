@@ -29,6 +29,8 @@ describe("billing intervals", () => {
     expect(parseInterval("every_two_years")).toEqual({ unit: "year", count: 2 });
     expect(parseInterval("year", 2)).toEqual({ unit: "year", count: 2 });
     expect(parseInterval("week", "0")).toEqual({ unit: "week", count: 1 });
+    expect(parseInterval("month", 36)).toEqual({ unit: "month", count: 36 });
+    expect(parseInterval("year", 50)).toBeNull();
     expect(parseInterval("hourly")).toBeNull();
     expect(parseInterval(42)).toBeNull();
   });

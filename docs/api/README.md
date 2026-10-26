@@ -161,7 +161,7 @@ curl -X POST "$OPENREV/api/v1/payments" \
 | `email`, `name`, `customer_id` | | Used to link renewals and identify customers. |
 | `renewal` | | `true` for recurring charges. |
 | `subscription_id` | | Groups a subscription's payments, for [MRR](../features/mrr.md). |
-| `interval`, `interval_count` | | How often the subscription bills: `day`, `week`, `month` or `year` (`monthly`, `annually`, `quarterly`… work too), and how many of them per payment (default 1). Without it, MRR infers the interval from the gaps between payments. |
+| `interval`, `interval_count` | | How often the subscription bills: `day`, `week`, `month` or `year` (`monthly`, `annually`, `quarterly`… work too), and how many of them per payment (default 1), up to 3 years in all. Without it, MRR infers the interval from the gaps between payments. |
 | `refunded` | | `true` for refunds (`amount` = refunded amount). Use `related_transaction_id` to inherit the original attribution. |
 | `timestamp` | | ISO 8601 or unix seconds/ms. Defaults to now. |
 | `provider` | | Label shown in the dashboard (default `api`). |

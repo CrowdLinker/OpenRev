@@ -44,7 +44,7 @@ export function openApiSpec(origin: string) {
             renewal: { type: "boolean" },
             subscription_id: { type: "string", description: "Groups a subscription's payments (used for MRR)" },
             interval: { type: "string", description: "Billing interval: day, week, month or year (monthly, annually, quarterly… accepted)" },
-            interval_count: { type: "integer", minimum: 1, description: "Intervals per payment, default 1" },
+            interval_count: { type: "integer", minimum: 1, description: "Intervals per payment, default 1; at most 3 years in all" },
             refunded: { type: "boolean" },
             timestamp: { type: "string", description: "ISO 8601 or unix timestamp; defaults to now." },
             description: { type: "string" },

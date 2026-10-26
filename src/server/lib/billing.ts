@@ -35,7 +35,10 @@ export function parseInterval(unit: unknown, count?: unknown): BillingInterval |
   if (typeof unit !== "string") return null;
   const key = unit.toLowerCase().replace(/^every[-_ ]?/, "").replace(/[-_ ]/g, "");
   for (const [re, base] of WORDS) {
-    if (re.test(key)) return { unit: base.unit, count: base.count * clampCount(count ?? 1) };
+    if (!re.test(key)) continue;
+    const interval: BillingInterval = { unit: base.unit, count: base.count * clampCount(count ?? 1) };
+    // Providers bill at most every 3 years (Stripe's limit); a longer "interval" is a mistake, not a billing period.
+    return intervalDays(interval) <= 3 * 366 ? interval : null;
   }
   return null;
 }
