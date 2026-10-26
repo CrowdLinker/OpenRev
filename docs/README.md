@@ -12,7 +12,7 @@
 - [Channels & UTM parameters](tracking/channels.md)
 - [Proxy through your domain](tracking/proxy.md) (bypass ad blockers)
 - [Cross-domain & subdomains](tracking/cross-domain.md) · [SPA & hash routing](tracking/spa-and-hash-routing.md)
-- [Mobile apps (React Native, Expo) & web-to-app funnels](tracking/mobile-apps.md)
+- [Mobile apps (React Native, Expo) & web-to-app funnels](tracking/mobile-apps.md) (beta)
 - [Exclude visits](tracking/exclusions.md) · [Privacy, cookies & GDPR](tracking/privacy-and-cookies.md)
 
 ## Revenue
@@ -23,8 +23,8 @@
 ## Product
 - [Using the dashboard](features/dashboard.md)
 - [MRR and churn](features/mrr.md)
-- [Google Search Console](features/search-console.md) (keywords and their estimated revenue)
-- [Social: 𝕏 and Hacker News](features/social.md) (posts that mention you, and the revenue they bring)
+- [Google Search Console](features/search-console.md) (keywords and their estimated revenue; beta)
+- [Social: 𝕏 and Hacker News](features/social.md) (posts that mention you, and the revenue they bring; 𝕏 is in beta)
 - [AI crawlers](features/ai-crawlers.md) (GPTBot, ClaudeBot and others, reported by your server)
 - [Alerts & digests](features/alerts.md)
 - [Team, access & public dashboards](features/team-and-sharing.md)
@@ -35,6 +35,6 @@
 - [Contributing](../CONTRIBUTING.md)
 
 ## Guides
-- [Import history from Plausible or Google Analytics](guides/import-history.md)
+- [Import history from Plausible or Google Analytics](guides/import-history.md) (Google Analytics is in beta)
 - [Migrate from DataFast](guides/migrate-from-datafast.md)
 - [Troubleshooting](guides/troubleshooting.md)

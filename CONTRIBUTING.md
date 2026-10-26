@@ -39,6 +39,18 @@ One file in `src/server/providers/` implementing `PaymentProvider`, registered i
 
 Small, focused PRs with a clear description. Include tests for behaviour changes and update the docs when user-facing behaviour changes.
 
+## Releasing OpenRev
+
+OpenRev itself (server, dashboard and tracker) is versioned with Git tags, separately from the npm packages below.
+
+1. In a PR, set the new version in `package.json` with `npm version <x.y.z> --no-git-tag-version` (it updates the
+   lockfile too) and in `VERSION` in `src/server/context.ts`. A test checks that they match: it's the version
+   `/api/health`, the OpenAPI spec and the MCP server report.
+2. After it merges, publish a GitHub release from `main` with a new tag `v<x.y.z>`. The **Publish Docker image**
+   workflow pushes `ghcr.io/crowdlinker/openrev:<x.y.z>` and `:<x.y>`; `latest` always follows `main`.
+3. Before 1.0, a release with new features bumps the minor version (`0.2.0`); one with only fixes bumps the patch
+   (`0.2.1`).
+
 ## Releasing the npm packages
 
 Three packages live in `packages/`:
@@ -62,4 +74,6 @@ Each package needs a trusted publisher on npmjs.com (package → Settings → Tr
 publishes its first version once by hand (`npm publish` in its folder, with 2FA), then adds the trusted publisher.
 
 The installer clones `main`, so most changes to OpenRev reach users without a new installer release. Release it only
-when `packages/create-openrev` itself changes. Release the CLI and the SDK when their folders change.
+when `packages/create-openrev` itself changes. Release the CLI and the SDK when their folders change. Their versions
+don't follow OpenRev's: each README says which OpenRev version it needs, so update that line when a package starts
+using something newer.

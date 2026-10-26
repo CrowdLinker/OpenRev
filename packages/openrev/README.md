@@ -2,7 +2,7 @@
 
 [OpenRev](https://github.com/CrowdLinker/OpenRev) analytics in your terminal: visitors and revenue, top pages and
 sources, live visitors, MRR, payments, search keywords, social posts and AI crawlers. No dependencies; Node.js 18.3
-or later.
+or later. Needs OpenRev 0.2.0 or later.
 
 ```bash
 npx openrev login     # your OpenRev address and an API key (Settings → API & MCP)

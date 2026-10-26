@@ -5,7 +5,7 @@ import { isPublicIp } from "./lib/net";
 import { ipMatches } from "./lib/validate";
 import type { Site } from "./services/sites";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 
 export interface AppConfig {
   /** Secret used to encrypt provider credentials. Falls back to a generated value stored in the database. */

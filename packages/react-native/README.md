@@ -4,6 +4,9 @@
 dashboard as your website, and web-to-app funnels where a visitor who goes from the website to the app stays the same
 visitor, with the revenue they bring.
 
+> **Beta.** Tested against the OpenRev server, not yet in a published iOS or Android app. Needs OpenRev 0.2.0 or
+> later. Please [open an issue](https://github.com/CrowdLinker/OpenRev/issues) if it behaves differently on a device.
+
 ```bash
 npx expo install openrev-react-native @react-native-async-storage/async-storage react-native-get-random-values
 ```

@@ -27,11 +27,13 @@ OpenRev records Polar orders — one-time purchases, subscription first payments
 
 Use a separate endpoint and OpenRev integration for the Polar sandbox.
 
-**Import past orders (optional):** in Polar, create an organization access token (**Settings → General → Organization
-access tokens**) with the `orders:read` scope. Paste it into OpenRev as **Organization access token** (pick **Sandbox**
-under **Environment** for a sandbox token), then click **Import history**. OpenRev reads every paid order, oldest
-first, with its refunds. Orders keep the visitor id when it was in the checkout metadata; older orders are matched by
-customer email when possible.
+**Import past orders (optional, beta):** in Polar, create an organization access token (**Settings → General →
+Organization access tokens**) with the `orders:read` scope. Paste it into OpenRev as **Organization access token**
+(pick **Sandbox** under **Environment** for a sandbox token), then click **Import history**. OpenRev reads every paid
+order, oldest first, with its refunds. Orders keep the visitor id when it was in the checkout metadata; older orders
+are matched by customer email when possible. The import follows the Polar API reference but hasn't run against a live
+account yet: please [open an issue](https://github.com/CrowdLinker/OpenRev/issues) if its totals don't match your
+Polar dashboard.
 
 ## 3. Pass the visitor id at checkout
 

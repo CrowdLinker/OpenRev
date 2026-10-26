@@ -28,11 +28,13 @@ OpenRev supports **Paddle Billing** (the current Paddle platform with `txn_…` 
 
 Sandbox and live accounts have separate destinations and secrets; use one OpenRev integration per environment.
 
-**Import past transactions (optional):** in Paddle, create an API key (**Developer tools → Authentication → API
+**Import past transactions (optional, beta):** in Paddle, create an API key (**Developer tools → Authentication → API
 keys**) with read access to transactions, adjustments and customers. Paste it into OpenRev as **API key**, then click
 **Import history**. OpenRev reads every completed transaction with its customer's email, then approved refunds and
-chargebacks. Sandbox keys (`pdl_sdbx_…`) read the sandbox. Transactions keep the visitor id when it was in `customData`;
-older ones are matched by email when possible.
+chargebacks. Sandbox keys (`pdl_sdbx_…`) read the sandbox. Transactions keep the visitor id when it was in
+`customData`; older ones are matched by email when possible. The import follows the Paddle API reference but hasn't
+run against a live account yet: please [open an issue](https://github.com/CrowdLinker/OpenRev/issues) if its totals
+don't match your Paddle dashboard.
 
 ## 3. Pass the visitor id at checkout
 
