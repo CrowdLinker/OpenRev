@@ -10,6 +10,7 @@ import { identifyVisitor, recordServerGoal } from "../services/ingest";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
 import { crawlerReport, recordCrawls, type CrawlHit } from "../services/crawlers";
 import { searchKeywords } from "../services/search-console";
+import { socialReport } from "../services/social";
 import { deletePayment, recordPayment } from "../services/payments";
 import { notifyPayment } from "../services/notify";
 import type { Site } from "../services/sites";
@@ -189,6 +190,13 @@ export function v1Routes() {
     const s = await site(c);
     const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
     const report = await crawlerReport(c.get("rt").db, q, { timezone: s.timezone, category: c.req.query("category") });
+    return ok(c, report, { currency: s.currency, range: rangeInfo(q) });
+  });
+
+  app.get("/analytics/social", async (c) => {
+    const s = await site(c);
+    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const report = await socialReport(c.get("rt").db, q, { platform: c.req.query("platform"), limit: Number(c.req.query("limit")) || undefined });
     return ok(c, report, { currency: s.currency, range: rangeInfo(q) });
   });
 

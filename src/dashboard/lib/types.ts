@@ -177,6 +177,8 @@ export interface SiteMeta {
   searchConsole?: boolean;
   /** The website's server has reported crawler requests. */
   crawlers?: boolean;
+  /** Posts on X or Hacker News were found. */
+  social?: boolean;
 }
 
 export interface Note {

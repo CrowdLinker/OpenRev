@@ -23,6 +23,7 @@
 - [Using the dashboard](features/dashboard.md)
 - [MRR and churn](features/mrr.md)
 - [Google Search Console](features/search-console.md) (keywords and their estimated revenue)
+- [Social: 𝕏 and Hacker News](features/social.md) (posts that mention you, and the revenue they bring)
 - [AI crawlers](features/ai-crawlers.md) (GPTBot, ClaudeBot and others, reported by your server)
 - [Alerts & digests](features/alerts.md)
 - [Team, access & public dashboards](features/team-and-sharing.md)

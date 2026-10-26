@@ -112,6 +112,17 @@ export function openApiSpec(origin: string) {
           responses: ok("Crawler report"),
         },
       },
+      "/analytics/social": {
+        get: {
+          summary: "Posts on X and Hacker News that mention or link to the website, with the visits and revenue credited to each, and link-in-bio profiles",
+          parameters: [
+            ...rangeParams,
+            { name: "platform", in: "query", schema: { type: "string", enum: ["x", "hn"] } },
+            { name: "limit", in: "query", schema: { type: "integer", default: 100, maximum: 500 } },
+          ],
+          responses: ok("Social report"),
+        },
+      },
       "/analytics/realtime": { get: { summary: "Visitors online now, live sessions, recent events and payments", parameters: rangeParams.slice(-1), responses: ok("Realtime") } },
       "/analytics/breakdowns/{dimension}": {
         get: {

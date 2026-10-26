@@ -122,6 +122,10 @@ Google search keywords in the range, when [Search Console is connected](../featu
 
 Crawler requests in the range, as [reported by the website's server](../features/ai-crawlers.md). `data.summary` has `hits`, the hits per category (`ai_training`, `ai_search`, `ai_user`, `search`), `crawlers`, `pages`, and `ai_visitors`, `ai_sessions` and `ai_revenue`: visits and revenue from the AI channel. `data.timeseries` has the hits per category for each day (or week, or month), `data.crawlers` has `name`, `operator`, `category`, `hits`, `pages` and `last_seen` per crawler, and `data.pages` the 50 most requested pages with their `crawlers`. `category` narrows `crawlers` and `pages` to one category. Hits are counted per day in the website's timezone, so they cover every day the range overlaps (`period=24h` reads yesterday and today), while the AI visits and revenue use the exact range. `data.pattern` is a regular expression (source, case-insensitive) that matches every crawler OpenRev knows, for your server code. Filters don't apply.
 
+### `GET /analytics/social`
+
+Posts on 𝕏 and Hacker News that mention or link to the website ([how it works](../features/social.md)). `data.posts` has, for each post: `platform` (`x` or `hn`), `id`, `url`, `author`, `author_name`, `author_image`, `text`, `created_at`, `likes` (points on Hacker News), `reposts`, `replies`, `views`, `links` (the website's pages it links to) and the visits credited to it in the range: `sessions`, `visitors`, `revenue` and `customers`. It holds the posts published in the range, and older ones that got visits in it, by revenue then visitors. `data.profiles` has the 𝕏 profiles whose bio links to the website, with the same fields. `data.summary` has `mentions` and, per platform, `mentions`, `visits`, `credited_visits`, `revenue` and `credited_revenue`. `platform` narrows it to one platform; `limit` defaults to 100. Filters don't apply.
+
 ### `GET /analytics/realtime`
 
 Visitors active in the last 5 minutes, live sessions (current page, source, location, buyer-intent score), recent events and payments.
@@ -255,4 +259,4 @@ claude mcp add --transport http openrev https://analytics.example.com/mcp --head
 }
 ```
 
-Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `get_mrr`, `get_mrr_breakdown`, `get_search_keywords`, `get_crawlers`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.
+Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `get_mrr`, `get_mrr_breakdown`, `get_search_keywords`, `get_crawlers`, `get_social_posts`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.

@@ -1,6 +1,7 @@
 import type { Runtime } from "../context";
 import { runScheduledAlerts } from "./alerts";
 import { syncAllSearchConsole } from "./search-console";
+import { syncAllSocial } from "./social";
 import { getRates } from "../lib/currency";
 
 async function due(rt: Runtime, name: string, everyMs: number, now: number): Promise<boolean> {
@@ -35,6 +36,8 @@ export async function runScheduled(rt: Runtime, now = Date.now()): Promise<strin
   await run("fx-rates", 6 * 3_600_000, () => getRates(rt.db, now));
   // Each round syncs a few days per connected website; recent days refresh every 6 hours, then history fills in.
   await run("search-console", 10 * 60_000, () => syncAllSearchConsole(rt, now));
+  // Hacker News is checked every hour and 𝕏 every 6 hours; each website keeps its own times.
+  await run("social", 10 * 60_000, () => syncAllSocial(rt, now));
 
   await run("cleanup", 24 * 3_600_000, async () => {
     await rt.db.run("DELETE FROM auth_sessions WHERE expires_at < ?", [now]);

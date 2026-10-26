@@ -5,6 +5,7 @@ import { verifyApiKey } from "../services/auth";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
 import { crawlerReport } from "../services/crawlers";
 import { searchKeywords } from "../services/search-console";
+import { socialReport } from "../services/social";
 import { getMemberRole, getSite, roleAtLeast, type Role, type Site } from "../services/sites";
 import * as stats from "../services/stats";
 import { buildStatsQuery, rangeInfo } from "./helpers";
@@ -94,6 +95,12 @@ const TOOLS = [
       "Crawler traffic reported by the website's server: hits from AI training crawlers (GPTBot, ClaudeBot…), AI search crawlers, AI assistants fetching pages for a user (ChatGPT-User, Claude-User…) and search engines, per crawler and page, plus visitors and revenue from AI assistants.",
     inputSchema: { type: "object", properties: { ...websiteProp, ...rangeProps, category: { type: "string", enum: ["ai_training", "ai_search", "ai_user", "search"] } } },
   },
+  {
+    name: "get_social_posts",
+    description:
+      "Posts on X and Hacker News that mention or link to the website, with the visits and revenue credited to each (by landing page and time), and the X profiles whose bio links to it.",
+    inputSchema: { type: "object", properties: { ...websiteProp, ...rangeProps, platform: { type: "string", enum: ["x", "hn"] }, limit: { type: "number" } } },
+  },
   { name: "list_funnels", description: "List the funnels defined for a website.", inputSchema: { type: "object", properties: { ...websiteProp } } },
   { name: "get_funnel", description: "Conversion and drop-off for each step of a funnel.", inputSchema: { type: "object", required: ["funnel_id"], properties: { ...websiteProp, ...rangeProps, funnel_id: { type: "string" } } } },
   {
@@ -168,6 +175,10 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
     }
     case "get_crawlers": {
       const { pattern: _pattern, ...report } = await crawlerReport(rt.db, q, { timezone: site.timezone, category: typeof args.category === "string" ? args.category : null });
+      return { range: rangeInfo(q), ...money, ...report };
+    }
+    case "get_social_posts": {
+      const report = await socialReport(rt.db, q, { platform: typeof args.platform === "string" ? args.platform : null, limit: Number(args.limit ?? 20) });
       return { range: rangeInfo(q), ...money, ...report };
     }
     case "list_funnels": {
