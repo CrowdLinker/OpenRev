@@ -756,7 +756,7 @@ function ExclusionSettings({ site }: { site: Site }) {
 
 function TeamSettings({ site }: { site: Site }) {
   const { user, instance } = useAuth();
-  const { role, reloadSite, reloadMeta } = useSite();
+  const { role, canSeeRevenue, reloadSite, reloadMeta } = useSite();
   const { data, reload } = useApi<{ members: Row[]; invites: Row[]; revenue_notice: boolean }>(`/api/sites/${site.id}/members`);
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("viewer");
@@ -813,8 +813,8 @@ function TeamSettings({ site }: { site: Site }) {
               </div>
               <Toggle
                 checked={!!m.can_see_revenue}
-                disabled={m.role === "owner"}
-                title={m.role === "owner" ? "Owners always see revenue" : undefined}
+                disabled={m.role === "owner" || !canSeeRevenue}
+                title={m.role === "owner" ? "Owners always see revenue" : !canSeeRevenue ? "Only members who can see revenue can change who sees it" : undefined}
                 onChange={(v) => update(m, { can_see_revenue: v })}
                 label={<span className="text-xs font-normal text-zinc-600 dark:text-zinc-400">Can see revenue</span>}
               />
@@ -883,10 +883,12 @@ function TeamSettings({ site }: { site: Site }) {
               <option value="admin">Admin</option>
             </select>
           </Field>
-          <label className="flex h-[38px] cursor-pointer items-center gap-2 text-sm">
-            <input type="checkbox" checked={inviteRevenue} onChange={(e) => setInviteRevenue(e.target.checked)} />
-            Can see revenue
-          </label>
+          {canSeeRevenue && (
+            <label className="flex h-[38px] cursor-pointer items-center gap-2 text-sm">
+              <input type="checkbox" checked={inviteRevenue} onChange={(e) => setInviteRevenue(e.target.checked)} />
+              Can see revenue
+            </label>
+          )}
           <Button variant="primary" type="submit" loading={busy}>
             Create invite
           </Button>

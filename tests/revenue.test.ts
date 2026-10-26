@@ -348,10 +348,30 @@ describe.each(DATABASES)("revenue visibility (%s)", (_name, makeDb) => {
     // Viewers can't grant it, even to themselves.
     expect((await viewer.call(`/api/sites/${siteId}/members/${viewer.id}`, { method: "PATCH", body: { can_see_revenue: true } })).status).toBe(403);
 
-    // An admin without the permission can grant it, as admins manage members.
+    // An admin without the permission can't give it to anyone, themselves included, or invite someone with it.
     const admin = await join(app, owner, siteId, "admin-grants@example.com", { role: "admin" });
+    for (const id of [admin.id, viewer.id]) {
+      for (const can_see_revenue of [true, false]) {
+        expect((await admin.call(`/api/sites/${siteId}/members/${id}`, { method: "PATCH", body: { can_see_revenue } })).status).toBe(403);
+      }
+    }
+    expect((await admin.call(`/api/sites/${siteId}/invites`, { body: { role: "viewer", can_see_revenue: true } })).status).toBe(403);
+    expect((await admin.call(`/api/sites/${siteId}/invites`, { body: { role: "viewer" } })).status).toBe(200);
+    expect((await admin.call(overview)).json.current).not.toHaveProperty("revenue");
+
+    // Once given it, they can pass it on, to members and in invitations.
+    await owner(`/api/sites/${siteId}/members/${admin.id}`, { method: "PATCH", body: { can_see_revenue: true } });
+    expect((await admin.call(overview)).json.current.revenue).toBe(14700);
     expect((await admin.call(`/api/sites/${siteId}/members/${viewer.id}`, { method: "PATCH", body: { can_see_revenue: true } })).status).toBe(200);
     expect((await viewer.call(overview)).json.current.revenue).toBe(14700);
+    const invited = await join(app, admin.call, siteId, "invited-with-revenue@example.com", { role: "viewer", can_see_revenue: true });
+    expect((await invited.call(overview)).json.current.revenue).toBe(14700);
+    // An invitation only passes it on while its creator still has it.
+    const pending = (await admin.call(`/api/sites/${siteId}/invites`, { body: { role: "viewer", can_see_revenue: true } })).json.url as string;
+    await owner(`/api/sites/${siteId}/members/${admin.id}`, { method: "PATCH", body: { can_see_revenue: false } });
+    const late = client(app);
+    expect((await late("/api/auth/signup", { body: { email: "late@example.com", password: "supersecret", invite: new URL(pending).pathname.split("/").pop() } })).status).toBe(200);
+    expect((await late(overview)).json.current).not.toHaveProperty("revenue");
     await owner(`/api/sites/${siteId}/members/${viewer.id}`, { method: "PATCH", body: { can_see_revenue: false } });
     expect((await viewer.call(overview)).json.current).not.toHaveProperty("revenue");
 
@@ -481,14 +501,14 @@ describe.each([
     // The owner can't lose it.
     expect((await owner(`/api/sites/site-a/members/${users.owner}`, { method: "PATCH", body: { can_see_revenue: false } })).status).toBe(400);
 
-    // The notice shows once to owners and admins, until each dismisses it.
+    // The notice shows once to owners, and to admins once they can see revenue (only they can give it back), until
+    // each dismisses it.
     expect((await owner("/api/sites/site-a/members")).json.revenue_notice).toBe(true);
-    expect((await admin("/api/sites/site-a/members")).json.revenue_notice).toBe(true);
+    expect((await admin("/api/sites/site-a/members")).json.revenue_notice).toBe(false);
     expect((await viewer("/api/sites/site-a/members")).json.revenue_notice).toBe(false);
     expect((await owner("/api/sites/site-b/members")).json.revenue_notice).toBe(false);
     await owner("/api/sites/site-a/revenue-notice", { method: "DELETE" });
     expect((await owner("/api/sites/site-a/members")).json.revenue_notice).toBe(false);
-    expect((await admin("/api/sites/site-a/members")).json.revenue_notice).toBe(true);
 
     // New invitations start without it.
     const link = (await owner("/api/sites/site-a/invites", { body: { role: "admin" } })).json.url as string;
@@ -496,9 +516,10 @@ describe.each([
     await newcomer("/api/auth/signup", { body: { email: "newcomer@example.com", password: "supersecret", invite: link.split("/").pop() } });
     expect((await newcomer(overview)).json.current).not.toHaveProperty("revenue");
 
-    // Granting it restores revenue at once.
+    // Granting it restores revenue at once, and shows that admin the notice.
     await owner(`/api/sites/site-a/members/${users.admin}`, { method: "PATCH", body: { can_see_revenue: true } });
     expect((await admin(overview)).json.current.revenue).toBe(1000);
+    expect((await admin("/api/sites/site-a/members")).json.revenue_notice).toBe(true);
     await db.close?.();
   });
 });

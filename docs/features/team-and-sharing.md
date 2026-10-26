@@ -14,10 +14,10 @@ Invite people from **Settings → Team**. You get an invitation link (valid 14 d
 
 ## Who sees revenue
 
-Each member has a **Can see revenue** toggle in **Settings → Team**. It's always on for owners. Owners and admins
-turn it on or off for other members, and it applies at once. When you invite someone, tick **Can see revenue** if
-they should see it: it's off by default. Admins can turn it on for anyone, themselves included, since they already
-manage the team.
+Each member has a **Can see revenue** toggle in **Settings → Team**. It's always on for owners, and it applies at once.
+Only members who can see revenue themselves can change it for others: owners, and admins who have it. An admin without
+it can't turn it on for anyone, themselves included, until someone who has it gives it to them. When you invite
+someone, tick **Can see revenue** if they should see it: it's off by default, and only shown to members who have it.
 
 A member without it gets no revenue anywhere: the dashboard, their account tokens (so the [CLI](../guides/cli.md)
 and MCP), website keys they created, CSV exports (there's no payments export for them), visitor profiles and

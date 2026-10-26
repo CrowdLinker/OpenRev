@@ -118,7 +118,7 @@ export async function getMemberRole(db: Database, siteId: string, userId: string
   return row?.role ?? null;
 }
 
-/** Owners always see revenue; other members when an owner or admin turned on "Can see revenue" for them. */
+/** Owners always see revenue; other members when someone who sees it turned on "Can see revenue" for them. */
 export function seesRevenue(role: string | null | undefined, canSeeRevenue: unknown): boolean {
   return role === "owner" || Number(canSeeRevenue) === 1;
 }
@@ -154,7 +154,8 @@ export function joinStatement(invite: { site_id: string; role: Role; can_see_rev
 
 /**
  * Looks up an unexpired invite whose creator can still grant it (an instance admin, or an admin/owner of the
- * site). Invites from someone who has since lost that authority are deleted and treated as invalid.
+ * site). Invites from someone who has since lost that authority are deleted and treated as invalid. "Can see
+ * revenue" only comes with the invite while its creator can still see revenue.
  */
 export async function findInvite(
   db: Database,
@@ -166,10 +167,11 @@ export async function findInvite(
   );
   if (!invite) return null;
   const creator = invite.created_by ? await db.first<{ is_admin: number }>("SELECT is_admin FROM users WHERE id = ?", [invite.created_by]) : null;
-  const creatorRole = invite.created_by ? await getMemberRole(db, invite.site_id, invite.created_by) : null;
-  if (!creator || (!creator.is_admin && !roleAtLeast(creatorRole, "admin"))) {
+  const membership = invite.created_by ? await getMembership(db, invite.site_id, invite.created_by) : null;
+  if (!creator || (!creator.is_admin && !roleAtLeast(membership?.role, "admin"))) {
     await db.run("DELETE FROM invites WHERE id = ?", [tokenHash]);
     return null;
   }
-  return { site_id: invite.site_id, role: invite.role, email: invite.email, can_see_revenue: Number(invite.can_see_revenue) };
+  const revenue = Number(invite.can_see_revenue) === 1 && (!!creator.is_admin || !!membership?.canSeeRevenue);
+  return { site_id: invite.site_id, role: invite.role, email: invite.email, can_see_revenue: revenue ? 1 : 0 };
 }

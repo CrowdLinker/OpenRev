@@ -49,7 +49,9 @@ export const REVENUE_FIELDS = [
 const FIELDS = new Set<string>(REVENUE_FIELDS);
 
 /** Why a revenue report (payments, LTV, MRR) is refused to a member without "Can see revenue". */
-export const REVENUE_HIDDEN = "You can't see revenue on this website. An owner or admin can turn on “Can see revenue” for you in Settings → Team.";
+export const REVENUE_HIDDEN = "You can't see revenue on this website. An owner, or an admin who can see revenue, can turn on “Can see revenue” for you in Settings → Team.";
+/** Why a member without "Can see revenue" can't change it for anyone, themselves included. */
+export const REVENUE_GRANT = "Only members who can see revenue can change who sees it";
 /** The same, on a public share link with "Hide revenue on share links". */
 export const REVENUE_HIDDEN_PUBLIC = "Revenue is hidden on this dashboard";
 

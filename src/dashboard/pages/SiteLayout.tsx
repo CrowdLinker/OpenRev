@@ -73,7 +73,7 @@ export function RevenueOnly({ page: Page }: { page: ComponentType }) {
   if (canSeeRevenue) return <Page />;
   return (
     <Empty title="Revenue is hidden" icon={<EyeOff className="h-6 w-6" />}>
-      {isPublic ? "This dashboard doesn't share revenue." : "An owner or admin can turn on “Can see revenue” for you in Settings → Team."}
+      {isPublic ? "This dashboard doesn't share revenue." : "An owner, or an admin who can see revenue, can turn on “Can see revenue” for you in Settings → Team."}
     </Empty>
   );
 }

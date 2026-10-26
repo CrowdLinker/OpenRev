@@ -6,7 +6,7 @@ import { sha256Hex } from "../lib/crypto";
 import { randomId, randomToken, uuid } from "../lib/ids";
 import { isValidTimezone, resolveRange } from "../lib/time";
 import { publicHttpsUrl } from "../lib/net";
-import { REVENUE_HIDDEN, withoutRevenue } from "../lib/revenue";
+import { REVENUE_GRANT, REVENUE_HIDDEN, withoutRevenue } from "../lib/revenue";
 import { isEmail, sanitizeGoalName } from "../lib/validate";
 import { getProvider, providerCatalog } from "../providers";
 import { ALERT_CHANNELS, ALERT_TYPES, invalidateAlerts, sendTestAlert, TELEGRAM_TOKEN, type AlertRow } from "../services/alerts";
@@ -238,7 +238,7 @@ export function siteRoutes() {
   // ---- team -------------------------------------------------------------------
 
   app.get("/sites/:siteId/members", async (c) => {
-    const { site, role } = await siteForUser(c, c.req.param("siteId"));
+    const { site, role, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"));
     const user = requireUser(c);
     const db = c.get("rt").db;
     const [members, invites] = await Promise.all([
@@ -252,8 +252,9 @@ export function siteRoutes() {
     return c.json({
       members: members.map(({ revenue_notice: _notice, ...m }) => ({ ...m, can_see_revenue: seesRevenue(m.role as string, m.can_see_revenue) })),
       invites: invites.map((i) => ({ ...i, id: String(i.id).slice(0, 12), can_see_revenue: Number(i.can_see_revenue) === 1 })),
-      // Shown once to the owners and admins of websites whose members lost revenue in the upgrade (migration 7).
-      revenue_notice: roleAtLeast(role, "admin") && Number(me?.revenue_notice) === 1,
+      // Shown once to the owners and admins of websites whose members lost revenue in the upgrade (migration 7), once
+      // they can see revenue: only they can give it back.
+      revenue_notice: roleAtLeast(role, "admin") && canSeeRevenue && Number(me?.revenue_notice) === 1,
     });
   });
 
@@ -266,10 +267,11 @@ export function siteRoutes() {
   });
 
   app.post("/sites/:siteId/invites", async (c) => {
-    const { site } = await siteForUser(c, c.req.param("siteId"), "admin");
+    const { site, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"), "admin");
     const rt = c.get("rt");
     const user = requireUser(c);
     const body = await readJson<{ email?: string; role?: Role; can_see_revenue?: boolean }>(c);
+    if (body.can_see_revenue === true && !canSeeRevenue) fail(403, REVENUE_GRANT);
     const role: Role = body.role && ROLES.includes(body.role) && body.role !== "owner" ? body.role : "viewer";
     const email = body.email && isEmail(body.email) ? body.email.toLowerCase() : null;
     // Everyone gets a link, even if an account with this email exists: account emails aren't verified,
@@ -309,11 +311,14 @@ export function siteRoutes() {
     return c.json({ ok: true });
   });
 
-  /** Changes a member's role, or "Can see revenue" (`can_see_revenue`). Owners and admins can do both. */
+  /** Changes a member's role, or "Can see revenue" (`can_see_revenue`). Owners and admins can change roles; only those
+   * who can see revenue themselves can change who sees it, so an admin without it can't grant it to anyone, themselves
+   * included. */
   app.patch("/sites/:siteId/members/:userId", async (c) => {
-    const { site, role: myRole } = await siteForUser(c, c.req.param("siteId"), "admin");
+    const { site, role: myRole, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"), "admin");
     const body = await readJson<{ role?: Role; can_see_revenue?: boolean }>(c);
     if (body.role === undefined && typeof body.can_see_revenue !== "boolean") fail(400, "Nothing to change");
+    if (typeof body.can_see_revenue === "boolean" && !canSeeRevenue) fail(403, REVENUE_GRANT);
     if (body.role !== undefined && !ROLES.includes(body.role)) fail(400, "Invalid role");
     if (body.role === "owner" && myRole !== "owner") fail(403, "Only owners can grant the owner role");
     const db = c.get("rt").db;
@@ -332,6 +337,8 @@ export function siteRoutes() {
     await db.batch([
       { sql: "UPDATE site_members SET role = ? WHERE site_id = ? AND user_id = ?", params: [role, site.id, target] },
       ...(revenue === undefined ? [] : [{ sql: "UPDATE site_members SET can_see_revenue = ? WHERE site_id = ? AND user_id = ?", params: [revenue ? 1 : 0, site.id, target] }]),
+      // A member who loses "Can see revenue" can't pass it on through their pending invitations either.
+      ...(revenue === false ? [{ sql: "UPDATE invites SET can_see_revenue = 0 WHERE site_id = ? AND created_by = ?", params: [site.id, target] }] : []),
       // A member who can no longer invite loses the invitation links they created.
       ...(roleAtLeast(role, "admin") ? [] : [{ sql: "DELETE FROM invites WHERE site_id = ? AND created_by = ?", params: [site.id, target] }]),
     ]);
