@@ -28,7 +28,9 @@ keywords, social posts and AI visits.
 
 ## Public dashboards
 
-**Settings → General → Public dashboard** creates a read-only link (`/share/<token>`) showing the dashboard, realtime, revenue and funnels — handy for "open startup" pages or investors. Names, emails and individual visitor journeys are never exposed, and realtime and payment data leave out visitor, session, transaction, subscription and checkout ids. Disable the link at any time. (The one exception is an instance started with [`DEMO_MODE`](../self-hosting/configuration.md), meant for made-up data like the live demo, whose share links also have the Visitors tab.)
+**Settings → General → Public dashboard** creates a read-only link (`/share/<token>`) showing the dashboard, realtime, revenue and funnels — handy for "open startup" pages or investors. Unless the instance runs with `DEMO_MODE` (below), names, emails and individual visitor journeys are never exposed, and realtime and payment data leave out visitor, session, transaction, subscription and checkout ids. Disable the link at any time.
+
+[`DEMO_MODE`](../self-hosting/configuration.md) is for instances with made-up data only, like the live demo. Their share links also have the Visitors tab, with each visitor's name, email and journey, so never turn it on where real people are tracked.
 
 Turn on **Hide revenue on share links** (**Settings → General**) to share traffic without revenue. The link then
 leaves out every revenue figure: revenue and refunds, revenue per visitor and customer counts in every report, MRR,
