@@ -178,8 +178,9 @@ describe.each([
     ]);
     expect(posts.find((p) => p.id === "1001")).toMatchObject({ likes: 40, reposts: 5 });
     expect(posts.find((p) => p.id === "501")?.text).toBe('On "Show HN: OpenRev": Docs: here & more');
-    const cfg = (await call(`/api/sites/${siteId}/social`)).json.config;
-    expect(cfg).toMatchObject({ x_reads: 2, last_error: null });
+    // The count is read from the database: the settings only show this month's reads, and NOW is in a fixed month.
+    expect((await call(`/api/sites/${siteId}/social`)).json.config).toMatchObject({ last_error: null });
+    expect(Number((await getSocialConfig(rt.db, siteId))!.x_reads)).toBe(2);
 
     // The next run continues from the newest post, and stops at the monthly limit.
     const second = fakeApis();
@@ -191,6 +192,14 @@ describe.each([
     expect(third.calls.some((c) => new URL(c).hostname === "api.x.com")).toBe(false);
     expect(paused.error).toMatch(/Paused: 500 𝕏 posts read this month/);
     await rt.db.run("UPDATE social_config SET x_reads = 2 WHERE site_id = ?", [siteId]);
+
+    // Two syncs at once ("Check now" during a scheduled run): only one pays for the search, and its reads are counted.
+    await rt.db.run("UPDATE social_config SET x_since_id = NULL WHERE site_id = ?", [siteId]);
+    const row = (await getSocialConfig(rt.db, siteId))!;
+    const both = fakeApis();
+    await Promise.all([1, 2].map(() => syncSocial(rt, site, row, { now: NOW + 21 * 3_600_000, fetchFn: both.fetchFn, force: true })));
+    expect(both.calls.filter((c) => new URL(c).pathname === "/2/tweets/search/recent")).toHaveLength(1);
+    expect(Number((await getSocialConfig(rt.db, siteId))!.x_reads)).toBe(4);
   });
 
   it("credits visits to the post or profile that links to their landing page", async () => {

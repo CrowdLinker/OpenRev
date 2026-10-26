@@ -536,6 +536,18 @@ const spend = (budget: SyncBudget, statements: number) => {
   budget.wrote = true;
 };
 
+/**
+ * Marks an 𝕏 check as started, unless another sync already did since `row` was read: two syncs at once ("Check now"
+ * during a scheduled run) would otherwise both pay for the same search.
+ */
+async function claimXCheck(rt: Runtime, row: SocialConfigRow, now: number): Promise<boolean> {
+  const res =
+    row.x_checked_at === null
+      ? await rt.db.run("UPDATE social_config SET x_checked_at = ? WHERE site_id = ? AND x_checked_at IS NULL", [now, row.site_id])
+      : await rt.db.run("UPDATE social_config SET x_checked_at = ? WHERE site_id = ? AND x_checked_at = ?", [now, row.site_id, Number(row.x_checked_at)]);
+  return res.changes > 0;
+}
+
 /** Looks for new posts: Hacker News every hour, 𝕏 every 6 hours (`force` checks now), within the monthly limit. */
 export async function syncSocial(
   rt: Runtime,
@@ -571,13 +583,14 @@ export async function syncSocial(
   const sinceX = row.x_checked_at ? now - Number(row.x_checked_at) : Infinity;
   const xDue = sinceX >= X_EVERY_MS || (opts.force && sinceX >= X_FORCE_MIN_MS);
   if (row.config && xDue && budget.wrote && budget.left < X_ROOM) result.stopped = true;
-  else if (row.config && xDue) {
+  else if (row.config && xDue && (await claimXCheck(rt, row, now))) {
     const month = monthKey(now);
-    let reads = row.x_reads_month === month ? Number(row.x_reads) : 0;
+    const reads = row.x_reads_month === month ? Number(row.x_reads) : 0;
     const left = Number(row.x_monthly_cap) - reads;
     let sinceId = row.x_since_id;
     let usersCheckedAt = row.x_users_checked_at;
     let found = 0;
+    let runReads = 0;
     try {
       if (left <= 0) throw new SocialError(`Paused: ${reads.toLocaleString("en-US")} 𝕏 posts read this month, the limit you set. Raise it to keep looking.`);
       const { xToken } = JSON.parse(await decryptString(await getSecret(rt), row.config)) as { xToken: string };
@@ -591,15 +604,17 @@ export async function syncSocial(
       const posts = postStatements(site.id, res.posts, now);
       await rt.db.batch(posts);
       spend(budget, posts.length);
-      reads += res.reads;
+      runReads = res.reads;
       found = res.posts.length;
       sinceId = res.newestId ?? sinceId;
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
     }
+    // The reads are added to the stored count, which a settings change may have touched meanwhile.
     await rt.db.run(
-      "UPDATE social_config SET x_since_id = ?, x_checked_at = ?, x_users_checked_at = ?, x_reads_month = ?, x_reads = ? WHERE site_id = ?",
-      [sinceId, now, usersCheckedAt, month, reads, site.id],
+      `UPDATE social_config SET x_since_id = ?, x_checked_at = ?, x_users_checked_at = ?,
+         x_reads = CASE WHEN x_reads_month = ? THEN x_reads + ? ELSE ? END, x_reads_month = ? WHERE site_id = ?`,
+      [sinceId, now, usersCheckedAt, month, runReads, runReads, month, site.id],
     );
     result.x = found;
   }
