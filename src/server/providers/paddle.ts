@@ -1,7 +1,7 @@
 import { intervalFromPeriod, parseInterval } from "../lib/billing";
 import type { NormalizedGoal, NormalizedPayment } from "../services/payments";
-import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
-import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
+import type { ImportPage, PaymentProvider, ProviderResult, WebhookRequest } from "./types";
+import { apiGet, currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -16,6 +16,8 @@ type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
  *   no double counting of a subscription's first payment.
  * - Refunds/chargebacks are adjustments; Paddle must approve most refunds, so they are counted once `status` is
  *   `approved` (via `adjustment.created` or `adjustment.updated`).
+ * - History import lists completed transactions (with their customer, for emails), then approved refund and
+ *   chargeback adjustments, with an API key. Sandbox keys (`pdl_sdbx_…`) use the sandbox API.
  */
 
 const TOLERANCE_SECONDS = 600;
@@ -53,6 +55,9 @@ function transactionPayment(t: Obj, occurredAt?: unknown): NormalizedPayment | n
     visitorId: pickVisitorId(custom),
     sessionId: pickSessionId(custom),
     customerId: str(t.customer_id),
+    // Only present when the transaction was listed with include=customer (history import).
+    email: t.customer?.email ?? null,
+    name: t.customer?.name ?? null,
     ref: String(t.id),
     subscriptionId: str(t.subscription_id),
     interval:
@@ -134,6 +139,14 @@ export const paddle: PaymentProvider = {
       secret: true,
       help: "Paddle → Developer tools → Notifications → your destination → Secret key.",
     },
+    {
+      key: "apiKey",
+      label: "API key for importing past transactions",
+      type: "password",
+      secret: true,
+      placeholder: "pdl_live_apikey_...",
+      help: "Paddle → Developer tools → Authentication → API keys, with read access to transactions, adjustments and customers.",
+    },
   ],
   events: ["transaction.completed", "adjustment.created", "adjustment.updated", "subscription.created", "subscription.canceled"],
   metadataHint: "customData: { openrev_visitor_id, openrev_session_id }",
@@ -146,5 +159,30 @@ export const paddle: PaymentProvider = {
     const event = parseJson<Obj>(req.rawBody);
     if (!event) return { payments: [], ignored: "invalid JSON" };
     return parsePaddleEvent(event);
+  },
+
+  async importHistory(config, cursor): Promise<ImportPage> {
+    const key = config.apiKey;
+    if (!key) throw new Error("A Paddle API key is required to import past transactions.");
+    const base = /_sdbx_/.test(key) ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
+    // cursor format: "<phase>:<after>" where phase is transactions | adjustments
+    const [phase = "transactions", after = ""] = (cursor ?? "transactions:").split(":");
+    if (phase !== "transactions" && phase !== "adjustments") throw new Error("Invalid import cursor");
+    const from = after ? `&after=${encodeURIComponent(after)}` : "";
+    const list =
+      phase === "transactions"
+        ? await apiGet<Obj>("Paddle", `${base}/transactions?status=completed,paid&include=customer&per_page=30&order_by=id%5BASC%5D${from}`, key)
+        : await apiGet<Obj>("Paddle", `${base}/adjustments?action=refund,chargeback&status=approved&per_page=50&order_by=id%5BASC%5D${from}`, key);
+    const payments: NormalizedPayment[] = [];
+    for (const item of (list.data ?? []) as Obj[]) {
+      const p = phase === "transactions" ? transactionPayment(item) : adjustmentRefund(item);
+      if (p) payments.push(p);
+    }
+    const items = (list.data ?? []) as Obj[];
+    const last = items[items.length - 1]?.id;
+    let next: string | null = null;
+    if (list.meta?.pagination?.has_more && last) next = `${phase}:${last}`;
+    else if (phase === "transactions") next = "adjustments:";
+    return { payments, nextCursor: next };
   },
 };

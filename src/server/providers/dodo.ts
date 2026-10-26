@@ -1,7 +1,7 @@
 import { parseInterval } from "../lib/billing";
 import type { NormalizedPayment } from "../services/payments";
-import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
-import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyStandardWebhook } from "./util";
+import type { ImportPage, PaymentProvider, ProviderResult, WebhookRequest } from "./types";
+import { apiGet, currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyStandardWebhook } from "./util";
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -16,6 +16,9 @@ type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
  *   Each payment fires once, so a subscription's first payment is never double counted.
  * - `refund.succeeded`: `amount` refunded, `payment_id` of the original payment.
  * - `ref` is the payment id: Dodo appends `?payment_id=…&status=succeeded` to the return URL, which the tracker reports.
+ * - History import lists succeeded payments, then succeeded refunds (100 per page) with an API key. Listed payments
+ *   have no billing interval, so it's read from their subscription. Refunds in the list have no customer; they inherit
+ *   the attribution of the payment they refund.
  */
 
 const RENEWAL_CHARGES = new Set(["renewal", "plan_change", "on_demand"]);
@@ -102,6 +105,23 @@ export const dodo: PaymentProvider = {
       secret: true,
       help: "Dodo Payments → Developer → Webhooks → your endpoint → Overview → Signing secret.",
     },
+    {
+      key: "apiKey",
+      label: "API key for importing past payments",
+      type: "password",
+      secret: true,
+      help: "Dodo Payments → Developer → API keys. Only used to read payments and refunds.",
+    },
+    {
+      key: "environment",
+      label: "Environment",
+      type: "select",
+      options: [
+        { value: "live", label: "Live mode" },
+        { value: "test", label: "Test mode" },
+      ],
+      help: "Which mode the API key belongs to.",
+    },
   ],
   events: ["payment.succeeded", "refund.succeeded"],
   metadataHint: "metadata: { openrev_visitor_id, openrev_session_id }",
@@ -114,5 +134,45 @@ export const dodo: PaymentProvider = {
     const event = parseJson<Obj>(req.rawBody);
     if (!event) return { payments: [], ignored: "invalid JSON" };
     return parseDodoEvent(event);
+  },
+
+  async importHistory(config, cursor): Promise<ImportPage> {
+    const key = config.apiKey;
+    if (!key) throw new Error("A Dodo Payments API key is required to import past payments.");
+    const base = config.environment === "test" ? "https://test.dodopayments.com" : "https://live.dodopayments.com";
+    // cursor format: "<phase>:<page>" where phase is payments | refunds; pages count from 0
+    const [phase = "payments", pageStr] = (cursor ?? "payments:0").split(":");
+    if (phase !== "payments" && phase !== "refunds") throw new Error("Invalid import cursor");
+    const page = Math.max(0, Number(pageStr) || 0);
+    const list = await apiGet<Obj>("Dodo Payments", `${base}/${phase}?page_size=100&page_number=${page}&status=succeeded`, key);
+    const items = (list.items ?? []) as Obj[];
+    const payments: NormalizedPayment[] = [];
+    // Listed payments don't carry the billing interval, so it's read from each subscription (once per page).
+    const subscriptions = new Map<string, Obj | null>();
+    for (const d of items) {
+      if (phase === "payments") {
+        const p = paymentFrom(d);
+        if (!p) continue;
+        if (p.subscriptionId && !p.interval) {
+          if (!subscriptions.has(p.subscriptionId)) {
+            const url = `${base}/subscriptions/${encodeURIComponent(p.subscriptionId)}`;
+            const sub = await apiGet<Obj>("Dodo Payments", url, key).catch((err) => {
+              if ((err as { status?: number }).status === 404) return null;
+              throw err;
+            });
+            subscriptions.set(p.subscriptionId, sub);
+          }
+          const sub = subscriptions.get(p.subscriptionId);
+          p.interval = parseInterval(sub?.payment_frequency_interval, sub?.payment_frequency_count);
+        }
+        payments.push(p);
+      } else {
+        payments.push(...parseDodoEvent({ type: "refund.succeeded", data: d }).payments);
+      }
+    }
+    let next: string | null = null;
+    if (items.length === 100) next = `${phase}:${page + 1}`;
+    else if (phase === "payments") next = "refunds:0";
+    return { payments, nextCursor: next };
   },
 };

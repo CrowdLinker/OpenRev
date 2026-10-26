@@ -7,12 +7,17 @@ OpenRev records successful Paystack charges (one-time and subscription) and proc
 Paystack signs webhooks with your **secret key** (there is no separate webhook secret).
 
 1. In Paystack open **Settings → API Keys & Webhooks** and copy the **Live Secret Key** (`sk_live_…`).
-2. In OpenRev open **Settings → Revenue → Connect → Paystack** and paste it as **Secret key**. It is encrypted at rest and only used to verify signatures.
+2. In OpenRev open **Settings → Revenue → Connect → Paystack** and paste it as **Secret key**. It is encrypted at rest and only used to verify signatures and, when you import history, to read past transactions.
 3. Copy the webhook URL:
 
    ```
    https://YOUR-OPENREV-DOMAIN/api/webhooks/<integration-id>
    ```
+
+**Import past transactions:** click **Import history** on the integration. It uses the same secret key to read every
+successful transaction, then processed refunds (a charge refunded in full is imported with its refund). Transactions
+keep the visitor id when it was in their metadata; older ones are matched by customer email when possible. Use the
+test key's integration to import test transactions.
 
 ## 2. Set the webhook URL in Paystack
 
