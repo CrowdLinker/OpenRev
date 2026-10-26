@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { ImportHistory } from "../components/ImportHistory";
 import { SearchConsoleSettings } from "../components/SearchConsole";
+import { MobileAppsSettings } from "../components/MobileApps";
 import { SocialSettings } from "../components/Social";
 import { InstallGuide, QUEUE_SNIPPET, scriptUrl, snippet, VerifyInstall } from "../components/InstallGuide";
 import { LiveBadge } from "../components/LiveBadge";
@@ -318,6 +319,7 @@ openrev("consent", false);`}
           </p>
         </Section>
       )}
+      <MobileAppsSettings site={site} />
       <Section title="Script options">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

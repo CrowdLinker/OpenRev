@@ -12,6 +12,7 @@
 - [Channels & UTM parameters](tracking/channels.md)
 - [Proxy through your domain](tracking/proxy.md) (bypass ad blockers)
 - [Cross-domain & subdomains](tracking/cross-domain.md) · [SPA & hash routing](tracking/spa-and-hash-routing.md)
+- [Mobile apps (React Native, Expo) & web-to-app funnels](tracking/mobile-apps.md)
 - [Exclude visits](tracking/exclusions.md) · [Privacy, cookies & GDPR](tracking/privacy-and-cookies.md)
 
 ## Revenue

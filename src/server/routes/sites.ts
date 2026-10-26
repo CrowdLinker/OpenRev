@@ -22,6 +22,7 @@ import {
   getSite,
   invalidateSite,
   isValidDomain,
+  normalizeAppId,
   normalizeDomain,
   parseSite,
   roleAtLeast,
@@ -139,6 +140,12 @@ export function siteRoutes() {
       const s = body.settings;
       const next: SiteSettings = { ...site.settings };
       if (s.allowedHostnames !== undefined) next.allowedHostnames = stringList(s.allowedHostnames).map(normalizeDomain).filter(isValidDomain);
+      if (s.appIds !== undefined) {
+        const ids = stringList(s.appIds);
+        const bad = ids.find((x) => !normalizeAppId(x));
+        if (bad) fail(400, `"${bad}" isn't an app id. Use the iOS bundle id or Android package name, like com.example.app`);
+        next.appIds = [...new Set(ids.map((x) => normalizeAppId(x)!))].slice(0, 20);
+      }
       if (s.excludedIps !== undefined) next.excludedIps = stringList(s.excludedIps);
       if (s.excludedPaths !== undefined) {
         const paths = stringList(s.excludedPaths);

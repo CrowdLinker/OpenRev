@@ -27,6 +27,8 @@ export interface SiteSettings {
   kpiGoal?: string | null;
   attribution?: AttributionModel;
   hideRevenue?: boolean;
+  /** Mobile apps (bundle ids, package names) allowed to send events with the SDK. */
+  appIds?: string[];
 }
 
 export interface Site {

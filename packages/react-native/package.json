@@ -1,0 +1,27 @@
+{
+  "name": "openrev-react-native",
+  "version": "0.1.0",
+  "description": "OpenRev for React Native and Expo: screens, goals, revenue attribution and web-to-app funnels.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "react-native": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./core": { "types": "./core.d.ts", "default": "./core.js" }
+  },
+  "files": ["index.js", "index.d.ts", "core.js", "core.d.ts", "README.md"],
+  "peerDependencies": {
+    "react-native": ">=0.70",
+    "@react-native-async-storage/async-storage": ">=1.17",
+    "react-native-get-random-values": ">=1.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CrowdLinker/OpenRev.git",
+    "directory": "packages/react-native"
+  },
+  "homepage": "https://github.com/CrowdLinker/OpenRev/blob/main/docs/tracking/mobile-apps.md",
+  "keywords": ["analytics", "react-native", "expo", "revenue", "attribution", "mobile", "web-to-app", "datafast"]
+}
