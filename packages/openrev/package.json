@@ -1,5 +1,5 @@
 {
-  "name": "openrev",
+  "name": "openrev-cli",
   "version": "0.1.1",
   "description": "OpenRev analytics in your terminal: visitors, revenue, MRR, top pages and sources, live visitors, social posts and AI crawlers.",
   "license": "MIT",
