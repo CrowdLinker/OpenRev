@@ -43,6 +43,10 @@ async function readPlausible(files: File[]): Promise<Tables> {
 
 const dayBefore = (date: string) => new Date(Date.parse(date) - 86_400_000).toISOString().slice(0, 10);
 
+/** Rows per chunk for the tables whose rows add to several reports (the server's maxChunkRows: a source row adds up to
+ * eight cells, a location row three). Other tables use the default. */
+const CHUNK_ROWS: Partial<Record<string, number>> = { sources: 750, locations: 2000 };
+
 /** Splits rows into chunks under the server's size limits. */
 function chunks(rows: Record<string, string>[], maxRows = 2000, maxBytes = 700_000) {
   const out: Record<string, string>[][] = [];
@@ -207,7 +211,7 @@ function PlausibleImport({ base, native, busy, setProgress, setError, onDone }: 
     let id: string | null = null;
     try {
       id = (await api<{ import: { id: string } }>(base, { body: { source: "plausible", date_from: from, date_to: to } })).import.id;
-      const work = TABLES.filter((t) => tables[t]?.length).flatMap((table) => chunks(tables[table]).map((part) => ({ table, part })));
+      const work = TABLES.filter((t) => tables[t]?.length).flatMap((table) => chunks(tables[table], CHUNK_ROWS[table]).map((part) => ({ table, part })));
       for (let seq = 0; seq < work.length; seq++) {
         const { table, part } = work[seq];
         setProgress({ label: `Uploading ${table.replace(/_/g, " ")}…`, value: seq / work.length });

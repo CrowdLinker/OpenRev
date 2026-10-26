@@ -31,6 +31,9 @@ Two more things to know:
 - **Imports can't overlap.** Delete one import before importing the same days again, for example from another tool.
 - Days are taken as they are in the export: Plausible uses your site's timezone, Google Analytics the property's.
 
+Imported days show up in reports once the import is complete. An import that fails keeps none of its rows, so you
+can import the same days again.
+
 Delete an import at any time from the list under **Import history**: its days disappear from every report.
 
 ## Plausible

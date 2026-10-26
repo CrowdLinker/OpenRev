@@ -129,12 +129,16 @@ export async function createImport(
 }
 
 export async function finishImport(db: Database, imp: ImportRecord, error: string | null, now = Date.now()) {
-  // Credentials are only kept while an import runs.
-  await db.run("UPDATE imports SET status = ?, error = ?, config = NULL, cursor = NULL, updated_at = ? WHERE id = ?", [
-    error ? "failed" : "done",
-    error,
-    now,
-    imp.id,
+  await db.batch([
+    // A failed import keeps none of its rows, so importing the same days again can't count them twice.
+    ...(error
+      ? [
+          { sql: "DELETE FROM imported_stats WHERE import_id = ?", params: [imp.id] },
+          { sql: "DELETE FROM import_chunks WHERE import_id = ?", params: [imp.id] },
+        ]
+      : []),
+    // Credentials are only kept while an import runs.
+    { sql: "UPDATE imports SET status = ?, error = ?, config = NULL, cursor = NULL, updated_at = ? WHERE id = ?", params: [error ? "failed" : "done", error, now, imp.id] },
   ]);
 }
 
@@ -337,6 +341,13 @@ export function aggregateRows(site: Site, imp: Pick<ImportRecord, "date_from" | 
 
 const ROWS_PER_INSERT = 8; // 12 parameters each: D1 allows 100 per statement
 const MAX_STATEMENTS = 800; // a Worker invocation may run 1,000 queries
+/** Cells one row can add: a source row adds to the source, channel, referrer and five UTM reports; a location row to three. */
+const CELLS_PER_ROW: Partial<Record<ImportTable, number>> = { sources: 8, locations: 3 };
+
+/** The most rows of a table that one chunk can take and still fit in MAX_STATEMENTS, whatever the rows hold. */
+export function maxChunkRows(table: ImportTable): number {
+  return Math.floor(((MAX_STATEMENTS - 1) * ROWS_PER_INSERT) / (CELLS_PER_ROW[table] ?? 1));
+}
 
 /**
  * Adds one chunk of an export table to an import. `seq` numbers the chunks of an import: a chunk that was already

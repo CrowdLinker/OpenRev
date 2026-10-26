@@ -1,6 +1,6 @@
 import type { Database } from "../db/types";
 import { accessToken, GoogleError, googleJson, parseServiceAccountKey, type ServiceAccountKey } from "../lib/google";
-import { addImportChunk, finishImport, ImportError, type ImportRecord, type ImportRow, type ImportTable } from "./imports";
+import { addImportChunk, finishImport, ImportError, maxChunkRows, type ImportRecord, type ImportRow, type ImportTable } from "./imports";
 import type { Site } from "./sites";
 
 /**
@@ -11,6 +11,8 @@ import type { Site } from "./sites";
 export const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 const API = "https://analyticsdata.googleapis.com/v1beta";
 const PAGE = 5000;
+/** Rows per request: at most PAGE, and few enough that one page fits in one chunk. */
+const pageSize = (table: ImportTable) => Math.min(PAGE, maxChunkRows(table));
 
 export interface Ga4Config {
   propertyId: string;
@@ -161,7 +163,8 @@ export async function ga4Step(db: Database, site: Site, imp: ImportRecord, cfg: 
     await finishImport(db, imp, null, now);
     return null;
   }
-  const res = await runReport(cfg, report, imp.date_from, imp.date_to, cursor.o, PAGE, fetchFn);
+  const size = pageSize(report.table);
+  const res = await runReport(cfg, report, imp.date_from, imp.date_to, cursor.o, size, fetchFn);
   const rows: ImportRow[] = [];
   for (const r of res.rows ?? []) {
     const d = (r.dimensionValues ?? []).map((x) => x.value ?? "");
@@ -171,9 +174,9 @@ export async function ga4Step(db: Database, site: Site, imp: ImportRecord, cfg: 
     if (row && /^\d{8}$/.test(yyyymmdd)) rows.push({ ...row, date: `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}` });
   }
   // Pages of a report are numbered so a step that runs twice (two open tabs) stores its rows once.
-  await addImportChunk(db, site, imp, cursor.r * 100_000 + cursor.o / PAGE, report.table, rows, now);
+  await addImportChunk(db, site, imp, cursor.r * 100_000 + cursor.o / size, report.table, rows, now);
   const fetched = res.rows?.length ?? 0;
-  const next: Ga4Cursor = fetched === PAGE && cursor.o + PAGE < (res.rowCount ?? 0) ? { r: cursor.r, o: cursor.o + PAGE } : { r: cursor.r + 1, o: 0 };
+  const next: Ga4Cursor = fetched === size && cursor.o + size < (res.rowCount ?? 0) ? { r: cursor.r, o: cursor.o + size } : { r: cursor.r + 1, o: 0 };
   if (next.r >= GA4_REPORTS.length) {
     await finishImport(db, imp, null, now);
     return null;

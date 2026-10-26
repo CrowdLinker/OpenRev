@@ -184,6 +184,8 @@ export const IMPORTED_DIMENSIONS = new Set<Dimension>([
 ]);
 
 const IMPORTED_SUMS = "SUM(i.visitors) AS visitors, SUM(i.visits) AS visits, SUM(i.pageviews) AS pageviews, SUM(i.bounces) AS bounces, SUM(i.duration) AS duration, SUM(i.events) AS events";
+/** Imported rows count once their import is complete: the partial days of a running import stay out of reports. */
+const DONE_IMPORT = "i.import_id IN (SELECT id FROM imports WHERE site_id = i.site_id AND status = 'done')";
 
 // ---------------------------------------------------------------------------
 // Overview
@@ -237,7 +239,7 @@ async function overviewFor(db: Database, q: StatsQuery, from: number, to: number
       [q.site.id, from, to, ...f.params],
     ),
     includesImported(q)
-      ? db.first<Record<string, number>>(`SELECT ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = '' AND i.ts >= ? AND i.ts < ?`, [
+      ? db.first<Record<string, number>>(`SELECT ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = '' AND i.ts >= ? AND i.ts < ? AND ${DONE_IMPORT}`, [
           q.site.id,
           from,
           to,
@@ -260,7 +262,7 @@ async function overviewFor(db: Database, q: StatsQuery, from: number, to: number
       ),
       imp
         ? db.first<Record<string, number>>(
-            `SELECT ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = 'goal' AND i.value = ? AND i.ts >= ? AND i.ts < ?`,
+            `SELECT ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = 'goal' AND i.value = ? AND i.ts >= ? AND i.ts < ? AND ${DONE_IMPORT}`,
             [q.site.id, q.site.settings.kpiGoal, from, to],
           )
         : Promise.resolve(null),
@@ -358,14 +360,14 @@ export async function timeseries(db: Database, q: StatsQuery, interval?: Interva
       : Promise.resolve([]),
     withImported
       ? db.all<Record<string, number>>(
-          `SELECT ${plan.sql("i.ts")} AS b, ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = '' AND i.ts >= ? AND i.ts < ? GROUP BY b`,
+          `SELECT ${plan.sql("i.ts")} AS b, ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = '' AND i.ts >= ? AND i.ts < ? AND ${DONE_IMPORT} GROUP BY b`,
           [q.site.id, q.range.from, q.range.to],
         )
       : Promise.resolve([]),
     withImported && q.site.settings.kpiGoal
       ? db.all<Record<string, number>>(
           `SELECT ${plan.sql("i.ts")} AS b, SUM(i.visitors) AS visitors FROM imported_stats i
-           WHERE i.site_id = ? AND i.dim = 'goal' AND i.value = ? AND i.ts >= ? AND i.ts < ? GROUP BY b`,
+           WHERE i.site_id = ? AND i.dim = 'goal' AND i.value = ? AND i.ts >= ? AND i.ts < ? AND ${DONE_IMPORT} GROUP BY b`,
           [q.site.id, q.site.settings.kpiGoal, q.range.from, q.range.to],
         )
       : Promise.resolve([]),
@@ -446,7 +448,7 @@ export async function breakdown(
     includesImported(q) && IMPORTED_DIMENSIONS.has(dim)
       ? await db.all<Record<string, unknown>>(
           `SELECT i.value AS value, i.meta AS meta, ${IMPORTED_SUMS} FROM imported_stats i
-           WHERE i.site_id = ? AND i.dim = ? AND i.ts >= ? AND i.ts < ?
+           WHERE i.site_id = ? AND i.dim = ? AND i.ts >= ? AND i.ts < ? AND ${DONE_IMPORT}
            GROUP BY i.value, i.meta
            ORDER BY SUM(i.visitors) DESC
            LIMIT 1000`,
@@ -616,7 +618,7 @@ export async function breakdown(
     );
     totalVisitors = n(t?.visitors);
     if (includesImported(q)) {
-      const ti = await db.first<{ visitors: number }>("SELECT SUM(visitors) AS visitors FROM imported_stats WHERE site_id = ? AND dim = '' AND ts >= ? AND ts < ?", base);
+      const ti = await db.first<{ visitors: number }>(`SELECT SUM(i.visitors) AS visitors FROM imported_stats i WHERE i.site_id = ? AND i.dim = '' AND i.ts >= ? AND i.ts < ? AND ${DONE_IMPORT}`, base);
       totalVisitors += n(ti?.visitors);
     }
   }
@@ -974,7 +976,7 @@ export async function customerLtv(db: Database, q: StatsQuery, groupBy: "source"
 export async function firstDataTimestamp(db: Database, siteId: string): Promise<number | null> {
   const row = await db.first<{ t: number | null; p: number | null; i: number | null }>(
     `SELECT (SELECT MIN(started_at) FROM sessions WHERE site_id = ?) AS t, (SELECT MIN(ts) FROM payments WHERE site_id = ?) AS p,
-            (SELECT MIN(ts) FROM imported_stats WHERE site_id = ?) AS i`,
+            (SELECT MIN(i.ts) FROM imported_stats i WHERE i.site_id = ? AND ${DONE_IMPORT}) AS i`,
     [siteId, siteId, siteId],
   );
   const vals = [row?.t, row?.p, row?.i].filter((x): x is number => x !== null && x !== undefined).map(Number);

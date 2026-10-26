@@ -2,13 +2,25 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
 import type { Database } from "../src/server/db/types";
-import { clearGoogleTokens, parseServiceAccountKey } from "../src/server/lib/google";
-import { GA4_REPORTS, parsePropertyId } from "../src/server/services/ga4";
+import { accessToken, clearGoogleTokens, parseServiceAccountKey } from "../src/server/lib/google";
+import { GA4_REPORTS, GA4_SCOPE, parsePropertyId } from "../src/server/services/ga4";
 import { mapRow } from "../src/server/services/imports";
 import { testDb, testRuntime } from "./helpers";
 import { pgliteDb } from "./pglite";
 
 const SITE = { domain: "example.com", settings: {} };
+
+/** A service account key with a new RSA private key, as in the JSON key file Google downloads. */
+async function serviceAccountKey(clientEmail = "openrev@p.iam.gserviceaccount.com") {
+  const pair = (await crypto.subtle.generateKey(
+    { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    true,
+    ["sign", "verify"],
+  )) as CryptoKeyPair;
+  const der = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der)).replace(/(.{64})/g, "$1\n")}\n-----END PRIVATE KEY-----\n`;
+  return { pair, key: { type: "service_account", project_id: "p", client_email: clientEmail, private_key: pem, token_uri: "https://oauth2.googleapis.com/token" } };
+}
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 describe("mapping export rows", () => {
@@ -53,6 +65,21 @@ describe("mapping export rows", () => {
     expect(() => parsePropertyId("G-ABC123")).toThrow(/measurement ID/);
     expect(() => parseServiceAccountKey("{}")).toThrow(/service account key/);
     expect(() => parseServiceAccountKey("nope")).toThrow(/JSON key file/);
+  });
+});
+
+describe("Google access tokens", () => {
+  afterEach(() => clearGoogleTokens());
+
+  it("reuses a token only for the private key that signed for it", async () => {
+    const { key } = await serviceAccountKey("shared@p.iam.gserviceaccount.com");
+    const { key: other } = await serviceAccountKey("shared@p.iam.gserviceaccount.com"); // same account name, another key
+    let calls = 0;
+    const fetchFn = async () => Response.json({ access_token: `token-${++calls}`, expires_in: 3600 });
+    expect(await accessToken(parseServiceAccountKey(key), GA4_SCOPE, fetchFn)).toBe("token-1");
+    expect(await accessToken(parseServiceAccountKey(key), GA4_SCOPE, fetchFn)).toBe("token-1");
+    expect(await accessToken(parseServiceAccountKey(other), GA4_SCOPE, fetchFn)).toBe("token-2");
+    expect(calls).toBe(2);
   });
 });
 
@@ -155,14 +182,7 @@ describe.each([
   });
 
   it("imports Google Analytics 4 through the Data API with a service account", async () => {
-    const pair = (await crypto.subtle.generateKey(
-      { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-      true,
-      ["sign", "verify"],
-    )) as CryptoKeyPair;
-    const der = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
-    const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der)).replace(/(.{64})/g, "$1\n")}\n-----END PRIVATE KEY-----\n`;
-    const key = { type: "service_account", project_id: "p", client_email: "openrev@p.iam.gserviceaccount.com", private_key: pem, token_uri: "https://oauth2.googleapis.com/token" };
+    const { pair, key } = await serviceAccountKey();
 
     const requests: { dims: string[]; offset: number }[] = [];
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
@@ -237,5 +257,66 @@ describe.each([
     const res = await call(`/api/sites/${siteId}/imports`, { body: { source: "ga4", date_from: "2023-01-01", date_to: "2023-01-31", property_id: "987654321", key } });
     expect(res.status).toBe(400);
     expect(res.json.error).toMatch(/add x@p\.iam\.gserviceaccount\.com as a Viewer/);
+  });
+
+  it("imports a large GA4 report in pages that each fit in one chunk", async () => {
+    const { key } = await serviceAccountKey();
+    // 1,700 referral sources with a campaign each: every row adds to the source, referrer, utm_source and utm_campaign
+    // reports, more cells than one chunk can store if the report came in one page.
+    const sources = Array.from({ length: 1700 }, (_, i) => ({
+      dimensionValues: ["20230301", `site${i}.example`, "referral", `campaign-${i}`].map((value) => ({ value })),
+      metricValues: [1, 1, 2, 1, 30].map((v) => ({ value: String(v) })),
+    }));
+    const limits: number[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      if (url.includes("oauth2")) return Response.json({ access_token: "token-1", expires_in: 3600 });
+      const body = JSON.parse(String(init.body));
+      const dims: string[] = body.dimensions.map((d: { name: string }) => d.name);
+      const rows =
+        dims[1] === "sessionSource"
+          ? sources
+          : dims.length === 1
+            ? [{ dimensionValues: [{ value: "20230301" }], metricValues: [1700, 1700, 3400, 1700, 30].map((v) => ({ value: String(v) })) }]
+            : [];
+      if (dims[1] === "sessionSource") limits.push(body.limit);
+      return Response.json({ rows: rows.slice(body.offset, body.offset + body.limit), rowCount: rows.length });
+    });
+
+    const created = await call(`/api/sites/${siteId}/imports`, {
+      body: { source: "ga4", date_from: "2023-03-01", date_to: "2023-03-31", property_id: "123456789", key: JSON.stringify(key) },
+    });
+    expect(created.status).toBe(200);
+    const id = created.json.import.id;
+    let res;
+    let steps = 0;
+    do {
+      res = await call(`/api/sites/${siteId}/imports/${id}/step`, { body: {} });
+      expect(res.status).toBe(200);
+    } while (!res.json.done && ++steps < 30);
+    expect(res.json.import).toMatchObject({ status: "done", imported_rows: 1 + 1700 });
+    expect(limits.length).toBeGreaterThan(1);
+    expect(await rt.db.first("SELECT COUNT(*) AS n FROM imported_stats WHERE import_id = ? AND dim = 'source'", [id])).toEqual({ n: 1700 });
+  });
+
+  it("counts an import once it's complete, and keeps nothing of a failed one", async () => {
+    const range = "period=custom&from=2023-05-01&to=2023-05-31";
+    const start = async () => (await call(`/api/sites/${siteId}/imports`, { body: { source: "plausible", date_from: "2023-05-01", date_to: "2023-05-31" } })).json.import.id as string;
+    const upload = (id: string) =>
+      call(`/api/sites/${siteId}/imports/${id}/rows`, {
+        body: { seq: 0, table: "visitors", rows: [{ date: "2023-05-10", visitors: 40, visits: 50, pageviews: 90, bounces: 10, visit_duration: 1000 }] },
+      });
+
+    const first = await start();
+    await upload(first);
+    expect((await stats(`overview?${range}`)).json.current.visitors).toBe(0); // not complete yet
+    const failed = await call(`/api/sites/${siteId}/imports/${first}/finish`, { body: { error: "The upload stopped" } });
+    expect(failed.json.import).toMatchObject({ status: "failed" });
+    expect(await rt.db.first("SELECT COUNT(*) AS n FROM imported_stats WHERE import_id = ?", [first])).toEqual({ n: 0 });
+
+    // Importing the same days again counts them once.
+    const second = await start();
+    await upload(second);
+    await call(`/api/sites/${siteId}/imports/${second}/finish`, { body: {} });
+    expect((await stats(`overview?${range}`)).json.current.visitors).toBe(40);
   });
 });

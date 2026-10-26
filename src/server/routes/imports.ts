@@ -14,6 +14,7 @@ import {
   IMPORT_TABLES,
   ImportError,
   listImports,
+  maxChunkRows,
   publicImport,
   type ImportRow,
   type ImportSource,
@@ -70,7 +71,8 @@ export function importRoutes() {
     if (imp.source !== "plausible") fail(400, "Rows can only be uploaded to a Plausible import");
     const body = await readJson<{ seq?: number; table?: string; rows?: unknown }>(c);
     if (!(IMPORT_TABLES as readonly string[]).includes(String(body.table))) fail(400, "Unknown table");
-    if (!Array.isArray(body.rows) || body.rows.length > MAX_ROWS_PER_CHUNK) fail(400, `Send between 0 and ${MAX_ROWS_PER_CHUNK} rows at a time`);
+    const limit = Math.min(MAX_ROWS_PER_CHUNK, maxChunkRows(body.table as ImportTable));
+    if (!Array.isArray(body.rows) || body.rows.length > limit) fail(400, `Send between 0 and ${limit} rows of ${body.table} at a time`);
     const rows = body.rows.filter((r): r is ImportRow => !!r && typeof r === "object" && !Array.isArray(r));
     try {
       const res = await addImportChunk(c.get("rt").db, site, imp, Number(body.seq), body.table as ImportTable, rows);

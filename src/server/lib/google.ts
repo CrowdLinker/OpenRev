@@ -77,7 +77,10 @@ const tokens = new Map<string, { token: string; expires: number }>();
 
 /** An access token for the service account, cached until a minute before it expires. */
 export async function accessToken(key: ServiceAccountKey, scope: string, fetchFn: FetchFn = fetch, now = Date.now()): Promise<string> {
-  const cacheKey = `${key.client_email}\u0000${scope}`;
+  // The private key is part of the cache key: a token is reused only for the key that signed for it, never for another
+  // key that merely names the same service account.
+  const keyHash = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key.private_key)));
+  const cacheKey = `${key.client_email}\u0000${keyHash}\u0000${scope}`;
   const cached = tokens.get(cacheKey);
   if (cached && cached.expires > now + 60_000) return cached.token;
   const res = await fetchFn(key.token_uri, {
