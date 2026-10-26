@@ -39,6 +39,7 @@ lumen.app  Overview · 2026-09-27 → 2026-10-26
 | `openrev sites` | Websites the key can read |
 
 Options: `-p 30d` (or `today`, `mtd`, `12m`…), `--from`/`--to`, `-s <site>`, `-n <rows>`, `--json`. In scripts, set
-`OPENREV_URL` and `OPENREV_API_KEY` instead of logging in.
+`OPENREV_URL` and `OPENREV_API_KEY` instead of logging in. A key whose member can't see revenue gets the reports without
+it.
 
 Full guide: [docs/guides/cli.md](https://github.com/CrowdLinker/OpenRev/blob/main/docs/guides/cli.md). MIT license.
