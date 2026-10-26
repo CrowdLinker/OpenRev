@@ -1,7 +1,7 @@
 import { parseInterval } from "../lib/billing";
 import type { NormalizedGoal, NormalizedPayment } from "../services/payments";
-import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
-import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyStandardWebhook } from "./util";
+import type { ImportPage, PaymentProvider, ProviderResult, WebhookRequest } from "./types";
+import { apiGet, currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyStandardWebhook } from "./util";
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -16,6 +16,8 @@ type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
  *   `subscription_cycle` / `subscription_update` / `subscription_meter_cycle` → renewal.
  * - Amounts are integers in cents. `order.refunded` carries cumulative `refunded_amount` (+ `refunded_tax_amount`).
  * - Checkout `metadata` is copied to the order and subscription; `customer_metadata` to the customer.
+ * - History import lists orders (GET /v1/orders, oldest first, 100 per page) with an organization access token; a
+ *   refunded order also yields its cumulative refund.
  */
 
 const RENEWAL_REASONS = new Set(["subscription_cycle", "subscription_update", "subscription_meter_cycle"]);
@@ -139,6 +141,24 @@ export const polar: PaymentProvider = {
       secret: true,
       help: "Polar → Settings → Webhooks → your endpoint → Secret. Paste it exactly as shown.",
     },
+    {
+      key: "accessToken",
+      label: "Organization access token for importing past orders",
+      type: "password",
+      secret: true,
+      placeholder: "polar_oat_...",
+      help: "Polar → Settings → General → Organization access tokens, with the orders:read scope. Only used to read orders.",
+    },
+    {
+      key: "environment",
+      label: "Environment",
+      type: "select",
+      options: [
+        { value: "production", label: "Production" },
+        { value: "sandbox", label: "Sandbox" },
+      ],
+      help: "Which Polar the access token belongs to.",
+    },
   ],
   events: ["order.paid", "order.refunded", "subscription.created", "subscription.canceled", "subscription.revoked"],
   metadataHint: "metadata: { openrev_visitor_id, openrev_session_id }",
@@ -151,5 +171,23 @@ export const polar: PaymentProvider = {
     const event = parseJson<Obj>(req.rawBody);
     if (!event) return { payments: [], ignored: "invalid JSON" };
     return parsePolarEvent(event);
+  },
+
+  async importHistory(config, cursor): Promise<ImportPage> {
+    const token = config.accessToken;
+    if (!token) throw new Error("A Polar organization access token is required to import past orders.");
+    const base = config.environment === "sandbox" ? "https://sandbox-api.polar.sh" : "https://api.polar.sh";
+    const page = Math.max(1, Number(cursor) || 1);
+    const statuses = ["paid", "refunded", "partially_refunded"].map((s) => `&status=${s}`).join("");
+    const list = await apiGet<Obj>("Polar", `${base}/v1/orders/?page=${page}&limit=100&sorting=created_at${statuses}`, token);
+    const payments: NormalizedPayment[] = [];
+    for (const o of (list.items ?? []) as Obj[]) {
+      const p = orderPayment(o);
+      if (p) payments.push(p);
+      const r = orderRefund(o, o.modified_at);
+      if (r) payments.push(r);
+    }
+    const maxPage = Number(list.pagination?.max_page) || page;
+    return { payments, nextCursor: page < maxPage ? String(page + 1) : null };
   },
 };

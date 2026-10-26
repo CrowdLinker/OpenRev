@@ -209,13 +209,13 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 |---|---|:-:|
 | [Stripe](docs/revenue/stripe.md) | Checkout, Payment Links, subscriptions, PaymentIntents, refunds | ✅ |
 | [Lemon Squeezy](docs/revenue/lemonsqueezy.md) | Orders, subscription renewals, refunds | ✅ |
-| [Polar](docs/revenue/polar.md) | Orders, renewals, refunds | |
-| [Paddle Billing](docs/revenue/paddle.md) | Transactions, renewals, refunds and chargebacks | |
+| [Polar](docs/revenue/polar.md) | Orders, renewals, refunds | ✅ |
+| [Paddle Billing](docs/revenue/paddle.md) | Transactions, renewals, refunds and chargebacks | ✅ |
 | [Shopify](docs/revenue/shopify.md) | Paid orders, refunds | |
-| [Dodo Payments](docs/revenue/dodo.md) | Payments, renewals, refunds | |
+| [Dodo Payments](docs/revenue/dodo.md) | Payments, renewals, refunds | ✅ |
 | [Creem](docs/revenue/creem.md) | Checkouts, subscription payments, refunds | |
 | [Gumroad](docs/revenue/gumroad.md) | Sales, memberships, refunds | |
-| [Paystack](docs/revenue/paystack.md) | Charges, refunds | |
+| [Paystack](docs/revenue/paystack.md) | Charges, refunds | ✅ |
 | [Razorpay](docs/revenue/razorpay.md) | Payments, subscriptions, invoices, refunds | |
 | [WooCommerce](docs/revenue/woocommerce.md) | Orders, refunds | |
 | **Anything else** | [Custom webhook](docs/revenue/custom-provider.md): map JSON paths and a signature for any provider | |
@@ -354,7 +354,7 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Adding a paym
 
 ## 🗺️ Roadmap
 
-- Historical import for more providers (Polar, Paddle, Dodo…)
+- History import for the other providers (Creem, Gumroad, Razorpay, Shopify, WooCommerce)
 
 Have an idea? [Open an issue](https://github.com/CrowdLinker/OpenRev/issues).
 

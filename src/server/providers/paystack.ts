@@ -1,7 +1,7 @@
 import { parseInterval } from "../lib/billing";
 import type { NormalizedPayment } from "../services/payments";
-import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
-import { asObject, currencyCode, num, pairsToObject, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
+import type { ImportPage, PaymentProvider, ProviderResult, WebhookRequest } from "./types";
+import { apiGet, asObject, currencyCode, num, pairsToObject, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -17,7 +17,11 @@ type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-exp
  *   (`[{ display_name, variable_name, value }]`); both are searched for the visitor id.
  * - Subscriptions: Paystack does not flag renewals explicitly. A charge on a plan whose metadata carries no
  *   OpenRev visitor id (renewal charges are created by Paystack, not by your checkout code) is treated as a renewal.
+ * - History import uses the same secret key: successful transactions (100 per page), then refunds. Listed refunds
+ *   name the transaction by id, so each one's transaction is fetched for its reference and customer.
  */
+
+const API = "https://api.paystack.co";
 
 function metadataBags(meta: unknown): Obj[] {
   const m = asObject(meta);
@@ -117,7 +121,7 @@ export const paystack: PaymentProvider = {
       required: true,
       placeholder: "sk_live_...",
       secret: true,
-      help: "Paystack signs webhooks with your secret key: Settings → API Keys & Webhooks. Use the live key for live mode (test events are signed with sk_test_…).",
+      help: "Paystack signs webhooks with your secret key: Settings → API Keys & Webhooks. Use the live key for live mode (test events are signed with sk_test_…). Import history reads past transactions with it.",
     },
   ],
   events: ["charge.success", "refund.processed"],
@@ -137,5 +141,37 @@ export const paystack: PaymentProvider = {
     const event = parseJson<Obj>(req.rawBody);
     if (!event) return { payments: [], ignored: "invalid JSON" };
     return parsePaystackEvent(event);
+  },
+
+  async importHistory(config, cursor): Promise<ImportPage> {
+    const key = config.secretKey;
+    if (!key) throw new Error("The Paystack secret key is required to import past transactions.");
+    // cursor format: "<phase>:<page>" where phase is transactions | refunds; pages count from 1
+    const [phase = "transactions", pageStr] = (cursor ?? "transactions:1").split(":");
+    if (phase !== "transactions" && phase !== "refunds") throw new Error("Invalid import cursor");
+    const page = Math.max(1, Number(pageStr) || 1);
+    const payments: NormalizedPayment[] = [];
+    const list =
+      phase === "transactions"
+        ? await apiGet<Obj>("Paystack", `${API}/transaction?perPage=100&page=${page}&status=success`, key)
+        : await apiGet<Obj>("Paystack", `${API}/refund?perPage=100&page=${page}`, key);
+    const items: Obj[] = Array.isArray(list.data) ? list.data : [];
+    for (const item of items) {
+      if (phase === "transactions") {
+        const p = chargePayment(item);
+        if (p) payments.push(p);
+        continue;
+      }
+      if (item.status && item.status !== "processed") continue;
+      let tx = asObject(item.transaction);
+      if (!tx?.reference && item.transaction) tx = (await apiGet<Obj>("Paystack", `${API}/transaction/${encodeURIComponent(String(item.transaction))}`, key)).data ?? null;
+      const refund = { ...item, transaction_reference: tx?.reference, customer: item.customer ?? tx?.customer, metadata: item.metadata ?? tx?.metadata };
+      payments.push(...parsePaystackEvent({ event: "refund.processed", data: refund }).payments);
+    }
+    const pageCount = Number(list.meta?.pageCount) || page;
+    let next: string | null = null;
+    if (page < pageCount) next = `${phase}:${page + 1}`;
+    else if (phase === "transactions") next = "refunds:1";
+    return { payments, nextCursor: next };
   },
 };
