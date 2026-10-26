@@ -11,6 +11,7 @@ import { FunnelsPage } from "./Funnels";
 import { RealtimePage } from "./Realtime";
 import { MrrPage } from "./Mrr";
 import { RevenuePage } from "./Revenue";
+import { SocialPage } from "./Social";
 import { SiteNav } from "./SiteLayout";
 
 /** Public, read-only dashboard: /share/:token */
@@ -52,13 +53,14 @@ export function SharePage({ token }: { token: string }) {
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-          <SiteNav isPublic role={null} hideRevenue={meta.data?.site.hideRevenue} crawlers={!!meta.data?.crawlers} />
+          <SiteNav isPublic role={null} hideRevenue={meta.data?.site.hideRevenue} crawlers={!!meta.data?.crawlers} social={!!meta.data?.social} />
           <Switch>
             <Route path="/" component={DashboardPage} />
             <Route path="/realtime" component={RealtimePage} />
             <Route path="/revenue" component={RevenuePage} />
             <Route path="/mrr" component={MrrPage} />
             <Route path="/funnels" component={FunnelsPage} />
+            <Route path="/social" component={SocialPage} />
             <Route path="/crawlers" component={CrawlersPage} />
           </Switch>
         </main>

@@ -379,6 +379,60 @@ CREATE TABLE IF NOT EXISTS crawler_stats (
 );
 `,
   },
+  {
+    id: 6,
+    name: "social",
+    sql: `
+-- Posts that mention or link to the website (X, Hacker News), and the account handles whose profile links to it.
+CREATE TABLE IF NOT EXISTS social_config (
+  site_id TEXT PRIMARY KEY,
+  config TEXT,
+  keywords TEXT,
+  handles TEXT,
+  x_since_id TEXT,
+  x_checked_at BIGINT,
+  x_users_checked_at BIGINT,
+  x_reads_month TEXT,
+  x_reads INTEGER NOT NULL DEFAULT 0,
+  x_monthly_cap INTEGER NOT NULL DEFAULT 2000,
+  hn INTEGER NOT NULL DEFAULT 1,
+  hn_checked_at BIGINT,
+  last_error TEXT,
+  created_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS social_posts (
+  site_id TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  url TEXT NOT NULL,
+  author TEXT,
+  author_name TEXT,
+  author_image TEXT,
+  text TEXT,
+  created_at BIGINT NOT NULL,
+  likes INTEGER NOT NULL DEFAULT 0,
+  reposts INTEGER NOT NULL DEFAULT 0,
+  replies INTEGER NOT NULL DEFAULT 0,
+  views INTEGER,
+  links TEXT,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (site_id, platform, id)
+);
+CREATE INDEX IF NOT EXISTS social_posts_created ON social_posts (site_id, created_at);
+-- One row per page of the website a post (or a profile, kind 'bio') links to, to match visits by landing page.
+CREATE TABLE IF NOT EXISTS social_links (
+  site_id TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  post_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY (site_id, platform, post_id, path)
+);
+CREATE INDEX IF NOT EXISTS social_links_path ON social_links (site_id, platform, path, created_at);
+`,
+  },
 ];
 
 export const LATEST_MIGRATION = migrations[migrations.length - 1].id;

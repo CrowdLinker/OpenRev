@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { ImportHistory } from "../components/ImportHistory";
 import { SearchConsoleSettings } from "../components/SearchConsole";
+import { SocialSettings } from "../components/Social";
 import { InstallGuide, QUEUE_SNIPPET, scriptUrl, snippet, VerifyInstall } from "../components/InstallGuide";
 import { LiveBadge } from "../components/LiveBadge";
 import { Badge, Button, Card, CodeBlock, CopyButton, cx, Empty, ErrorBox, Field, Loading, Modal, Section, Toggle } from "../components/ui";
@@ -233,6 +234,7 @@ function GeneralSettings({ site }: { site: Site }) {
         )}
       </Section>
       <SearchConsoleSettings />
+      <SocialSettings />
       <NotesSection site={site} />
     </>
   );

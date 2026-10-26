@@ -97,6 +97,20 @@ add("social", "Lobsters", "lobste.rs");
 add("social", "Dev.to", "dev.to");
 add("social", "Stack Overflow", "stackoverflow.com");
 add("social", "Twitch", "twitch.tv");
+// Link-in-bio pages: visits from a profile's link
+add("social", "Linktree", "linktr.ee", "linktree.com");
+add("social", "Beacons", "beacons.ai", "beacons.page");
+add("social", "Bio.link", "bio.link");
+add("social", "Lnk.Bio", "lnk.bio");
+add("social", "Stan", "stan.store");
+add("social", "Linkin.bio", "linkin.bio");
+add("social", "Taplink", "taplink.cc", "taplink.at");
+add("social", "Campsite", "campsite.bio");
+add("social", "Solo.to", "solo.to");
+add("social", "Milkshake", "msha.ke");
+add("social", "Hoo.be", "hoo.be");
+add("social", "Snipfeed", "snipfeed.co");
+add("social", "Komi", "komi.io");
 
 // Well-known referral sites (named for nicer display)
 add("referral", "GitHub", "github.com");

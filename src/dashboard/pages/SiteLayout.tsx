@@ -1,4 +1,4 @@
-import { BarChart3, Bot, DollarSign, Filter as FunnelIcon, Radio, Repeat, Settings, Users } from "lucide-react";
+import { BarChart3, Bot, DollarSign, Megaphone, Filter as FunnelIcon, Radio, Repeat, Settings, Users } from "lucide-react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { cx, ErrorBox, Loading } from "../components/ui";
 import { useApi } from "../lib/api";
@@ -10,10 +10,23 @@ import { FunnelsPage } from "./Funnels";
 import { MrrPage } from "./Mrr";
 import { RealtimePage } from "./Realtime";
 import { RevenuePage } from "./Revenue";
+import { SocialPage } from "./Social";
 import { SettingsPage } from "./Settings";
 import { VisitorProfilePage, VisitorsPage } from "./Visitors";
 
-export function SiteNav({ isPublic = false, role, hideRevenue, crawlers = true }: { isPublic?: boolean; role: Role | null; hideRevenue?: boolean; crawlers?: boolean }) {
+export function SiteNav({
+  isPublic = false,
+  role,
+  hideRevenue,
+  crawlers = true,
+  social = true,
+}: {
+  isPublic?: boolean;
+  role: Role | null;
+  hideRevenue?: boolean;
+  crawlers?: boolean;
+  social?: boolean;
+}) {
   const [location] = useLocation();
   const items = [
     { href: "/", label: "Dashboard", icon: BarChart3, match: (l: string) => l === "/" || l === "" },
@@ -26,6 +39,7 @@ export function SiteNav({ isPublic = false, role, hideRevenue, crawlers = true }
           { href: "/mrr", label: "MRR", icon: Repeat },
         ]),
     { href: "/funnels", label: "Funnels", icon: FunnelIcon },
+    ...(social ? [{ href: "/social", label: "Social", icon: Megaphone }] : []),
     ...(crawlers ? [{ href: "/crawlers", label: "Crawlers", icon: Bot }] : []),
     ...(!isPublic && canEdit(role) ? [{ href: "/settings", label: "Settings", icon: Settings }] : []),
   ];
@@ -77,6 +91,7 @@ export function SiteLayout({ siteId }: { siteId: string }) {
         <Route path="/revenue" component={RevenuePage} />
         <Route path="/mrr" component={MrrPage} />
         <Route path="/funnels" component={FunnelsPage} />
+        <Route path="/social" component={SocialPage} />
         <Route path="/crawlers" component={CrawlersPage} />
         <Route path="/settings/:tab?">{(p) => <SettingsPage tab={p.tab} />}</Route>
       </Switch>
