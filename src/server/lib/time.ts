@@ -70,7 +70,13 @@ export function zonedTime(tz: string, year: number, month: number, day: number, 
   const off1 = offsetAt(tz, guess);
   let t = guess - off1;
   const off2 = offsetAt(tz, t);
-  if (off2 !== off1) t = guess - off2;
+  if (off2 !== off1) {
+    t = guess - off2;
+    // When clocks spring forward at that time (west of UTC), this lands before the gap, on the previous day:
+    // use the transition instead, the first valid moment of the requested day.
+    const p = localParts(tz, t);
+    if (Date.UTC(p.year, p.month - 1, p.day) < Date.UTC(year, month - 1, day)) t = guess - offsetAt(tz, t);
+  }
   return t;
 }
 
