@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: Package in packages/ to publish
+        description: Folder in packages/ to publish (react-native is openrev-react-native)
         type: choice
-        options: [create-openrev, openrev]
+        options: [create-openrev, openrev, react-native]
         default: create-openrev
 
 # Manual only: OpenRev's own release tags (v0.1.0, ...) must not try to republish the packages.

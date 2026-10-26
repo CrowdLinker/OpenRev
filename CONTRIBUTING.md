@@ -44,13 +44,15 @@ Small, focused PRs with a clear description. Include tests for behaviour changes
 Two packages live in `packages/`:
 
 - [`create-openrev`](https://www.npmjs.com/package/create-openrev), the installer behind `npm create openrev`;
-- [`openrev`](https://www.npmjs.com/package/openrev), the [CLI](docs/guides/cli.md).
+- [`openrev`](https://www.npmjs.com/package/openrev), the [CLI](docs/guides/cli.md);
+- [`openrev-react-native`](https://www.npmjs.com/package/openrev-react-native), the
+  [mobile SDK](docs/tracking/mobile-apps.md), in `packages/react-native`.
 
-Both are published by the **Publish an npm package** workflow through npm trusted publishing, so no npm token is
+They are published by the **Publish an npm package** workflow through npm trusted publishing, so no npm token is
 stored anywhere, and every release needs a maintainer's 2FA:
 
 1. Bump `version` in `packages/<package>/package.json` and merge the PR.
-2. Run the workflow from the Actions tab on `main`, picking the package. It stages the release with
+2. Run the workflow from the Actions tab on `main`, picking the package's folder. It stages the release with
    `npm stage publish`. It doesn't run on tags, so an OpenRev release (`v0.1.0`, ...) never republishes them.
 3. A package maintainer approves the staged version on npmjs.com (package → Staged Packages) with 2FA. It goes
    public with a provenance attestation that links it to the workflow run.
@@ -60,4 +62,4 @@ Each package needs a trusted publisher on npmjs.com (package → Settings → Tr
 publishes its first version once by hand (`npm publish` in its folder, with 2FA), then adds the trusted publisher.
 
 The installer clones `main`, so most changes to OpenRev reach users without a new installer release. Release it only
-when `packages/create-openrev` itself changes. Release the CLI when `packages/openrev` changes.
+when `packages/create-openrev` itself changes. Release the CLI and the SDK when their folders change.

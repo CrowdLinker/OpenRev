@@ -20,6 +20,8 @@ export interface SiteSettings {
   attribution?: AttributionModel;
   /** Hide the revenue features for sites that don't sell anything. */
   hideRevenue?: boolean;
+  /** Mobile apps allowed to send events with the SDK: iOS bundle ids and Android package names, lowercase. */
+  appIds?: string[];
 }
 
 export interface Site {
@@ -83,6 +85,17 @@ export function isValidDomain(d: string): boolean {
 /** Hostnames that belong to the website (used for self-referral detection and hostname checks). */
 export function siteHosts(site: Site): string[] {
   return [site.domain, ...(site.settings.allowedHostnames ?? [])].map(normalizeDomain).filter(Boolean);
+}
+
+/** An app id (bundle id or package name) as stored: lowercase, reverse-DNS. Null if it isn't one. */
+export function normalizeAppId(input: string): string | null {
+  const id = input.trim().toLowerCase();
+  return /^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$/.test(id) && id.length <= 150 ? id : null;
+}
+
+/** Events from a mobile app (app://<app id>/<screen>) only count for the app ids listed in the settings. */
+export function appAllowed(site: Site, appId: string): boolean {
+  return (site.settings.appIds ?? []).includes(appId.toLowerCase());
 }
 
 export function hostAllowed(site: Site, hostname: string): boolean {

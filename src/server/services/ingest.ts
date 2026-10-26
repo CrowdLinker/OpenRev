@@ -5,11 +5,11 @@ import { sha256Hex } from "../lib/crypto";
 import { normalizeGeo, type GeoInfo } from "../lib/geo";
 import { isValidClientId, randomToken, uuid } from "../lib/ids";
 import { classify, CLICK_ID_PARAMS } from "../lib/referrers";
-import { parseUserAgent } from "../lib/ua";
+import { parseUserAgent, type UserAgentInfo } from "../lib/ua";
 import { clampString, ipMatches, isEmail, matchPath, sanitizeGoalName, sanitizeProps } from "../lib/validate";
 import { notifyGoal } from "./notify";
 import { attachVisitorToPayments } from "./payments";
-import { getSiteCached, hostAllowed, siteHosts, type Site } from "./sites";
+import { appAllowed, getSiteCached, hostAllowed, siteHosts, type Site } from "./sites";
 
 /** Avatar URLs are shown in the dashboard, so only keep plain https:// image links. */
 function imageUrl(value: unknown): string | null {
@@ -50,6 +50,8 @@ export interface IncomingEvent {
   ref?: string;
   /** hash-based routing: include location.hash in the path */
   hash?: boolean;
+  /** Sent by the mobile SDK with app://<app id>/<screen> URLs. */
+  app?: { version?: unknown; os?: unknown; osVersion?: unknown; device?: unknown };
 }
 
 export interface RequestMeta {
@@ -97,6 +99,15 @@ async function cookielessVisitorId(rt: Runtime, site: Site, meta: RequestMeta, n
   const salt = await dailySalt(rt, now);
   const hash = await sha256Hex(`${salt}|${site.id}|${site.domain}|${meta.ip ?? ""}|${meta.userAgent}`);
   return "h" + hash.slice(0, 31);
+}
+
+/** Device details the mobile SDK reports, in the shape the user agent parser returns. The app version is the "browser" version. */
+function appClient(app: IncomingEvent["app"]): UserAgentInfo {
+  const str = (v: unknown, n: number) => (typeof v === "string" || typeof v === "number" ? String(v).slice(0, n) : null);
+  const platform = str(app?.os, 20)?.toLowerCase();
+  const tablet = app?.device === "tablet";
+  const os = platform === "ios" ? (tablet ? "iPadOS" : "iOS") : platform === "android" ? "Android" : (str(app?.os, 20) ?? "Unknown");
+  return { browser: "App", browserVersion: str(app?.version, 20), os, osVersion: str(app?.osVersion, 20)?.split(".")[0] ?? null, device: tablet ? "tablet" : "mobile", inApp: null };
 }
 
 function isExcluded(site: Site, hostname: string, path: string, meta: RequestMeta, country: string | null): boolean {
@@ -181,7 +192,9 @@ export async function ingestEvent(rt: Runtime, body: IncomingEvent, meta: Reques
 
   const site = await getSiteCached(rt.db, body.websiteId);
   if (!site) return { ok: false, reason: "unknown_website" };
-  if (!meta.trusted && isBot(meta.userAgent)) return { ok: false, reason: "bot" };
+  // The mobile SDK's requests carry the HTTP client's user agent (okhttp, CFNetwork), not a browser's.
+  const isApp = typeof body.href === "string" && body.href.startsWith("app://");
+  if (!meta.trusted && !isApp && isBot(meta.userAgent)) return { ok: false, reason: "bot" };
 
   let url: URL | null = null;
   if (body.href) {
@@ -194,7 +207,9 @@ export async function ingestEvent(rt: Runtime, body: IncomingEvent, meta: Reques
   if (!url && !meta.trusted) return { ok: false, reason: "invalid_url" };
   if (url && url.protocol === "file:") url = new URL("http://localhost" + url.pathname);
   const hostname = url ? url.hostname.toLowerCase().replace(/^www\./, "") : site.domain;
-  if (url && !meta.trusted && !hostAllowed(site, hostname)) return { ok: false, reason: "hostname_not_allowed" };
+  if (url && !meta.trusted && !(isApp ? appAllowed(site, hostname) : hostAllowed(site, hostname))) {
+    return { ok: false, reason: isApp ? "app_not_allowed" : "hostname_not_allowed" };
+  }
   const path = url ? normalizePath(url, !!body.hash) : "/";
 
   const geo = normalizeGeo(meta.geo);
@@ -250,7 +265,7 @@ export async function ingestEvent(rt: Runtime, body: IncomingEvent, meta: Reques
   const isGoal = type === "goal";
   if (!sessionExists) {
     const params = url?.searchParams;
-    const ua = parseUserAgent(meta.userAgent, Number(body.screenWidth) || null);
+    const ua = isApp ? appClient(body.app) : parseUserAgent(meta.userAgent, Number(body.screenWidth) || null);
     const utm = {
       source: clampString(params?.get("utm_source"), 200),
       medium: clampString(params?.get("utm_medium"), 200),
