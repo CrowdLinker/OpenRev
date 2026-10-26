@@ -208,8 +208,8 @@ interface Payload {
   // ---------------------------------------------------------------------------
   // Transport
   // ---------------------------------------------------------------------------
-  // Consent build: the last request sent, so the consent event can wait for the pageview that creates the session.
-  let inflight: Promise<boolean> | undefined;
+  // Consent build: every request sent so far, so the consent event can wait for the pageview that creates the session.
+  let inflight: Promise<unknown> | undefined;
   function send(type: string, data: Props = {}, beacon = false) {
     if (ignored) {
       log("Ignoring event (" + ignored + "):", type);
@@ -235,7 +235,11 @@ interface Payload {
       }
       const req = fetch(api, { method: "POST", body, keepalive: true, headers: { "Content-Type": "text/plain" } });
       // The consent build needs to know whether it got through; the others don't wait.
-      if (__CONSENT__) return (inflight = req.then((r) => r.status < 500, () => false));
+      if (__CONSENT__) {
+        const done = req.then((r) => r.status < 500, () => false);
+        inflight = Promise.all([inflight, done]);
+        return done;
+      }
       req.catch(() => {});
     } catch {
       /* ignore */
@@ -489,7 +493,7 @@ interface Payload {
             send("consent")?.then((ok) => {
               if (!ok && !cookieless && attempt < 3) setTimeout(() => adopt(attempt + 1), 2000 * attempt);
             });
-          // After the request in flight: the session the server should move may not exist until it lands.
+          // After the requests in flight: the session the server should move may not exist until they land.
           Promise.resolve(inflight).then(() => adopt(1));
           log("Consent given: using cookies");
         } else {
