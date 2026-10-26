@@ -7,6 +7,12 @@ const rangeParams = [
   { name: "timezone", in: "query", schema: { type: "string" }, description: "IANA timezone, defaults to the website timezone." },
   { name: "filters", in: "query", schema: { type: "string" }, description: 'JSON array, e.g. [{"dim":"country","op":"is","values":["US"]}]. Ops: is, is_not, contains, not_contains.' },
   { name: "websiteId", in: "query", schema: { type: "string" }, description: "Required when using an account token (ort_...)." },
+  {
+    name: "imported",
+    in: "query",
+    schema: { type: "boolean" },
+    description: "Include history imported from Plausible or Google Analytics (default true; always left out when filters are set).",
+  },
 ];
 
 const ok = (description: string) => ({ 200: { description, content: { "application/json": { schema: { $ref: "#/components/schemas/Envelope" } } } } });

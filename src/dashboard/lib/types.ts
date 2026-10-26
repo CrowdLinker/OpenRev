@@ -171,6 +171,8 @@ export interface SiteMeta {
   };
   funnels: Funnel[];
   goals: string[];
+  /** Completed history imports (Plausible, Google Analytics). */
+  imports?: { source: "plausible" | "ga4"; date_from: string; date_to: string }[];
 }
 
 export interface Note {

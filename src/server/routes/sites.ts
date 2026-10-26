@@ -30,6 +30,7 @@ import {
 } from "../services/sites";
 import * as stats from "../services/stats";
 import { fail, readJson, requireUser, siteForUser, stringList } from "./helpers";
+import { importRoutes } from "./imports";
 import { statsRoutes } from "./stats";
 
 const ROLES: Role[] = ["owner", "admin", "viewer"];
@@ -210,6 +211,7 @@ export function siteRoutes() {
     await next();
   });
   app.route("/sites/:siteId/stats", statsApp);
+  app.route("/sites/:siteId/imports", importRoutes());
 
   // ---- team -------------------------------------------------------------------
 
@@ -653,10 +655,13 @@ export function siteRoutes() {
 }
 
 export function deleteSiteStatements(siteId: string, includeSite: boolean): Statement[] {
-  const analytics = ["events", "sessions", "visitors", "payments", "customers", "checkout_refs"];
+  const analytics = ["events", "sessions", "visitors", "payments", "customers", "checkout_refs", "imported_stats", "imports"];
   const config = ["site_members", "invites", "api_keys", "integrations", "funnels", "notes", "alerts", "alert_history"];
   const tables = includeSite ? [...analytics, ...config] : analytics;
-  const out: Statement[] = tables.map((t) => ({ sql: `DELETE FROM ${t} WHERE site_id = ?`, params: [siteId] }));
+  const out: Statement[] = [
+    { sql: "DELETE FROM import_chunks WHERE import_id IN (SELECT id FROM imports WHERE site_id = ?)", params: [siteId] },
+    ...tables.map((t) => ({ sql: `DELETE FROM ${t} WHERE site_id = ?`, params: [siteId] })),
+  ];
   if (includeSite) out.push({ sql: "DELETE FROM sites WHERE id = ?", params: [siteId] });
   return out;
 }

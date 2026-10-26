@@ -1,6 +1,7 @@
 import { AlertTriangle, Bell, CheckCircle2, Download, ExternalLink, KeyRound, Plus, Trash2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
+import { ImportHistory } from "../components/ImportHistory";
 import { InstallGuide, QUEUE_SNIPPET, scriptUrl, snippet, VerifyInstall } from "../components/InstallGuide";
 import { LiveBadge } from "../components/LiveBadge";
 import { Badge, Button, Card, CodeBlock, CopyButton, cx, Empty, ErrorBox, Field, Loading, Modal, Section, Toggle } from "../components/ui";
@@ -1206,6 +1207,7 @@ function DataSettings({ site }: { site: Site }) {
   const [resetDone, setResetDone] = useState(false);
   return (
     <>
+      {(role === "owner" || role === "admin") && <ImportHistory />}
       <Section title="Export your data" description="Download raw data as CSV. It's your data — take it anywhere.">
         <div className="flex flex-wrap gap-2">
           {["sessions", "events", "payments", "visitors"].map((k) => (

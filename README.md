@@ -196,7 +196,7 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 - **Live badge**: show "3 online · 1,297 visitors today" on your site, linking to your public dashboard ([docs](docs/features/live-badge.md)).
 - **Alerts**: new sales and refunds with source, country and journey, goal completions, traffic spikes, and daily or weekly digests to Slack, Discord, Telegram, email or webhooks.
 - **Tracking options**: subdomains and cross-domain tracking, a first-party proxy to get past ad blockers, and exclusions by IP, path, country, hostname or your own browser.
-- **Exports**: CSV export of all raw data, chart notes, and date ranges from hourly to monthly with period-over-period comparison.
+- **Imports and exports**: bring your history from Plausible or Google Analytics 4 ([guide](docs/guides/import-history.md)), CSV export of all raw data, chart notes, and date ranges from hourly to monthly with period-over-period comparison.
 
 ## 💳 Connect any payment provider
 
@@ -351,7 +351,6 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Adding a paym
 
 - Google Search Console integration (keywords → revenue)
 - Social mentions and 𝕏 post and link-in-bio attribution
-- Import from Plausible and Google Analytics
 - React Native / mobile SDK and web-to-app funnels
 - AI crawler (bot) traffic reports via server middleware
 - Historical import for more providers (Polar, Paddle, Dodo…)

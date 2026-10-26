@@ -31,5 +31,6 @@
 - [Contributing](../CONTRIBUTING.md)
 
 ## Guides
+- [Import history from Plausible or Google Analytics](guides/import-history.md)
 - [Migrate from DataFast](guides/migrate-from-datafast.md)
 - [Troubleshooting](guides/troubleshooting.md)

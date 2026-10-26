@@ -1,4 +1,4 @@
-import { StickyNote, Star, Target } from "lucide-react";
+import { History, StickyNote, Star, Target } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { BreakdownList, BreakdownPanel } from "../components/Breakdown";
@@ -339,6 +339,25 @@ function NoteModal({ open, onClose, siteId, onSaved }: { open: boolean; onClose:
   );
 }
 
+const IMPORT_SOURCES = { plausible: "Plausible", ga4: "Google Analytics" };
+
+/** Says when the numbers include imported history, or that filters leave it out. */
+function ImportedNote({ range, filtered }: { range?: { fromDate: string; toDate: string }; filtered: boolean }) {
+  const { meta } = useSite();
+  const overlapping = range ? (meta?.imports ?? []).filter((i) => i.date_from <= range.toDate && range.fromDate <= i.date_to) : [];
+  if (!overlapping.length) return null;
+  const sources = [...new Set(overlapping.map((i) => IMPORT_SOURCES[i.source]))].join(" and ");
+  const until = overlapping.map((i) => i.date_to).sort().at(-1);
+  return (
+    <p className="mt-1 flex items-center gap-1.5 px-2 pb-1 text-xs text-zinc-500">
+      <History className="h-3.5 w-3.5 shrink-0" />
+      {filtered
+        ? `History imported from ${sources} isn't included while filters are on.`
+        : `Includes history imported from ${sources}, up to ${until}. Imported days count visitors per day, so a visitor seen on several days counts more than once.`}
+    </p>
+  );
+}
+
 export function DashboardPage() {
   const { statsBase, meta, site, role, isPublic } = useSite();
   const [q] = useDashQuery();
@@ -400,6 +419,7 @@ export function DashboardPage() {
               <Spinner />
             </div>
           )}
+          <ImportedNote range={overview.data?.range} filtered={q.filters.length > 0} />
         </div>
       </Card>
 
