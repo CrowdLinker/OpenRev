@@ -180,9 +180,11 @@ async function trigger(rt: Runtime, alert: AlertRow, site: Site, msg: Message, r
   try {
     if (alert.channel === "email" && restricted !== undefined) {
       const to = await emailRecipients(rt, site, config);
+      // Built before any send starts, so a failure here can't leave a send running unobserved.
+      const restrictedMsg = to.restricted.length && restricted ? await restricted() : null;
       const sends: Promise<unknown>[] = [];
       if (to.full.length) sends.push(deliver(rt, "email", { ...config, email: to.full.join(",") }, msg, site));
-      if (to.restricted.length && restricted) sends.push(deliver(rt, "email", { ...config, email: to.restricted.join(",") }, await restricted(), site));
+      if (restrictedMsg) sends.push(deliver(rt, "email", { ...config, email: to.restricted.join(",") }, restrictedMsg, site));
       if (!sends.length) return false;
       await Promise.all(sends);
     } else {

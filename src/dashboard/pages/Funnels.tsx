@@ -13,13 +13,15 @@ function FunnelCard({ funnel, onEdit, onDelete }: { funnel: Funnel; onEdit?: () 
   const [q] = useDashQuery();
   const { data, loading, error } = useApi<{ results: FunnelResult[] }>(`${statsBase}/funnels/${funnel.id}?${toSearch(q)}`);
   const overall = data?.results.length ? data.results[data.results.length - 1].conversion_rate : 0;
+  // Without revenue the results stop before the first payment step, so the last one isn't the funnel's conversion.
+  const truncated = !canSeeRevenue && funnel.steps.some((s) => s.type === "payment");
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">{funnel.name}</h3>
           <p className="text-xs text-zinc-500">
-            {funnel.steps.length} steps · {(overall * 100).toFixed(1)}% overall conversion
+            {funnel.steps.length} steps{truncated ? "" : ` · ${(overall * 100).toFixed(1)}% overall conversion`}
           </p>
         </div>
         <div className="flex gap-1">
