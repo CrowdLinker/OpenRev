@@ -42,6 +42,8 @@ reuse it.
   page syncs while it's open (select **Sync history now** to continue); otherwise the history fills in a few days at a
   time in the background.
 - Every 6 hours OpenRev syncs the latest days again, because Search Console keeps revising them for about two days.
+- On an instance with many connected websites, each background run syncs as many days as fit in one run, starting
+  from a different website each time, so the history can take longer to fill in.
 - OpenRev stores up to 10,000 keyword and landing page pairs per day, the ones with the most clicks first. Pages that
   differ only by protocol or query string are added together, and landing pages are stored as paths, like entry pages.
 - The key is stored encrypted with `OPENREV_SECRET`. **Disconnect** deletes it and the synced data.

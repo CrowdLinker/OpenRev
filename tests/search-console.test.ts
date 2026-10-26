@@ -2,10 +2,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
 import type { Database } from "../src/server/db/types";
-import { clearGoogleTokens } from "../src/server/lib/google";
+import { encryptString } from "../src/server/lib/crypto";
+import { clearGoogleTokens, parseServiceAccountKey } from "../src/server/lib/google";
 import { ingestEvent } from "../src/server/services/ingest";
 import { recordPayment } from "../src/server/services/payments";
-import { getSearchConsole, HISTORY_DAYS, pagePath, syncSearchConsole } from "../src/server/services/search-console";
+import { getSecret } from "../src/server/services/instance";
+import { getSearchConsole, HISTORY_DAYS, pagePath, syncAllSearchConsole, syncSearchConsole } from "../src/server/services/search-console";
 import { getSite } from "../src/server/services/sites";
 import { testDb, testRuntime } from "./helpers";
 import { pgliteDb } from "./pglite";
@@ -155,5 +157,38 @@ describe.each([
     expect((await call(`/api/sites/${siteId}/search-console`, { method: "DELETE" })).status).toBe(200);
     expect(await rt.db.first("SELECT COUNT(*) AS n FROM search_stats")).toEqual({ n: 0 });
     expect((await call(`/api/sites/${siteId}/stats/meta`)).json.searchConsole).toBe(false);
+  });
+
+  it("shares one statement budget between websites in a scheduled run, starting from a different one each run", async () => {
+    const config = await encryptString(await getSecret(rt), JSON.stringify(parseServiceAccountKey(await serviceAccountKey())));
+    for (const domain of ["a.example.com", "b.example.com", "c.example.com"]) {
+      const id = (await call("/api/sites", { body: { domain, timezone: "UTC", currency: "USD" } })).json.site.id;
+      await rt.db.run("INSERT INTO search_console (site_id, property, config, created_at) VALUES (?, ?, ?, ?)", [id, `sc-domain:${domain}`, config, 0]);
+    }
+    // 140 queries a day: a day takes 11 statements to store.
+    const queried: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url.includes("oauth2")) return Response.json({ access_token: "gsc-token", expires_in: 3600 });
+      queried.push(decodeURIComponent(url.split("/sites/")[1].split("/")[0]));
+      return Response.json({ rows: Array.from({ length: 140 }, (_, i) => ({ keys: [`query ${i}`, "https://x.example.com/"], clicks: 1, impressions: 1, position: 1 })) });
+    });
+    const batch = rt.db.batch;
+    let written = 0;
+    rt.db.batch = (async (statements) => {
+      written += statements.length;
+      return batch.call(rt.db, statements);
+    }) as typeof batch;
+    try {
+      const now = Date.UTC(2026, 5, 15, 12);
+      await syncAllSearchConsole(rt, now, { left: 50, wrote: false });
+      expect(written).toBeLessThanOrEqual(50);
+      expect(new Set(queried).size).toBe(2); // the third website waits for the next run
+      const firstRun = queried[0];
+      queried.length = 0;
+      await syncAllSearchConsole(rt, now + 600_000, { left: 50, wrote: false });
+      expect(queried[0]).not.toBe(firstRun);
+    } finally {
+      rt.db.batch = batch;
+    }
   });
 });

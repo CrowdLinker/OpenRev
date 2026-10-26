@@ -199,7 +199,23 @@ export interface SyncResult {
   newest: string | null;
   backfilled: boolean;
   days: number;
+  /** The round stopped because the statement budget ran out. */
+  stopped: boolean;
 }
+
+/**
+ * Statements a sync may still write. The first day written against a budget is written even when it's larger, so a
+ * day bigger than the budget can't hold up the sync forever. The scheduler shares one budget between all websites.
+ */
+export interface SyncBudget {
+  left: number;
+  wrote: boolean;
+}
+
+/** Statements one scheduled run spends on Search Console: a Worker invocation may run 1,000 queries, and the other jobs need some. */
+const RUN_BUDGET = 600;
+/** What visiting a website costs a scheduled run besides the days it writes: reading the site, saving its progress. */
+const VISIT_COST = 2;
 
 /**
  * One bounded round of syncing: first the recent days (every 6 hours, since Search Console revises the last few
@@ -209,12 +225,12 @@ export async function syncSearchConsole(
   rt: Runtime,
   site: Site,
   row: SearchConsoleRow,
-  opts: { now?: number; fetchFn?: FetchFn; maxDays?: number; maxStatements?: number } = {},
+  opts: { now?: number; fetchFn?: FetchFn; maxDays?: number; maxStatements?: number; budget?: SyncBudget } = {},
 ): Promise<SyncResult> {
   const now = opts.now ?? Date.now();
   const fetchFn = opts.fetchFn ?? fetch;
   const maxDays = opts.maxDays ?? 6;
-  const maxStatements = opts.maxStatements ?? 600;
+  const budget = opts.budget ?? { left: opts.maxStatements ?? 600, wrote: false };
   const yesterday = isoDay(now - DAY);
   const limit = addDays(yesterday, -HISTORY_DAYS);
   let key: ServiceAccountKey;
@@ -233,14 +249,22 @@ export async function syncSearchConsole(
   if (recentDue) for (let d = recentFrom; d <= yesterday && days.length < maxDays; d = addDays(d, 1)) days.push({ date: d, recent: true });
   else for (let d = oldest ? addDays(oldest, -1) : addDays(yesterday, -3); d >= limit && days.length < maxDays; d = addDays(d, -1)) days.push({ date: d, recent: false });
 
-  let statements = 0;
   let done = 0;
+  let stopped = false;
   try {
     for (const { date, recent } of days) {
+      if (budget.wrote && budget.left <= 0) {
+        stopped = true;
+        break;
+      }
       const stmts = dayStatements(site, date, await fetchDay(key, row.property, date, fetchFn));
-      if (done > 0 && statements + stmts.length > maxStatements) break;
+      if (budget.wrote && stmts.length > budget.left) {
+        stopped = true;
+        break;
+      }
       await rt.db.batch(stmts);
-      statements += stmts.length;
+      budget.left -= stmts.length;
+      budget.wrote = true;
       done++;
       if (recent) {
         if (!newest || date > newest) newest = date;
@@ -260,17 +284,23 @@ export async function syncSearchConsole(
     throw err;
   }
   await rt.db.run("UPDATE search_console SET oldest = ?, newest = ?, recent_synced_at = ?, last_error = NULL WHERE site_id = ?", [oldest, newest, recentSyncedAt, site.id]);
-  return { oldest, newest, backfilled: !!oldest && oldest <= limit && !!recentSyncedAt && now - Number(recentSyncedAt) <= RECENT_EVERY_MS, days: done };
+  return { oldest, newest, backfilled: !!oldest && oldest <= limit && !!recentSyncedAt && now - Number(recentSyncedAt) <= RECENT_EVERY_MS, days: done, stopped };
 }
 
-/** Called by the scheduler: one round for every connected website. */
-export async function syncAllSearchConsole(rt: Runtime, now = Date.now()) {
-  const rows = await rt.db.all<SearchConsoleRow>("SELECT * FROM search_console");
-  for (const row of rows) {
+/**
+ * Called by the scheduler: a round for each connected website, within one statement budget for the whole run. Each run
+ * starts from a different website, so on an instance with many of them none waits behind the others.
+ */
+export async function syncAllSearchConsole(rt: Runtime, now = Date.now(), budget: SyncBudget = { left: RUN_BUDGET, wrote: false }) {
+  const rows = await rt.db.all<SearchConsoleRow>("SELECT * FROM search_console ORDER BY site_id");
+  const start = rows.length ? Math.floor(now / 600_000) % rows.length : 0;
+  for (let i = 0; i < rows.length && budget.left > 0; i++) {
+    const row = rows[(start + i) % rows.length];
+    budget.left -= VISIT_COST;
     const site = await getSite(rt.db, row.site_id);
     if (!site) continue;
     try {
-      await syncSearchConsole(rt, site, row, { now, maxDays: 4 });
+      if ((await syncSearchConsole(rt, site, row, { now, maxDays: 4, budget })).stopped) break;
     } catch (err) {
       if (!(err instanceof GoogleError || err instanceof SearchConsoleError)) console.error(`[openrev] Search Console sync for ${site.id} failed:`, err);
     }
