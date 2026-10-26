@@ -657,8 +657,10 @@ export function siteRoutes() {
     const row = await db.first<AlertRow>("SELECT * FROM alerts WHERE id = ? AND site_id = ?", [c.req.param("alertId"), site.id]);
     if (!row) fail(404, "Alert not found");
     const body = await readJson(c);
-    const a = cleanAlert({ type: row.type, channel: row.channel, ...body }, JSON.parse(row.config || "{}"));
-    if (!canSeeRevenue && (REVENUE_ALERT_TYPES.includes(row.type) || REVENUE_ALERT_TYPES.includes(a.type))) fail(403, REVENUE_ALERT);
+    // An alert keeps its type: the delivery history is filtered by it for members without revenue.
+    if (body.type !== undefined && body.type !== row.type) fail(400, "An alert's type can't be changed. Create a new alert instead.");
+    if (!canSeeRevenue && REVENUE_ALERT_TYPES.includes(row.type)) fail(403, REVENUE_ALERT);
+    const a = cleanAlert({ channel: row.channel, ...body, type: row.type }, JSON.parse(row.config || "{}"));
     const enabled = body.enabled === undefined ? row.enabled : body.enabled ? 1 : 0;
     await db.run("UPDATE alerts SET type = ?, channel = ?, config = ?, enabled = ? WHERE id = ?", [a.type, a.channel, a.config, enabled, row.id]);
     invalidateAlerts(site.id);

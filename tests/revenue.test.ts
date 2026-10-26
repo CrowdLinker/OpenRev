@@ -389,8 +389,10 @@ describe.each(DATABASES)("revenue visibility (%s)", (_name, makeDb) => {
     // An admin without it can't send payments or digests to a channel they control, nor change or test one.
     for (const type of ["payment", "digest"]) expect((await admin.call(alerts, hook(type))).status).toBe(403);
     const spike = (await admin.call(alerts, hook("traffic_spike"))).json.alert.id as string;
-    expect((await admin.call(`${alerts}/${spike}`, { method: "PATCH", body: { type: "payment" } })).status).toBe(403);
     const payment = (await owner(alerts, hook("payment"))).json.alert.id as string;
+    // Nobody can change an alert's type, or a payment alert's past deliveries would show up as another type's.
+    expect((await admin.call(`${alerts}/${spike}`, { method: "PATCH", body: { type: "payment" } })).status).toBe(400);
+    expect((await owner(`${alerts}/${payment}`, { method: "PATCH", body: { type: "goal", config: { goal: "signup" } } })).status).toBe(400);
     expect((await admin.call(`${alerts}/${payment}`, { method: "PATCH", body: { config: { url: "https://attacker.example/hook" } } })).status).toBe(403);
     expect((await admin.call(`${alerts}/${payment}`, { method: "PATCH", body: { enabled: false } })).status).toBe(403);
     expect((await admin.call(`${alerts}/${payment}/test`, { body: {} })).status).toBe(403);
