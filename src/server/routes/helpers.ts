@@ -61,7 +61,7 @@ export async function buildStatsQuery(db: Database, site: Site, q: Record<string
     Date.now(),
     first ?? site.created_at,
   );
-  return { site: siteForTz, range, filters: parseFilters(q), attribution: q.attribution ?? null };
+  return { site: siteForTz, range, filters: parseFilters(q), attribution: q.attribution ?? null, imported: q.imported !== "false" && q.imported !== "0" };
 }
 
 function isTz(tz: string) {

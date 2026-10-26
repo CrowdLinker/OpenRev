@@ -143,12 +143,47 @@ export interface StatsQuery {
   range: ResolvedRange;
   filters: Filter[];
   attribution?: string | null;
+  /** Add imported history (Plausible, Google Analytics) where it covers the range. Default true. */
+  imported?: boolean;
 }
 
 function n(v: unknown): number {
   const x = Number(v ?? 0);
   return Number.isFinite(x) ? x : 0;
 }
+
+/**
+ * Imported history is daily totals per dimension, so it can't be filtered or combined: it's added only when no filters
+ * are set, and left out with `imported: false`.
+ */
+export function includesImported(q: StatsQuery): boolean {
+  return q.imported !== false && q.filters.length === 0;
+}
+
+/** Dimensions imported history has values for. */
+export const IMPORTED_DIMENSIONS = new Set<Dimension>([
+  "channel",
+  "source",
+  "referrer",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+  "entry_page",
+  "exit_page",
+  "country",
+  "region",
+  "city",
+  "device",
+  "browser",
+  "os",
+  "page",
+  "goal",
+  "outbound",
+]);
+
+const IMPORTED_SUMS = "SUM(i.visitors) AS visitors, SUM(i.visits) AS visits, SUM(i.pageviews) AS pageviews, SUM(i.bounces) AS bounces, SUM(i.duration) AS duration, SUM(i.events) AS events";
 
 // ---------------------------------------------------------------------------
 // Overview
@@ -177,7 +212,7 @@ async function overviewFor(db: Database, q: StatsQuery, from: number, to: number
   const f = sessionFilterSql(q.filters);
   const hasFilters = q.filters.length > 0;
   const attr = attributionColumn(q.site, q.attribution);
-  const [s, p] = await Promise.all([
+  const [s, p, imp] = await Promise.all([
     db.first<Record<string, number>>(
       `SELECT COUNT(DISTINCT s.visitor_id) AS visitors,
               COUNT(DISTINCT CASE WHEN s.is_new = 1 THEN s.visitor_id END) AS new_visitors,
@@ -201,34 +236,53 @@ async function overviewFor(db: Database, q: StatsQuery, from: number, to: number
        WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?${f.sql}`,
       [q.site.id, from, to, ...f.params],
     ),
+    includesImported(q)
+      ? db.first<Record<string, number>>(`SELECT ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = '' AND i.ts >= ? AND i.ts < ?`, [
+          q.site.id,
+          from,
+          to,
+        ])
+      : Promise.resolve(null),
   ]);
 
-  const visitors = n(s?.visitors);
-  const sessions = n(s?.sessions);
+  // Imported visitors count as new: the tools they come from don't say who returned.
+  const visitors = n(s?.visitors) + n(imp?.visitors);
+  const sessions = n(s?.sessions) + n(imp?.visits);
   const revenue = n(p?.revenue);
   let kpi: OverviewMetrics["kpi"] = null;
   if (q.site.settings.kpiGoal) {
-    const k = await db.first<{ conversions: number; visitors: number }>(
-      `SELECT COUNT(*) AS conversions, COUNT(DISTINCT e.visitor_id) AS visitors
-       FROM events e JOIN sessions s ON s.id = e.session_id
-       WHERE e.site_id = ? AND e.type = 'goal' AND e.name = ? AND e.ts >= ? AND e.ts < ?${f.sql}`,
-      [q.site.id, q.site.settings.kpiGoal, from, to, ...f.params],
-    );
+    const [k, ki] = await Promise.all([
+      db.first<{ conversions: number; visitors: number }>(
+        `SELECT COUNT(*) AS conversions, COUNT(DISTINCT e.visitor_id) AS visitors
+         FROM events e JOIN sessions s ON s.id = e.session_id
+         WHERE e.site_id = ? AND e.type = 'goal' AND e.name = ? AND e.ts >= ? AND e.ts < ?${f.sql}`,
+        [q.site.id, q.site.settings.kpiGoal, from, to, ...f.params],
+      ),
+      imp
+        ? db.first<Record<string, number>>(
+            `SELECT ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = 'goal' AND i.value = ? AND i.ts >= ? AND i.ts < ?`,
+            [q.site.id, q.site.settings.kpiGoal, from, to],
+          )
+        : Promise.resolve(null),
+    ]);
+    const converted = n(k?.visitors) + n(ki?.visitors);
     kpi = {
       goal: q.site.settings.kpiGoal,
-      conversions: n(k?.conversions),
-      visitors: n(k?.visitors),
-      conversion_rate: visitors ? n(k?.visitors) / visitors : 0,
+      conversions: n(k?.conversions) + n(ki?.events),
+      visitors: converted,
+      conversion_rate: visitors ? converted / visitors : 0,
     };
   }
+  const newVisitors = n(s?.new_visitors) + n(imp?.visitors);
   return {
     visitors,
-    new_visitors: n(s?.new_visitors),
-    returning_visitors: Math.max(0, visitors - n(s?.new_visitors)),
+    new_visitors: newVisitors,
+    returning_visitors: Math.max(0, visitors - newVisitors),
     sessions,
-    pageviews: n(s?.pageviews),
-    bounce_rate: sessions ? n(s?.bounces) / sessions : 0,
-    avg_session_duration: sessions ? n(s?.duration) / sessions / 1000 : 0,
+    pageviews: n(s?.pageviews) + n(imp?.pageviews),
+    bounce_rate: sessions ? (n(s?.bounces) + n(imp?.bounces)) / sessions : 0,
+    // Native durations are in milliseconds, imported ones in seconds.
+    avg_session_duration: sessions ? (n(s?.duration) / 1000 + n(imp?.duration)) / sessions : 0,
     revenue,
     refunds: n(p?.refunds),
     new_revenue: n(p?.new_revenue),
@@ -273,7 +327,8 @@ export async function timeseries(db: Database, q: StatsQuery, interval?: Interva
   const attr = attributionColumn(q.site, q.attribution);
   const hasFilters = q.filters.length > 0;
 
-  const [sessions, payments, goals] = await Promise.all([
+  const withImported = includesImported(q);
+  const [sessions, payments, goals, imported, importedGoals] = await Promise.all([
     db.all<Record<string, number>>(
       `SELECT ${plan.sql("s.started_at")} AS b,
               COUNT(DISTINCT s.visitor_id) AS visitors, COUNT(*) AS sessions, SUM(s.pageviews) AS pageviews,
@@ -301,28 +356,44 @@ export async function timeseries(db: Database, q: StatsQuery, interval?: Interva
           [q.site.id, q.site.settings.kpiGoal, q.range.from, q.range.to, ...f.params],
         )
       : Promise.resolve([]),
+    withImported
+      ? db.all<Record<string, number>>(
+          `SELECT ${plan.sql("i.ts")} AS b, ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = '' AND i.ts >= ? AND i.ts < ? GROUP BY b`,
+          [q.site.id, q.range.from, q.range.to],
+        )
+      : Promise.resolve([]),
+    withImported && q.site.settings.kpiGoal
+      ? db.all<Record<string, number>>(
+          `SELECT ${plan.sql("i.ts")} AS b, SUM(i.visitors) AS visitors FROM imported_stats i
+           WHERE i.site_id = ? AND i.dim = 'goal' AND i.value = ? AND i.ts >= ? AND i.ts < ? GROUP BY b`,
+          [q.site.id, q.site.settings.kpiGoal, q.range.from, q.range.to],
+        )
+      : Promise.resolve([]),
   ]);
 
   const sMap = new Map(sessions.map((r) => [n(r.b), r]));
   const pMap = new Map(payments.map((r) => [n(r.b), r]));
   const gMap = new Map(goals.map((r) => [n(r.b), r]));
+  const iMap = new Map(imported.map((r) => [n(r.b), r]));
+  const igMap = new Map(importedGoals.map((r) => [n(r.b), r]));
   return plan.buckets.map((bucket) => {
     const s = sMap.get(bucket.key);
     const p = pMap.get(bucket.key);
     const g = gMap.get(bucket.key);
-    const sess = n(s?.sessions);
+    const i = iMap.get(bucket.key);
+    const sess = n(s?.sessions) + n(i?.visits);
     return {
       date: bucket.label,
       start: bucket.start,
-      visitors: n(s?.visitors),
+      visitors: n(s?.visitors) + n(i?.visitors),
       sessions: sess,
-      pageviews: n(s?.pageviews),
-      bounce_rate: sess ? n(s?.bounces) / sess : 0,
-      avg_session_duration: sess ? n(s?.duration) / sess / 1000 : 0,
+      pageviews: n(s?.pageviews) + n(i?.pageviews),
+      bounce_rate: sess ? (n(s?.bounces) + n(i?.bounces)) / sess : 0,
+      avg_session_duration: sess ? (n(s?.duration) / 1000 + n(i?.duration)) / sess : 0,
       revenue: n(p?.revenue),
       payments: n(p?.payments),
       customers: n(p?.customers),
-      ...(q.site.settings.kpiGoal ? { conversions: n(g?.conversions) } : {}),
+      ...(q.site.settings.kpiGoal ? { conversions: n(g?.conversions) + n(igMap.get(bucket.key)?.visitors) } : {}),
     };
   });
 }
@@ -371,6 +442,17 @@ export async function breakdown(
     }
     return r;
   };
+  const imported =
+    includesImported(q) && IMPORTED_DIMENSIONS.has(dim)
+      ? await db.all<Record<string, unknown>>(
+          `SELECT i.value AS value, i.meta AS meta, ${IMPORTED_SUMS} FROM imported_stats i
+           WHERE i.site_id = ? AND i.dim = ? AND i.ts >= ? AND i.ts < ?
+           GROUP BY i.value, i.meta
+           ORDER BY SUM(i.visitors) DESC
+           LIMIT 1000`,
+          [q.site.id, dim, q.range.from, q.range.to],
+        )
+      : [];
 
   if (dim in SESSION_DIMENSIONS) {
     const col = `s.${SESSION_DIMENSIONS[dim as SessionDimension]}`;
@@ -388,13 +470,30 @@ export async function breakdown(
        LIMIT 1000`,
       [...base, ...f.params],
     );
+    // Bounces and duration (seconds) per row, to compute rates once imported history is added.
+    const sums = new Map<BreakdownRow, { bounces: number; duration: number }>();
     for (const v of visitors) {
       const r = get(String(v.value ?? ""), withCountry || dim === "source" ? (v.meta as string | null) : null);
       r.visitors = n(v.visitors);
       r.sessions = n(v.sessions);
       r.pageviews = n(v.pageviews);
-      r.bounce_rate = r.sessions ? n(v.bounces) / r.sessions : 0;
-      r.avg_session_duration = r.sessions ? n(v.duration) / r.sessions / 1000 : 0;
+      sums.set(r, { bounces: n(v.bounces), duration: n(v.duration) / 1000 });
+    }
+    for (const v of imported) {
+      const value = String(v.value ?? "");
+      const meta = String(v.meta ?? "");
+      const r = dim === "source" ? ([...rows.values()].find((x) => x.value === value) ?? get(value, meta || null)) : get(value, withCountry ? meta : null);
+      r.visitors += n(v.visitors);
+      r.sessions = (r.sessions ?? 0) + n(v.visits);
+      r.pageviews = (r.pageviews ?? 0) + n(v.pageviews);
+      const t = sums.get(r) ?? { bounces: 0, duration: 0 };
+      t.bounces += n(v.bounces);
+      t.duration += n(v.duration);
+      sums.set(r, t);
+    }
+    for (const [r, t] of sums) {
+      r.bounce_rate = r.sessions ? t.bounces / r.sessions : 0;
+      r.avg_session_duration = r.sessions ? t.duration / r.sessions : 0;
     }
     const join = q.filters.length ? "JOIN" : "LEFT JOIN";
     const revenue = await db.all<Record<string, unknown>>(
@@ -440,6 +539,11 @@ export async function breakdown(
       r.visitors = n(v.visitors);
       r.pageviews = n(v.pageviews);
     }
+    for (const v of imported) {
+      const r = get(String(v.value ?? ""));
+      r.visitors += n(v.visitors);
+      r.pageviews = (r.pageviews ?? 0) + n(v.pageviews);
+    }
     // Revenue influenced by a page: payments whose visitor viewed the page before paying.
     const revenue = await db.all<Record<string, unknown>>(
       `SELECT x.path AS value, SUM(x.revenue) AS revenue, SUM(x.is_payment) AS payments, COUNT(DISTINCT x.paying) AS customers
@@ -479,6 +583,11 @@ export async function breakdown(
       r.visitors = n(v.visitors);
       r.completions = n(v.completions);
     }
+    for (const v of imported) {
+      const r = get(String(v.value ?? ""));
+      r.visitors += n(v.visitors);
+      r.completions = (r.completions ?? 0) + n(v.events);
+    }
     if (dim === "goal") {
       const revenue = await db.all<Record<string, unknown>>(
         `SELECT g.name AS value, SUM(p.revenue) AS revenue, SUM(CASE WHEN p.type <> 'refund' THEN 1 ELSE 0 END) AS payments,
@@ -506,6 +615,10 @@ export async function breakdown(
       [...base, ...f.params],
     );
     totalVisitors = n(t?.visitors);
+    if (includesImported(q)) {
+      const ti = await db.first<{ visitors: number }>("SELECT SUM(visitors) AS visitors FROM imported_stats WHERE site_id = ? AND dim = '' AND ts >= ? AND ts < ?", base);
+      totalVisitors += n(ti?.visitors);
+    }
   }
 
   const out = [...rows.values()].map((r) => {
@@ -859,10 +972,11 @@ export async function customerLtv(db: Database, q: StatsQuery, groupBy: "source"
 }
 
 export async function firstDataTimestamp(db: Database, siteId: string): Promise<number | null> {
-  const row = await db.first<{ t: number | null; p: number | null }>(
-    "SELECT (SELECT MIN(started_at) FROM sessions WHERE site_id = ?) AS t, (SELECT MIN(ts) FROM payments WHERE site_id = ?) AS p",
-    [siteId, siteId],
+  const row = await db.first<{ t: number | null; p: number | null; i: number | null }>(
+    `SELECT (SELECT MIN(started_at) FROM sessions WHERE site_id = ?) AS t, (SELECT MIN(ts) FROM payments WHERE site_id = ?) AS p,
+            (SELECT MIN(ts) FROM imported_stats WHERE site_id = ?) AS i`,
+    [siteId, siteId, siteId],
   );
-  const vals = [row?.t, row?.p].filter((x): x is number => x !== null && x !== undefined).map(Number);
+  const vals = [row?.t, row?.p, row?.i].filter((x): x is number => x !== null && x !== undefined).map(Number);
   return vals.length ? Math.min(...vals) : null;
 }

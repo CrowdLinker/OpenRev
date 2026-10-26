@@ -45,6 +45,7 @@ Request bodies are limited to 2 MB; larger ones get `413`.
 | `from` & `to` | `2026-01-01` & `2026-01-31` | Custom range, inclusive. Years 1970–2100; other dates are ignored |
 | `timezone` | `Europe/Paris` | Override the website timezone |
 | `interval` | `hour`, `day`, `week`, `month` | Timeseries bucket (auto by default) |
+| `imported` | `false` | Leave out history [imported from Plausible or Google Analytics](../guides/import-history.md). It's included by default, except when filters are set |
 
 A range covers at most 10 years (3,660 days): longer ranges, including `all`, keep the most recent 10 years.
 

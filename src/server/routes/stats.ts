@@ -165,11 +165,15 @@ export function statsRoutes() {
   app.get("/meta", async (c) => {
     const site = c.get("site");
     const db = c.get("rt").db;
-    const [funnels, goals] = await Promise.all([
+    const [funnels, goals, imports] = await Promise.all([
       db.all<{ id: string; name: string; steps: string }>("SELECT id, name, steps FROM funnels WHERE site_id = ? ORDER BY created_at ASC", [site.id]),
       db.all<{ name: string }>(
         "SELECT DISTINCT name FROM events WHERE site_id = ? AND type = 'goal' AND ts > ? ORDER BY name LIMIT 200",
         [site.id, Date.now() - 365 * 24 * 60 * 60 * 1000],
+      ),
+      db.all<{ source: string; date_from: string; date_to: string }>(
+        "SELECT source, date_from, date_to FROM imports WHERE site_id = ? AND status = 'done' ORDER BY date_from",
+        [site.id],
       ),
     ]);
     return c.json({
@@ -186,6 +190,8 @@ export function statsRoutes() {
       },
       funnels: funnels.map((f) => ({ id: f.id, name: f.name, steps: JSON.parse(f.steps) })),
       goals: goals.map((g) => g.name),
+      /** Completed history imports: the dashboard says when a chart includes them, or leaves them out under filters. */
+      imports,
     });
   });
 

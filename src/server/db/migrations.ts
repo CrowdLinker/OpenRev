@@ -288,6 +288,52 @@ ALTER TABLE payments ADD COLUMN billing_interval_count INTEGER;
 CREATE INDEX IF NOT EXISTS payments_subscription ON payments (site_id, subscription_id);
 `,
   },
+  {
+    id: 3,
+    name: "imported history",
+    // Daily totals imported from Plausible or Google Analytics, for the time before OpenRev. `dim` is '' for a day's
+    // totals, else the dimension (source, page, country…) that `value` belongs to; `ts` is the start of that day in the
+    // website's timezone. Each chunk of rows is recorded in import_chunks so a retried upload isn't counted twice.
+    sql: `
+CREATE TABLE IF NOT EXISTS imports (
+  id TEXT PRIMARY KEY,
+  site_id TEXT NOT NULL,
+  source TEXT NOT NULL,
+  status TEXT NOT NULL,
+  date_from TEXT NOT NULL,
+  date_to TEXT NOT NULL,
+  config TEXT,
+  cursor TEXT,
+  imported_rows INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  created_by TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS imports_site ON imports (site_id);
+CREATE TABLE IF NOT EXISTS imported_stats (
+  site_id TEXT NOT NULL,
+  import_id TEXT NOT NULL,
+  ts BIGINT NOT NULL,
+  dim TEXT NOT NULL,
+  value TEXT NOT NULL,
+  meta TEXT NOT NULL DEFAULT '',
+  visitors INTEGER NOT NULL DEFAULT 0,
+  visits INTEGER NOT NULL DEFAULT 0,
+  pageviews INTEGER NOT NULL DEFAULT 0,
+  bounces INTEGER NOT NULL DEFAULT 0,
+  duration BIGINT NOT NULL DEFAULT 0,
+  events INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (import_id, ts, dim, value, meta)
+);
+CREATE INDEX IF NOT EXISTS imported_stats_site ON imported_stats (site_id, dim, ts);
+CREATE TABLE IF NOT EXISTS import_chunks (
+  import_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  PRIMARY KEY (import_id, seq)
+);
+`,
+  },
 ];
 
 export const LATEST_MIGRATION = migrations[migrations.length - 1].id;
