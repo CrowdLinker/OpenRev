@@ -42,6 +42,9 @@ Turn on **Watch Hacker News** and select **Start watching**. That's all: OpenRev
 
 ### 𝕏
 
+> **Beta.** 𝕏 search is tested against the responses 𝕏 documents, not yet with a live token. Hacker News search has
+> been checked against the live API. If 𝕏 results look wrong, please [open an issue](https://github.com/CrowdLinker/OpenRev/issues).
+
 𝕏 search needs an 𝕏 API app of your own. 𝕏 bills reads from prepaid credits, about **$0.005 per post** read (see 𝕏's
 [pricing](https://docs.x.com/x-api/getting-started/pricing)). OpenRev never buys anything for you.
 

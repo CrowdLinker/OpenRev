@@ -61,6 +61,9 @@ What comes across:
 
 ## Google Analytics 4
 
+> **Beta.** Tested against the responses the Data API documents, not yet against a live GA4 property. If an import
+> fails or its totals look wrong, please [open an issue](https://github.com/CrowdLinker/OpenRev/issues).
+
 OpenRev reads your GA4 reports through the Google Analytics Data API, signed in as a **service account**: a robot
 Google account that you create and give read access to your property. You don't need an OAuth app, and OpenRev never
 sees your Google password.

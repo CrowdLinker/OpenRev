@@ -26,11 +26,13 @@ OpenRev records Dodo Payments one-time payments, subscription payments (first ch
 
 Test mode and live mode have separate endpoints and secrets; use one OpenRev integration for each.
 
-**Import past payments (optional):** in Dodo Payments, create an API key (**Developer → API keys**). Paste it into
-OpenRev as **API key**, choose its mode under **Environment**, then click **Import history**. OpenRev reads every
+**Import past payments (optional, beta):** in Dodo Payments, create an API key (**Developer → API keys**). Paste it
+into OpenRev as **API key**, choose its mode under **Environment**, then click **Import history**. OpenRev reads every
 successful payment (with its subscription's billing interval, for MRR), then refunds, which inherit the attribution of
 the payment they refund. Payments keep the visitor id when it was in the checkout metadata; older ones are matched by
-customer email when possible.
+customer email when possible. The import follows the Dodo Payments API reference but hasn't run against a live account
+yet: please [open an issue](https://github.com/CrowdLinker/OpenRev/issues) if its totals don't match your Dodo
+Payments dashboard.
 
 ## 3. Pass the visitor id at checkout
 

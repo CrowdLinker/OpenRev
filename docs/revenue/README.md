@@ -41,13 +41,13 @@ The **Customer lifetime value** report always groups customers by their first to
 |---|---|---|---|
 | Stripe | [stripe.md](stripe.md) | Checkout, Payment Links, subscriptions, PaymentIntents, refunds | ✅ |
 | Lemon Squeezy | [lemonsqueezy.md](lemonsqueezy.md) | Orders, subscription renewals, refunds | ✅ |
-| Polar | [polar.md](polar.md) | Orders, renewals, refunds | ✅ |
-| Paddle (Billing) | [paddle.md](paddle.md) | Transactions, renewals, refunds/chargebacks | ✅ |
+| Polar | [polar.md](polar.md) | Orders, renewals, refunds | ✅ (beta) |
+| Paddle (Billing) | [paddle.md](paddle.md) | Transactions, renewals, refunds/chargebacks | ✅ (beta) |
 | Shopify | [shopify.md](shopify.md) | Paid orders, refunds | |
-| Dodo Payments | [dodo.md](dodo.md) | Payments, renewals, refunds | ✅ |
+| Dodo Payments | [dodo.md](dodo.md) | Payments, renewals, refunds | ✅ (beta) |
 | Creem | [creem.md](creem.md) | Checkouts, subscription payments, refunds | |
 | Gumroad | [gumroad.md](gumroad.md) | Sales, memberships, refunds | |
-| Paystack | [paystack.md](paystack.md) | Charges, refunds | ✅ |
+| Paystack | [paystack.md](paystack.md) | Charges, refunds | ✅ (beta) |
 | Razorpay | [razorpay.md](razorpay.md) | Payments, subscriptions, invoices, refunds | |
 | WooCommerce | [woocommerce.md](woocommerce.md) | Orders, refunds | |
 | **Any other system** | [custom-provider.md](custom-provider.md) | Configure JSON paths + signature for any webhook | |

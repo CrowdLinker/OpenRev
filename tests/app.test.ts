@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/server/app";
-import type { Runtime } from "../src/server/context";
+import rootPackage from "../package.json";
+import { type Runtime, VERSION } from "../src/server/context";
 import { hmacHex } from "../src/server/lib/crypto";
 import { realPostgresDb, TEST_DATABASE_URL, testDb, testRuntime } from "./helpers";
 import { pgliteDb } from "./pglite";
@@ -323,5 +324,14 @@ describe.each(DATABASES)("HTTP API (%s)", (_name, makeDb) => {
     // other accounts are unaffected
     expect((await call("/api/auth/login", { body: { email: "viewer@example.com", password: "supersecret" } })).status).toBe(200);
     cookie = saved;
+  });
+});
+
+describe("version", () => {
+  it("matches package.json, so /api/health, the OpenAPI spec and the MCP server report the release", async () => {
+    expect(VERSION).toBe(rootPackage.version);
+    const own = await testRuntime();
+    const res = await createApp(() => own).request(BASE + "/api/health");
+    expect((await res.json()).version).toBe(rootPackage.version);
   });
 });

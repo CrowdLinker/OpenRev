@@ -4,6 +4,9 @@ Connect Google Search Console to see the searches that bring visitors from Googl
 each keyword earns. The dashboard gets a **Search keywords** card: clicks, click-through rate, average position, the
 landing page, and estimated revenue.
 
+> **Beta.** Tested against the responses Google documents, not yet against a live Search Console property. If the
+> numbers don't match Search Console's own, please [open an issue](https://github.com/CrowdLinker/OpenRev/issues).
+
 ## How revenue is estimated
 
 Search Console reports clicks per keyword and landing page, but it doesn't say who clicked, so no single payment can be

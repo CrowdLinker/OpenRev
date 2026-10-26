@@ -14,10 +14,12 @@ Paystack signs webhooks with your **secret key** (there is no separate webhook s
    https://YOUR-OPENREV-DOMAIN/api/webhooks/<integration-id>
    ```
 
-**Import past transactions:** click **Import history** on the integration. It uses the same secret key to read every
-successful transaction, then processed refunds (a charge refunded in full is imported with its refund). Transactions
-keep the visitor id when it was in their metadata; older ones are matched by customer email when possible. Use the
-test key's integration to import test transactions.
+**Import past transactions (beta):** click **Import history** on the integration. It uses the same secret key to read
+every successful transaction, then processed refunds (a charge refunded in full is imported with its refund).
+Transactions keep the visitor id when it was in their metadata; older ones are matched by customer email when
+possible. Use the test key's integration to import test transactions. The import follows the Paystack API reference
+but hasn't run against a live account yet: please [open an issue](https://github.com/CrowdLinker/OpenRev/issues) if
+its totals don't match your Paystack dashboard.
 
 ## 2. Set the webhook URL in Paystack
 

@@ -5,6 +5,9 @@ Track a React Native or Expo app on the same dashboard as your website, with the
 on the website, and a visitor who goes from the website to the app stays the same visitor: funnels can start on a web
 page and end on an app screen, and revenue made in the app keeps the source that brought the visitor to the website.
 
+> **Beta.** The SDK is tested against the OpenRev server, but not yet in a published iOS or Android app. Needs
+> OpenRev 0.2.0 or later. If it behaves differently on a device, please [open an issue](https://github.com/CrowdLinker/OpenRev/issues).
+
 ## Set up
 
 1. In OpenRev, open **Settings → Tracking code → Mobile apps** and add your app ids: the iOS bundle id and the Android

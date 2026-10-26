@@ -192,16 +192,16 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 ### And the rest
 
 - **MRR and churn**: MRR, ARR, new, expansion, contraction and churned MRR, churn rates and net revenue retention, with MRR by the channel that brought each subscriber in ([docs](docs/features/mrr.md)).
-- **Google Search Console**: the searches that bring visitors, with clicks, position and an estimate of the revenue each keyword earns ([docs](docs/features/search-console.md)).
-- **Mobile apps**: a React Native and Expo SDK, with screens, goals and revenue on the same dashboard, and web-to-app funnels that follow a visitor from the website into the app ([guide](docs/tracking/mobile-apps.md)).
+- **Google Search Console** (beta): the searches that bring visitors, with clicks, position and an estimate of the revenue each keyword earns ([docs](docs/features/search-console.md)).
+- **Mobile apps** (beta): a React Native and Expo SDK, with screens, goals and revenue on the same dashboard, and web-to-app funnels that follow a visitor from the website into the app ([guide](docs/tracking/mobile-apps.md)).
 - **CLI**: `npx openrev stats`, `top pages`, `live`, `mrr` and more in your terminal, with `--json` for scripts ([guide](docs/guides/cli.md)).
-- **Social**: posts on 𝕏 and Hacker News that mention or link to you, with the visitors and revenue each one brings, link-in-bio attribution for 𝕏 profiles, and link-in-bio pages like Linktree as sources ([docs](docs/features/social.md)).
+- **Social**: posts on 𝕏 (beta) and Hacker News that mention or link to you, with the visitors and revenue each one brings, link-in-bio attribution for 𝕏 profiles, and link-in-bio pages like Linktree as sources ([docs](docs/features/social.md)).
 - **AI crawlers**: which AI crawlers (GPTBot, ClaudeBot, ChatGPT-User…) read which pages, reported by a few lines of server middleware, next to the visitors and revenue that AI assistants send ([docs](docs/features/ai-crawlers.md)).
 - **Team and sharing**: unlimited websites and members (owner, admin, viewer), invitation links, and public read-only dashboards that hide personal data.
 - **Live badge**: show "3 online · 1,297 visitors today" on your site, linking to your public dashboard ([docs](docs/features/live-badge.md)).
 - **Alerts**: new sales and refunds with source, country and journey, goal completions, traffic spikes, and daily or weekly digests to Slack, Discord, Telegram, email or webhooks.
 - **Tracking options**: subdomains and cross-domain tracking, a first-party proxy to get past ad blockers, and exclusions by IP, path, country, hostname or your own browser.
-- **Imports and exports**: bring your history from Plausible or Google Analytics 4 ([guide](docs/guides/import-history.md)), CSV export of all raw data, chart notes, and date ranges from hourly to monthly with period-over-period comparison.
+- **Imports and exports**: bring your history from Plausible or Google Analytics 4 (beta) ([guide](docs/guides/import-history.md)), CSV export of all raw data, chart notes, and date ranges from hourly to monthly with period-over-period comparison.
 
 ## 💳 Connect any payment provider
 
@@ -209,13 +209,13 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 |---|---|:-:|
 | [Stripe](docs/revenue/stripe.md) | Checkout, Payment Links, subscriptions, PaymentIntents, refunds | ✅ |
 | [Lemon Squeezy](docs/revenue/lemonsqueezy.md) | Orders, subscription renewals, refunds | ✅ |
-| [Polar](docs/revenue/polar.md) | Orders, renewals, refunds | ✅ |
-| [Paddle Billing](docs/revenue/paddle.md) | Transactions, renewals, refunds and chargebacks | ✅ |
+| [Polar](docs/revenue/polar.md) | Orders, renewals, refunds | ✅ (beta) |
+| [Paddle Billing](docs/revenue/paddle.md) | Transactions, renewals, refunds and chargebacks | ✅ (beta) |
 | [Shopify](docs/revenue/shopify.md) | Paid orders, refunds | |
-| [Dodo Payments](docs/revenue/dodo.md) | Payments, renewals, refunds | ✅ |
+| [Dodo Payments](docs/revenue/dodo.md) | Payments, renewals, refunds | ✅ (beta) |
 | [Creem](docs/revenue/creem.md) | Checkouts, subscription payments, refunds | |
 | [Gumroad](docs/revenue/gumroad.md) | Sales, memberships, refunds | |
-| [Paystack](docs/revenue/paystack.md) | Charges, refunds | ✅ |
+| [Paystack](docs/revenue/paystack.md) | Charges, refunds | ✅ (beta) |
 | [Razorpay](docs/revenue/razorpay.md) | Payments, subscriptions, invoices, refunds | |
 | [WooCommerce](docs/revenue/woocommerce.md) | Orders, refunds | |
 | **Anything else** | [Custom webhook](docs/revenue/custom-provider.md): map JSON paths and a signature for any provider | |
