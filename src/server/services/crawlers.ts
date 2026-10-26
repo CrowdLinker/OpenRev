@@ -1,5 +1,5 @@
 import type { Database, SqlValue, Statement } from "../db/types";
-import { CRAWLER_CATEGORIES, CRAWLER_PATTERN, crawlerByName, matchCrawler, type CrawlerCategory } from "../lib/crawlers";
+import { CRAWLER_CATEGORIES, CRAWLER_PATTERN, CRAWLERS, crawlerByName, matchCrawler, type CrawlerCategory } from "../lib/crawlers";
 import { planBuckets, startOfLocalDay, type Interval } from "../lib/time";
 import type { Site } from "./sites";
 import { attributionColumn, type StatsQuery } from "./stats";
@@ -79,7 +79,10 @@ export async function crawlerReport(db: Database, q: StatsQuery, opts: { interva
   const base = [q.site.id, q.range.from, q.range.to];
   const category = (CRAWLER_CATEGORIES as readonly string[]).includes(opts.category ?? "") ? (opts.category as CrawlerCategory) : null;
   const attr = attributionColumn(q.site, q.attribution);
-  const [series, bots, pageRows, ai] = await Promise.all([
+  // Pages are added up in SQL: a large website can have tens of thousands of crawled paths in a range.
+  const names = category ? CRAWLERS.filter((c) => c.category === category).map((c) => c.name) : [];
+  const botFilter = category ? ` AND bot IN (${names.map(() => "?").join(", ")})` : "";
+  const [series, bots, topPages, pageCount, ai] = await Promise.all([
     db.all<{ b: number; bot: string; hits: number }>(
       `SELECT ${plan.sql("ts")} AS b, bot, SUM(hits) AS hits FROM crawler_stats WHERE site_id = ? AND ts >= ? AND ts < ? GROUP BY b, bot`,
       base,
@@ -89,10 +92,12 @@ export async function crawlerReport(db: Database, q: StatsQuery, opts: { interva
        WHERE site_id = ? AND ts >= ? AND ts < ? GROUP BY bot ORDER BY hits DESC`,
       base,
     ),
-    db.all<{ path: string; bot: string; hits: number }>(
-      `SELECT path, bot, SUM(hits) AS hits FROM crawler_stats WHERE site_id = ? AND ts >= ? AND ts < ? GROUP BY path, bot`,
-      base,
+    db.all<{ path: string; hits: number }>(
+      `SELECT path, SUM(hits) AS hits FROM crawler_stats WHERE site_id = ? AND ts >= ? AND ts < ?${botFilter}
+       GROUP BY path ORDER BY hits DESC, path LIMIT 50`,
+      [...base, ...names],
     ),
+    db.first<{ n: number }>("SELECT COUNT(DISTINCT path) AS n FROM crawler_stats WHERE site_id = ? AND ts >= ? AND ts < ?", base),
     db.first<{ visitors: number; sessions: number; revenue: number }>(
       `SELECT COUNT(DISTINCT s.visitor_id) AS visitors, COUNT(DISTINCT s.id) AS sessions,
               (SELECT SUM(p.revenue) FROM payments p JOIN sessions ps ON ps.id = p.${attr}
@@ -110,21 +115,22 @@ export async function crawlerReport(db: Database, q: StatsQuery, opts: { interva
     m[categoryOf(r.bot)] += Number(r.hits);
     byBucket.set(Number(r.b), m);
   }
-  const pages = new Map<string, { path: string; hits: number; bots: Set<string> }>();
-  for (const r of pageRows) {
-    if (category && categoryOf(r.bot) !== category) continue;
-    const p = pages.get(r.path) ?? { path: r.path, hits: 0, bots: new Set<string>() };
-    p.hits += Number(r.hits);
-    p.bots.add(r.bot);
-    pages.set(r.path, p);
-  }
+  // The crawlers of the top pages only: 3 + 50 + at most a category's names parameters, under D1's 100.
+  const pageBots = topPages.length
+    ? await db.all<{ path: string; bot: string }>(
+        `SELECT DISTINCT path, bot FROM crawler_stats WHERE site_id = ? AND ts >= ? AND ts < ?${botFilter} AND path IN (${topPages.map(() => "?").join(", ")})`,
+        [...base, ...names, ...topPages.map((p) => p.path)],
+      )
+    : [];
+  const botsOf = new Map<string, string[]>();
+  for (const r of pageBots) botsOf.set(r.path, [...(botsOf.get(r.path) ?? []), r.bot]);
 
   return {
     summary: {
       hits: Object.values(totals).reduce((a, b) => a + b, 0),
       ...totals,
       crawlers: bots.length,
-      pages: new Set(pageRows.map((r) => r.path)).size,
+      pages: Number(pageCount?.n) || 0,
       ai_visitors: Number(ai?.visitors) || 0,
       ai_sessions: Number(ai?.sessions) || 0,
       ai_revenue: Number(ai?.revenue) || 0,
@@ -136,10 +142,7 @@ export async function crawlerReport(db: Database, q: StatsQuery, opts: { interva
         return { name: b.bot, operator: c?.operator ?? null, category: categoryOf(b.bot), hits: Number(b.hits), pages: Number(b.pages), last_seen: Number(b.last_seen) };
       })
       .filter((b) => !category || b.category === category),
-    pages: [...pages.values()]
-      .sort((a, b) => b.hits - a.hits)
-      .slice(0, 50)
-      .map((p) => ({ path: p.path, hits: p.hits, crawlers: [...p.bots].sort() })),
+    pages: topPages.map((p) => ({ path: p.path, hits: Number(p.hits), crawlers: (botsOf.get(p.path) ?? []).sort() })),
     pattern: CRAWLER_PATTERN,
   };
 }
