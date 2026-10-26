@@ -8,6 +8,7 @@ import { clampString, isEmail, sanitizeGoalName, sanitizeProps } from "../lib/va
 import { verifyApiKey } from "../services/auth";
 import { identifyVisitor, recordServerGoal } from "../services/ingest";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
+import { crawlerReport, recordCrawls, type CrawlHit } from "../services/crawlers";
 import { searchKeywords } from "../services/search-console";
 import { deletePayment, recordPayment } from "../services/payments";
 import { notifyPayment } from "../services/notify";
@@ -184,6 +185,13 @@ export function v1Routes() {
     return ok(c, report.rows, { totals: report.totals, currency: s.currency, range: rangeInfo(q) });
   });
 
+  app.get("/analytics/crawlers", async (c) => {
+    const s = await site(c);
+    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const report = await crawlerReport(c.get("rt").db, q, { category: c.req.query("category") });
+    return ok(c, report, { currency: s.currency, range: rangeInfo(q) });
+  });
+
   app.get("/analytics/mrr/breakdown", async (c) => {
     const s = await site(c);
     const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
@@ -235,6 +243,22 @@ export function v1Routes() {
     const deleted = await deletePayment(c.get("rt").db, s.id, c.req.param("id"));
     if (!deleted) fail(404, "Payment not found");
     return ok(c, { deleted: true });
+  });
+
+  /** Requests from crawlers, reported by the website's server (middleware or access logs). Up to 1,000 per call. */
+  app.post("/crawls", async (c) => {
+    const s = await site(c, "admin");
+    const body = await readJson<Record<string, unknown>>(c);
+    const list = Array.isArray(body.hits) ? body.hits : [body];
+    if (!list.length || list.length > 1000) fail(422, "Send between 1 and 1000 hits");
+    const hits: CrawlHit[] = [];
+    for (const h of list as Record<string, unknown>[]) {
+      const path = h?.path ?? h?.url;
+      const userAgent = h?.user_agent ?? h?.userAgent;
+      if (typeof path !== "string" || typeof userAgent !== "string") fail(422, "Each hit needs `path` (or `url`) and `user_agent`");
+      hits.push({ path, userAgent: userAgent.slice(0, 1000), timestamp: parseTimestamp(h.timestamp) });
+    }
+    return ok(c, await recordCrawls(c.get("rt").db, s, hits));
   });
 
   app.post("/goals", async (c) => {

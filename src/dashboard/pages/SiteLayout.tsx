@@ -1,9 +1,10 @@
-import { BarChart3, DollarSign, Filter as FunnelIcon, Radio, Repeat, Settings, Users } from "lucide-react";
+import { BarChart3, Bot, DollarSign, Filter as FunnelIcon, Radio, Repeat, Settings, Users } from "lucide-react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { cx, ErrorBox, Loading } from "../components/ui";
 import { useApi } from "../lib/api";
 import { canEdit, SiteContext } from "../lib/context";
 import type { Role, Site, SiteMeta } from "../lib/types";
+import { CrawlersPage } from "./Crawlers";
 import { DashboardPage } from "./Dashboard";
 import { FunnelsPage } from "./Funnels";
 import { MrrPage } from "./Mrr";
@@ -12,7 +13,7 @@ import { RevenuePage } from "./Revenue";
 import { SettingsPage } from "./Settings";
 import { VisitorProfilePage, VisitorsPage } from "./Visitors";
 
-export function SiteNav({ isPublic = false, role, hideRevenue }: { isPublic?: boolean; role: Role | null; hideRevenue?: boolean }) {
+export function SiteNav({ isPublic = false, role, hideRevenue, crawlers = true }: { isPublic?: boolean; role: Role | null; hideRevenue?: boolean; crawlers?: boolean }) {
   const [location] = useLocation();
   const items = [
     { href: "/", label: "Dashboard", icon: BarChart3, match: (l: string) => l === "/" || l === "" },
@@ -25,6 +26,7 @@ export function SiteNav({ isPublic = false, role, hideRevenue }: { isPublic?: bo
           { href: "/mrr", label: "MRR", icon: Repeat },
         ]),
     { href: "/funnels", label: "Funnels", icon: FunnelIcon },
+    ...(crawlers ? [{ href: "/crawlers", label: "Crawlers", icon: Bot }] : []),
     ...(!isPublic && canEdit(role) ? [{ href: "/settings", label: "Settings", icon: Settings }] : []),
   ];
   return (
@@ -75,6 +77,7 @@ export function SiteLayout({ siteId }: { siteId: string }) {
         <Route path="/revenue" component={RevenuePage} />
         <Route path="/mrr" component={MrrPage} />
         <Route path="/funnels" component={FunnelsPage} />
+        <Route path="/crawlers" component={CrawlersPage} />
         <Route path="/settings/:tab?">{(p) => <SettingsPage tab={p.tab} />}</Route>
       </Switch>
     </SiteContext.Provider>

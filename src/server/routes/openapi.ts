@@ -105,6 +105,13 @@ export function openApiSpec(origin: string) {
           responses: ok("Search keywords"),
         },
       },
+      "/analytics/crawlers": {
+        get: {
+          summary: "Crawler hits (AI training, AI search, AI assistants, search engines) per crawler and page, with visitors and revenue from AI assistants",
+          parameters: [...rangeParams, { name: "category", in: "query", schema: { type: "string", enum: ["ai_training", "ai_search", "ai_user", "search"] } }],
+          responses: ok("Crawler report"),
+        },
+      },
       "/analytics/realtime": { get: { summary: "Visitors online now, live sessions, recent events and payments", parameters: rangeParams.slice(-1), responses: ok("Realtime") } },
       "/analytics/breakdowns/{dimension}": {
         get: {
@@ -146,6 +153,28 @@ export function openApiSpec(origin: string) {
       "/goals": {
         get: { summary: "Goals with completions, conversion rate and revenue", parameters: rangeParams, responses: ok("Goals") },
         post: { summary: "Track a goal server-side", requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/GoalInput" } } } }, responses: { 201: { description: "Created" } } },
+      },
+      "/crawls": {
+        post: {
+          summary: "Report requests from crawlers (AI crawlers, search engines) seen by your server; others are ignored",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    path: { type: "string", description: "Requested path or URL" },
+                    user_agent: { type: "string" },
+                    timestamp: { type: "string", description: "ISO date or epoch (ms or s); default now" },
+                    hits: { type: "array", maxItems: 1000, description: "Several hits at once, each with path, user_agent and timestamp", items: { type: "object" } },
+                  },
+                },
+              },
+            },
+          },
+          responses: ok("Hits recorded and ignored"),
+        },
       },
       "/identify": { post: { summary: "Attach a user id, name, email and custom properties to a visitor", requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/IdentifyInput" } } } }, responses: ok("Identified") } },
       "/funnels": { get: { summary: "List funnels", responses: ok("Funnels") } },

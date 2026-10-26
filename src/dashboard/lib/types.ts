@@ -175,6 +175,8 @@ export interface SiteMeta {
   imports?: { source: "plausible" | "ga4"; date_from: string; date_to: string }[];
   /** Google Search Console is connected. */
   searchConsole?: boolean;
+  /** The website's server has reported crawler requests. */
+  crawlers?: boolean;
 }
 
 export interface Note {

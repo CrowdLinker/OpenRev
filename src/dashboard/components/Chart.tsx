@@ -433,3 +433,100 @@ export function MrrChart({ points, interval, currency, height = 320 }: { points:
     </div>
   );
 }
+
+export interface StackedSeries {
+  key: string;
+  label: string;
+  /** Fill class for the bar segment, e.g. "fill-brand-500". */
+  fill: string;
+  /** Background class for the legend and tooltip dot, e.g. "bg-brand-500". */
+  dot: string;
+}
+
+/** Bars stacked by series per time bucket (crawler hits by category). */
+export function StackedBars({
+  points,
+  series,
+  interval,
+  height = 260,
+}: {
+  points: ({ date: string } & Record<string, number | string>)[];
+  series: StackedSeries[];
+  interval: string;
+  height?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(800);
+  const [hover, setHover] = useState<number | null>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    const ro = new ResizeObserver((entries) => setWidth(Math.max(300, entries[0].contentRect.width)));
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const padL = 44;
+  const padR = 12;
+  const padT = 12;
+  const padB = 30;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+  const n = Math.max(points.length, 1);
+  const step = innerW / n;
+  const x = (i: number) => padL + step * (i + 0.5);
+  const total = (p: (typeof points)[number]) => series.reduce((sum, s) => sum + (Number(p[s.key]) || 0), 0);
+  const max = niceMax(Math.max(...points.map(total), 0) * 1.08, true) || 1;
+  const barW = Math.max(2, Math.min(step * 0.6, 24));
+  const labelEvery = Math.max(1, Math.ceil(points.length / Math.max(2, Math.floor(innerW / 80))));
+  const hp = hover !== null ? points[hover] : null;
+  const tooltipLeft = hover !== null ? Math.min(Math.max(x(hover) - 100, 0), width - 200) : 0;
+
+  return (
+    <div ref={ref} className="relative w-full select-none" style={{ height }} onMouseLeave={() => setHover(null)}>
+      <svg width={width} height={height} className="overflow-visible">
+        {[0, 0.5, 1].map((t) => (
+          <g key={t}>
+            <line x1={padL} x2={width - padR} y1={padT + innerH * (1 - t)} y2={padT + innerH * (1 - t)} className="stroke-zinc-200 dark:stroke-zinc-800" strokeDasharray={t === 0 ? undefined : "3 4"} />
+            <text x={padL - 8} y={padT + innerH * (1 - t) + 4} textAnchor="end" className="fill-zinc-400 text-[10px] tabular">
+              {num(max * t)}
+            </text>
+          </g>
+        ))}
+        {points.map((p, i) => {
+          let y = padT + innerH;
+          return (
+            <g key={i} opacity={hover === null || hover === i ? 1 : 0.55}>
+              {series.map((s) => {
+                const v = Number(p[s.key]) || 0;
+                if (!v) return null;
+                const h = (v / max) * innerH;
+                y -= h;
+                return <rect key={s.key} x={x(i) - barW / 2} y={y} width={barW} height={Math.max(h, 1)} className={s.fill} />;
+              })}
+            </g>
+          );
+        })}
+        {points.map((p, i) =>
+          i % labelEvery === 0 ? (
+            <text key={`l${i}`} x={x(i)} y={height - 8} textAnchor="middle" className="fill-zinc-400 text-[10px]">
+              {bucketLabel(p.date, interval)}
+            </text>
+          ) : null,
+        )}
+        {points.map((_, i) => (
+          <rect key={`h${i}`} x={padL + step * i} y={padT} width={step} height={innerH} fill="transparent" onMouseEnter={() => setHover(i)} onTouchStart={() => setHover(i)} />
+        ))}
+      </svg>
+      {hp && hover !== null && (
+        <div className="card pointer-events-none absolute top-2 z-10 w-[200px] p-3 text-xs shadow-lg" style={{ left: tooltipLeft }}>
+          <div className="mb-2 font-medium text-zinc-500">{bucketLabel(hp.date, interval, true)}</div>
+          <div className="space-y-1.5">
+            {series.map((s) => (
+              <Row key={s.key} color={s.dot} label={s.label} value={num(Number(hp[s.key]) || 0, false)} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
