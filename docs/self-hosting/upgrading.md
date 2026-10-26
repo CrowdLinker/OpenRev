@@ -12,7 +12,7 @@ Database migrations run automatically when the new version starts (or on the fir
 
 ## Upgrade notes
 
-### Upgrading from 0.2 or earlier: who sees revenue
+### Upgrading to 0.2.0: who sees revenue
 
 Team members now need **Can see revenue** to see revenue
 ([who sees revenue](../features/team-and-sharing.md#who-sees-revenue)). After the update, only owners see it: admins
