@@ -187,6 +187,8 @@ export interface SiteMeta {
   crawlers?: boolean;
   /** Posts on X or Hacker News were found. */
   social?: boolean;
+  /** The dashboard has the Visitors tab: always for members, on share links only on a demo instance. */
+  visitors?: boolean;
 }
 
 export interface Note {
