@@ -4,6 +4,9 @@ import { syncAllSearchConsole } from "./search-console";
 import { syncAllSocial } from "./social";
 import { getRates } from "../lib/currency";
 
+/** Statements the scheduled syncs may write in one run, together. */
+const SYNC_BUDGET = 600;
+
 async function due(rt: Runtime, name: string, everyMs: number, now: number): Promise<boolean> {
   const row = await rt.db.first<{ last_run_at: number }>("SELECT last_run_at FROM jobs WHERE name = ?", [name]);
   if (row && now - Number(row.last_run_at) < everyMs) return false;
@@ -34,10 +37,18 @@ export async function runScheduled(rt: Runtime, now = Date.now()): Promise<strin
   }
 
   await run("fx-rates", 6 * 3_600_000, () => getRates(rt.db, now));
-  // Each round syncs a few days per connected website; recent days refresh every 6 hours, then history fills in.
-  await run("search-console", 10 * 60_000, () => syncAllSearchConsole(rt, now));
-  // Hacker News is checked every hour and 𝕏 every 6 hours; each website keeps its own times.
-  await run("social", 10 * 60_000, () => syncAllSocial(rt, now));
+
+  // The syncs share one statement budget, since D1 runs about 1,000 queries per Worker invocation. They take turns
+  // going first, so neither can hold the other back.
+  const budget = { left: SYNC_BUDGET, wrote: false };
+  const syncs = [
+    // Each round syncs a few days per connected website; recent days refresh every 6 hours, then history fills in.
+    () => run("search-console", 10 * 60_000, () => syncAllSearchConsole(rt, now, budget)),
+    // Hacker News is checked every hour and 𝕏 every 6 hours; each website keeps its own times.
+    () => run("social", 10 * 60_000, () => syncAllSocial(rt, now, budget)),
+  ];
+  if (Math.floor(now / 600_000) % 2) syncs.reverse();
+  for (const sync of syncs) await sync();
 
   await run("cleanup", 24 * 3_600_000, async () => {
     await rt.db.run("DELETE FROM auth_sessions WHERE expires_at < ?", [now]);

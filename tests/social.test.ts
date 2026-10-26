@@ -230,6 +230,11 @@ describe.each([
     expect(report.posts[0].id).toBe("500"); // most revenue first
     expect(report.profiles).toEqual([expect.objectContaining({ id: "bio:openrev", author: "openrev", sessions: 1, links: ["/"] })]);
 
+    // A shorter list still counts every mention.
+    const short = (await call(`/api/sites/${siteId}/stats/social?${range}&limit=1`)).json;
+    expect(short.posts).toHaveLength(1);
+    expect(short.summary).toMatchObject({ mentions: 5, x: { mentions: 2 }, hn: { mentions: 3 } });
+
     const xOnly = (await call(`/api/sites/${siteId}/stats/social?${range}&platform=x`)).json;
     expect(xOnly.posts.every((p: { platform: string }) => p.platform === "x")).toBe(true);
     expect((await call(`/api/sites/${siteId}/stats/meta`)).json.social).toBe(true);

@@ -708,6 +708,13 @@ export async function socialReport(db: Database, q: StatsQuery, opts: { platform
      ORDER BY created_at DESC LIMIT ?`,
     [q.site.id, ...platforms, q.range.from, q.range.to, limit],
   );
+  // The list stops at `limit`; the counts don't.
+  const counts = await db.all<{ platform: SocialPlatform; n: number }>(
+    `SELECT platform, COUNT(*) AS n FROM social_posts WHERE site_id = ? AND kind = 'post' AND platform IN (${ph}) AND created_at >= ? AND created_at < ?
+     GROUP BY platform`,
+    [q.site.id, ...platforms, q.range.from, q.range.to],
+  );
+  const mentions = Object.fromEntries(counts.map((r) => [r.platform, Number(r.n)])) as Partial<Record<SocialPlatform, number>>;
   const have = new Set(published.map((p) => `${p.platform}:${p.id}`));
   const missing = [...byPost.keys()].filter((k) => !have.has(k));
   const extra: PostRow[] = [];
@@ -752,12 +759,12 @@ export async function socialReport(db: Database, q: StatsQuery, opts: { platform
 
   return {
     summary: {
-      mentions: published.length,
+      mentions: platforms.reduce((n, p) => n + (mentions[p] ?? 0), 0),
       ...Object.fromEntries(
         platforms.map((p) => [
           p,
           {
-            mentions: published.filter((x) => x.platform === p).length,
+            mentions: mentions[p] ?? 0,
             visits: totals[p].visits,
             credited_visits: totals[p].credited,
             revenue: totals[p].revenue,

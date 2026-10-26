@@ -37,7 +37,8 @@ Turn on **Watch Hacker News** and select **Start watching**. That's all: OpenRev
   The first check looks back 30 days.
 - It checks every hour, and refreshes the points and comment counts of the last 3 days.
 - On an instance with many websites, each background run checks as many as fit in one run, starting from a
-  different website each time, so a check can come a little later than the hour.
+  different website each time, so a check can come a little later than the hour. Social checks and Search Console
+  syncs share each run and take turns going first.
 
 ### 𝕏
 
