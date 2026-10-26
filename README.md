@@ -192,6 +192,7 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 ### And the rest
 
 - **Team and sharing**: unlimited websites and members (owner, admin, viewer), invitation links, and public read-only dashboards that hide personal data.
+- **Live badge**: show "3 online · 1,297 visitors today" on your site, linking to your public dashboard ([docs](docs/features/live-badge.md)).
 - **Alerts**: new sales and refunds with source, country and journey, goal completions, traffic spikes, and daily or weekly digests to Slack, Discord, Telegram, email or webhooks.
 - **Tracking options**: subdomains and cross-domain tracking, a first-party proxy to get past ad blockers, and exclusions by IP, path, country, hostname or your own browser.
 - **Exports**: CSV export of all raw data, chart notes, and date ranges from hourly to monthly with period-over-period comparison.

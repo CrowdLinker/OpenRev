@@ -14,6 +14,8 @@ Invite people from **Settings → Team**. You get an invitation link (valid 14 d
 
 **Settings → General → Public dashboard** creates a read-only link (`/share/<token>`) showing the dashboard, realtime, revenue and funnels — handy for "open startup" pages or investors. Names, emails and individual visitor journeys are never exposed, and realtime and payment data leave out visitor, session, transaction, subscription and checkout ids. Disable the link at any time.
 
+With the link on, you can also embed a [live badge](live-badge.md) ("3 online · 1,297 visitors today · stats →") that links to it.
+
 ## API keys
 
 Website keys (`or_…`) live in **Settings → API & MCP**; account tokens (`ort_…`) in **Account**. Keys act with their creator's role on each website: a viewer's account token can read data but can't send payments, goals or identities, or add notes over MCP. See the [API docs](../api/README.md).

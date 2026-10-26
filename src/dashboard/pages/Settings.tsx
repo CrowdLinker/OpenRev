@@ -2,6 +2,7 @@ import { AlertTriangle, Bell, CheckCircle2, Download, ExternalLink, KeyRound, Pl
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { InstallGuide, QUEUE_SNIPPET, scriptUrl, VerifyInstall } from "../components/InstallGuide";
+import { LiveBadge } from "../components/LiveBadge";
 import { Badge, Button, Card, CodeBlock, CopyButton, cx, Empty, ErrorBox, Field, Loading, Modal, Section, Toggle } from "../components/ui";
 import { api, useApi } from "../lib/api";
 import { useAuth, useSite } from "../lib/context";
@@ -213,6 +214,7 @@ function GeneralSettings({ site }: { site: Site }) {
             >
               Disable public link
             </Button>
+            <LiveBadge token={site.share_token} />
           </div>
         ) : (
           <Button

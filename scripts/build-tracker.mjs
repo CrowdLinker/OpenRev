@@ -1,4 +1,4 @@
-// Builds the tracking script variants into dist/public/js.
+// Builds the tracking script variants and the live badge into dist/public/js.
 import { build } from "esbuild";
 import { mkdirSync, statSync } from "node:fs";
 
@@ -24,13 +24,23 @@ for (const v of variants) {
     define: { __HASH_MODE__: String(v.hash), __COOKIELESS__: String(v.cookieless) },
     legalComments: "none",
   };
+  await run(options, v.file);
+}
+
+// The embeddable live badge (<openrev-badge>), served next to the tracker.
+await run(
+  { entryPoints: ["src/tracker/badge.ts"], outfile: `${outdir}/badge.js`, bundle: true, minify: true, format: "iife", target: ["es2017"], legalComments: "none" },
+  "badge.js",
+);
+
+async function run(options, file) {
   if (watch) {
     const { context } = await import("esbuild");
     const ctx = await context(options);
     await ctx.watch();
   } else {
     await build(options);
-    console.log(`  ${outdir}/${v.file}  ${(statSync(`${outdir}/${v.file}`).size / 1024).toFixed(1)} kB`);
+    console.log(`  ${outdir}/${file}  ${(statSync(`${outdir}/${file}`).size / 1024).toFixed(1)} kB`);
   }
 }
 if (watch) console.log("Watching tracker...");
