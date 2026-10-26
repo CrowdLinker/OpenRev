@@ -81,7 +81,7 @@ function FunnelEditor({ funnel, onClose, onSaved }: { funnel: Funnel | null; onC
 
   return (
     <Modal open onClose={onClose} title={funnel ? "Edit funnel" : "New funnel"} wide>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="space-y-4">
           <Field label="Name">
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Landing → Pricing → Purchase" />
@@ -168,7 +168,7 @@ export function FunnelsPage() {
           <Empty title="No funnels yet">Funnels show how many visitors go from one step to the next — e.g. landing page → pricing → signup → payment.</Empty>
         </Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {funnels.map((f) => (
             <FunnelCard
               key={f.id}

@@ -56,7 +56,7 @@ export function RealtimePage() {
   if (loading && !data) return <Spinner />;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
       <Card className="relative overflow-hidden p-5">
         <div className="relative z-10 flex items-start justify-between">
           <div>
