@@ -8,6 +8,7 @@ import { clampString, isEmail, sanitizeGoalName, sanitizeProps } from "../lib/va
 import { verifyApiKey } from "../services/auth";
 import { identifyVisitor, recordServerGoal } from "../services/ingest";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
+import { searchKeywords } from "../services/search-console";
 import { deletePayment, recordPayment } from "../services/payments";
 import { notifyPayment } from "../services/notify";
 import type { Site } from "../services/sites";
@@ -170,6 +171,17 @@ export function v1Routes() {
     const s = await site(c);
     const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
     return ok(c, await mrrReport(c.get("rt").db, q), { currency: s.currency, interval: q.range.interval, range: rangeInfo(q) });
+  });
+
+  app.get("/analytics/search-keywords", async (c) => {
+    const s = await site(c);
+    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const sort = c.req.query("sort");
+    const report = await searchKeywords(c.get("rt").db, q, {
+      limit: Number(c.req.query("limit") || 50),
+      sort: sort === "revenue" || sort === "impressions" ? sort : "clicks",
+    });
+    return ok(c, report.rows, { totals: report.totals, currency: s.currency, range: rangeInfo(q) });
   });
 
   app.get("/analytics/mrr/breakdown", async (c) => {

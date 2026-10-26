@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { BreakdownList, BreakdownPanel } from "../components/Breakdown";
 import { formatMetric, MainChart, METRIC_LABELS, type ChartMetric } from "../components/Chart";
+import { SearchKeywords } from "../components/SearchConsole";
 import { FilterBar, PeriodPicker } from "../components/Filters";
 import { Button, Card, cx, Delta, Empty, ErrorBox, Field, Modal, Spinner, Tabs } from "../components/ui";
 import { api, useApi, useLocalStorage } from "../lib/api";
@@ -447,6 +448,7 @@ export function DashboardPage() {
             { key: "hostname", label: "Hostname", dim: "hostname" },
           ]}
         />
+        <SearchKeywords showRevenue={showRevenue} />
         <BreakdownPanel
           id="locations"
           title="Locations"

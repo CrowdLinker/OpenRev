@@ -114,6 +114,10 @@ Monthly recurring revenue for the range, from subscription payments ([how it's c
 
 Current MRR, `subscribers`, `new_mrr`, `new_subscribers` and `churned_mrr` in the range, grouped by what brought each subscription in. `group` is `channel` (the default), `source`, `utm_campaign` or `country`.
 
+### `GET /analytics/search-keywords`
+
+Google search keywords in the range, when [Search Console is connected](../features/search-console.md). Each row has `query`, `clicks`, `impressions`, `ctr`, `position` (average), `page` (the landing page with the most clicks) and `revenue`: an estimate, from the revenue of Google organic visits to each landing page shared between its keywords by clicks. `sort` is `clicks` (default), `revenue` or `impressions`; `limit` defaults to 50. `meta.totals` has `clicks`, `impressions`, `revenue` (shared out) and `organic_revenue` (Google organic revenue on all landing pages). Filters don't apply.
+
 ### `GET /analytics/realtime`
 
 Visitors active in the last 5 minutes, live sessions (current page, source, location, buyer-intent score), recent events and payments.
@@ -235,4 +239,4 @@ claude mcp add --transport http openrev https://analytics.example.com/mcp --head
 }
 ```
 
-Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `get_mrr`, `get_mrr_breakdown`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.
+Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `get_mrr`, `get_mrr_breakdown`, `get_search_keywords`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.
