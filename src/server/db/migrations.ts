@@ -277,6 +277,17 @@ CREATE TABLE IF NOT EXISTS salts (
 );
 `,
   },
+  {
+    id: 2,
+    name: "subscription billing interval",
+    // How often a subscription payment recurs, when the provider says so. MRR uses it to spread a payment over
+    // its period; for payments without it the interval is inferred from the gaps between renewals.
+    sql: `
+ALTER TABLE payments ADD COLUMN billing_interval TEXT;
+ALTER TABLE payments ADD COLUMN billing_interval_count INTEGER;
+CREATE INDEX IF NOT EXISTS payments_subscription ON payments (site_id, subscription_id);
+`,
+  },
 ];
 
 export const LATEST_MIGRATION = migrations[migrations.length - 1].id;

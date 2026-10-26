@@ -1,3 +1,4 @@
+import { intervalFromPeriod, parseInterval, type BillingInterval } from "../lib/billing";
 import { hmacHex, safeEqual } from "../lib/crypto";
 import { isValidClientId } from "../lib/ids";
 import type { NormalizedGoal, NormalizedPayment } from "../services/payments";
@@ -27,6 +28,19 @@ function invoiceMetadata(invoice: Obj): Obj[] {
     invoice.parent?.subscription_details?.metadata,
     invoice.lines?.data?.[0]?.metadata,
   ].filter(Boolean);
+}
+
+/** The billing interval of a subscription invoice: the price's recurring interval, else its line's period. */
+function invoiceInterval(invoice: Obj): BillingInterval | null {
+  // Every line has a period, so prefer the subscription's own line over a setup fee or one-off item listed first.
+  const lines: Obj[] = invoice.lines?.data ?? [];
+  const line: Obj = lines.find((l) => l?.price?.recurring || l?.plan) ?? lines.find((l) => l?.period) ?? {};
+  const recurring: Obj | undefined = line.price?.recurring ?? line.plan;
+  return (
+    parseInterval(recurring?.interval, recurring?.interval_count) ??
+    intervalFromPeriod(line.period?.start, line.period?.end) ??
+    intervalFromPeriod(invoice.period_start, invoice.period_end)
+  );
 }
 
 function invoiceSubscription(invoice: Obj): string | null {
@@ -76,6 +90,7 @@ function fromInvoice(inv: Obj, eventCreated?: number): NormalizedPayment | null 
     email: inv.customer_email ?? null,
     name: inv.customer_name ?? null,
     subscriptionId: subscription,
+    interval: invoiceInterval(inv),
     description: inv.lines?.data?.[0]?.description ?? null,
   };
 }

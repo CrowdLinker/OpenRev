@@ -1,3 +1,4 @@
+import { intervalFromPeriod } from "../lib/billing";
 import type { NormalizedPayment } from "../services/payments";
 import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
 import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
@@ -72,6 +73,8 @@ export function parseRazorpayEvent(event: Obj): ProviderResult {
       const p = paymentFrom(payment, notesOf(payment, sub), paidCount > 1 ? "renewal" : "new", str(sub.id));
       if (!p) return { payments, ignored: "payment not captured or zero amount" };
       if (!p.customerId) p.customerId = str(sub.customer_id);
+      // The subscription's current billing cycle gives its interval (Razorpay plans don't come with the event).
+      p.interval = intervalFromPeriod(sub.current_start, sub.current_end);
       payments.push(p);
       break;
     }

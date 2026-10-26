@@ -1,3 +1,4 @@
+import { parseInterval } from "../lib/billing";
 import type { NormalizedPayment } from "../services/payments";
 import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
 import { asObject, currencyCode, num, pairsToObject, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
@@ -58,6 +59,8 @@ function chargePayment(d: Obj): NormalizedPayment | null {
     name,
     ref: reference,
     subscriptionId: str(d.subscription?.subscription_code) ?? str(d.subscription_code),
+    // Plans bill hourly, daily, weekly, monthly, quarterly, biannually or annually (hourly isn't recognized).
+    interval: parseInterval(plan?.interval),
     description: plan?.name ? String(plan.name) : null,
   };
 }

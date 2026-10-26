@@ -1,3 +1,4 @@
+import { intervalFromPeriod, parseInterval } from "../lib/billing";
 import type { NormalizedGoal, NormalizedPayment } from "../services/payments";
 import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
 import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
@@ -81,6 +82,8 @@ function subscriptionPayment(s: Obj, eventCreated?: unknown): NormalizedPayment 
     email: customer.email ?? null,
     name: customer.name ?? null,
     subscriptionId: str(s.id),
+    // Products bill every-month, every-three-months, every-six-months or every-year.
+    interval: parseInterval(product.billing_period) ?? intervalFromPeriod(s.current_period_start_date, s.current_period_end_date),
     description: product.name ?? null,
   };
 }

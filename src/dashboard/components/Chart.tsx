@@ -286,3 +286,150 @@ export function MiniBars({ values, height = 40, className = "fill-brand-500" }: 
     </svg>
   );
 }
+
+export interface MrrChartPoint {
+  date: string;
+  start: number;
+  mrr: number;
+  subscribers: number;
+  new: number;
+  expansion: number;
+  reactivation: number;
+  contraction: number;
+  churn: number;
+}
+
+const MOVEMENTS = [
+  { key: "new", label: "New", className: "fill-money-500", dot: "bg-money-500" },
+  { key: "expansion", label: "Expansion", className: "fill-money-300 dark:fill-money-400/70", dot: "bg-money-300" },
+  { key: "reactivation", label: "Reactivation", className: "fill-sky-400 dark:fill-sky-500/80", dot: "bg-sky-400" },
+  { key: "contraction", label: "Contraction", className: "fill-amber-400 dark:fill-amber-500/80", dot: "bg-amber-400" },
+  { key: "churn", label: "Churn", className: "fill-red-400 dark:fill-red-500/80", dot: "bg-red-400" },
+] as const;
+
+/** MRR over time (line) above each period's MRR movements (bars: gains up, losses down). */
+export function MrrChart({ points, interval, currency, height = 320 }: { points: MrrChartPoint[]; interval: string; currency: string; height?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(800);
+  const [hover, setHover] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const ro = new ResizeObserver((entries) => setWidth(Math.max(300, entries[0].contentRect.width)));
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const padL = 56;
+  const padR = 12;
+  const padT = 12;
+  const padB = 30;
+  const gap = 18;
+  const innerW = width - padL - padR;
+  const lineH = Math.round((height - padT - padB - gap) * 0.62);
+  const barsTop = padT + lineH + gap;
+  const barsH = height - padB - barsTop;
+  const n = Math.max(points.length, 1);
+  const step = innerW / n;
+  const x = (i: number) => padL + step * (i + 0.5);
+
+  const maxM = niceMax(Math.max(...points.map((p) => p.mrr), 0) * 1.08);
+  const yM = (v: number) => padT + lineH - (v / maxM) * lineH;
+  const gains = points.map((p) => p.new + p.expansion + p.reactivation);
+  const losses = points.map((p) => p.contraction + p.churn); // <= 0
+  const maxMove = niceMax(Math.max(...gains, ...losses.map((v) => -v), 0) * 1.1);
+  const zeroY = barsTop + barsH / 2;
+  const scaleMove = (v: number) => (v / maxMove) * (barsH / 2);
+  const barW = Math.max(2, Math.min(step * 0.55, 22));
+
+  const linePts = points.map((p, i) => [x(i), yM(p.mrr)] as [number, number]);
+  const line = smoothPath(linePts);
+  const area = points.length ? `${line} L${x(points.length - 1)},${padT + lineH} L${x(0)},${padT + lineH} Z` : "";
+  const labelEvery = Math.max(1, Math.ceil(points.length / Math.max(2, Math.floor(innerW / 80))));
+  const hp = hover !== null ? points[hover] : null;
+  const tooltipLeft = hover !== null ? Math.min(Math.max(x(hover) - 115, 0), width - 240) : 0;
+
+  return (
+    <div ref={ref} className="relative w-full select-none" style={{ height }} onMouseLeave={() => setHover(null)}>
+      <svg width={width} height={height} className="overflow-visible">
+        <defs>
+          <linearGradient id="mrrFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-money-500)" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="var(--color-money-500)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 0.5, 1].map((t) => (
+          <g key={t}>
+            <line x1={padL} x2={width - padR} y1={padT + lineH * (1 - t)} y2={padT + lineH * (1 - t)} className="stroke-zinc-200 dark:stroke-zinc-800" strokeDasharray={t === 0 ? undefined : "3 4"} />
+            <text x={padL - 8} y={padT + lineH * (1 - t) + 4} textAnchor="end" className="fill-zinc-400 text-[10px] tabular">
+              {money(maxM * t, currency, { compact: true })}
+            </text>
+          </g>
+        ))}
+        <line x1={padL} x2={width - padR} y1={zeroY} y2={zeroY} className="stroke-zinc-300 dark:stroke-zinc-700" />
+        <text x={padL - 8} y={barsTop + 8} textAnchor="end" className="fill-zinc-400 text-[10px] tabular">
+          +{money(maxMove, currency, { compact: true })}
+        </text>
+        <text x={padL - 8} y={barsTop + barsH} textAnchor="end" className="fill-zinc-400 text-[10px] tabular">
+          −{money(maxMove, currency, { compact: true })}
+        </text>
+
+        {points.map((p, i) => {
+          let up = zeroY;
+          let down = zeroY;
+          return (
+            <g key={`m${i}`} opacity={hover === null || hover === i ? 1 : 0.55}>
+              {MOVEMENTS.map((m) => {
+                const v = p[m.key];
+                if (!v) return null;
+                const h = Math.abs(scaleMove(v));
+                const y = v > 0 ? (up -= h) : down;
+                if (v < 0) down += h;
+                return <rect key={m.key} x={x(i) - barW / 2} y={y} width={barW} height={Math.max(h, 1)} className={m.className} />;
+              })}
+            </g>
+          );
+        })}
+
+        {points.length > 0 && (
+          <>
+            <path d={area} fill="url(#mrrFill)" />
+            <path d={line} fill="none" stroke="var(--color-money-500)" strokeWidth={2.25} strokeLinejoin="round" strokeLinecap="round" />
+          </>
+        )}
+
+        {points.map((p, i) =>
+          i % labelEvery === 0 ? (
+            <text key={`l${i}`} x={x(i)} y={height - 8} textAnchor="middle" className="fill-zinc-400 text-[10px]">
+              {bucketLabel(p.date, interval)}
+            </text>
+          ) : null,
+        )}
+
+        {hover !== null && hp && (
+          <g pointerEvents="none">
+            <line x1={x(hover)} x2={x(hover)} y1={padT} y2={barsTop + barsH} className="stroke-zinc-300 dark:stroke-zinc-600" />
+            <circle cx={x(hover)} cy={yM(hp.mrr)} r={4.5} fill="var(--color-money-500)" className="stroke-white dark:stroke-zinc-900" strokeWidth={2} />
+          </g>
+        )}
+
+        {points.map((_, i) => (
+          <rect key={`h${i}`} x={padL + step * i} y={padT} width={step} height={height - padT} fill="transparent" onMouseEnter={() => setHover(i)} onTouchStart={() => setHover(i)} />
+        ))}
+      </svg>
+
+      {hp && hover !== null && (
+        <div className="card pointer-events-none absolute top-2 z-10 w-[240px] p-3 text-xs shadow-lg" style={{ left: tooltipLeft }}>
+          <div className="mb-2 font-medium text-zinc-500">{bucketLabel(hp.date, interval, true)}</div>
+          <div className="space-y-1.5">
+            <Row color="bg-money-500" label="MRR" value={money(hp.mrr, currency)} />
+            <Row label="Subscribers" value={num(hp.subscribers, false)} />
+            {MOVEMENTS.filter((m) => hp[m.key]).map((m) => (
+              <Row key={m.key} color={m.dot} label={m.label} value={`${hp[m.key] > 0 ? "+" : "−"}${money(Math.abs(hp[m.key]), currency)}`} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

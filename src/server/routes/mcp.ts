@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { VERSION, type AppEnv, type ApiKeyAuth, type Runtime } from "../context";
 import { uuid } from "../lib/ids";
 import { verifyApiKey } from "../services/auth";
+import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
 import { getMemberRole, getSite, roleAtLeast, type Role, type Site } from "../services/sites";
 import * as stats from "../services/stats";
 import { buildStatsQuery, rangeInfo } from "./helpers";
@@ -65,6 +66,17 @@ const TOOLS = [
     description: "Customers acquired in a period grouped by first-touch source with lifetime value, renewals and repeat purchase rate.",
     inputSchema: { type: "object", properties: { ...websiteProp, ...rangeProps, group_by: { type: "string", enum: ["source", "channel", "country", "utm_campaign"] } } },
   },
+  {
+    name: "get_mrr",
+    description:
+      "Monthly recurring revenue for a period: MRR and ARR at the end, subscribers, ARPU, new/expansion/reactivation/contraction/churn MRR, churn rate, revenue churn and net revenue retention, plus MRR over time.",
+    inputSchema: { type: "object", properties: { ...websiteProp, ...rangeProps } },
+  },
+  {
+    name: "get_mrr_breakdown",
+    description: "Current MRR, MRR won and MRR churned in a period, grouped by the channel, source, campaign or country that brought each subscription in.",
+    inputSchema: { type: "object", properties: { ...websiteProp, ...rangeProps, group_by: { type: "string", enum: ["channel", "source", "utm_campaign", "country"] } } },
+  },
   { name: "list_funnels", description: "List the funnels defined for a website.", inputSchema: { type: "object", properties: { ...websiteProp } } },
   { name: "get_funnel", description: "Conversion and drop-off for each step of a funnel.", inputSchema: { type: "object", required: ["funnel_id"], properties: { ...websiteProp, ...rangeProps, funnel_id: { type: "string" } } } },
   {
@@ -127,6 +139,12 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
       return { range: rangeInfo(q), ...money, payments: await stats.listPayments(rt.db, q, { limit: Number(args.limit ?? 50) }) };
     case "get_ltv":
       return { range: rangeInfo(q), ...money, rows: await stats.customerLtv(rt.db, q, (args.group_by as "source") ?? "source") };
+    case "get_mrr":
+      return { range: rangeInfo(q), ...money, ...(await mrrReport(rt.db, q)) };
+    case "get_mrr_breakdown": {
+      const group = mrrGroup(args.group_by);
+      return { range: rangeInfo(q), ...money, group, rows: await mrrBreakdown(rt.db, q, group) };
+    }
     case "list_funnels": {
       const rows = await rt.db.all<{ id: string; name: string; steps: string }>("SELECT id, name, steps FROM funnels WHERE site_id = ?", [site.id]);
       return rows.map((r) => ({ ...r, steps: JSON.parse(r.steps) }));

@@ -1,3 +1,4 @@
+import { parseInterval } from "../lib/billing";
 import { toMinor } from "../lib/currency";
 import type { NormalizedPayment } from "../services/payments";
 import type { PaymentProvider, ProviderConfig, ProviderResult, WebhookRequest } from "./types";
@@ -123,6 +124,8 @@ export function parseCustomEvent(body: Obj, config: ProviderConfig): ProviderRes
     email: email && email.includes("@") ? email : null,
     ref: str(readPath(body, config.refPath)),
     relatedTransactionId: kind === "refund" ? str(readPath(body, config.relatedTransactionIdPath)) : null,
+    subscriptionId: str(readPath(body, config.subscriptionIdPath)),
+    interval: kind === "payment" ? parseInterval(readPath(body, config.intervalPath), readPath(body, config.intervalCountPath)) : null,
   });
   return { payments };
 }
@@ -316,6 +319,27 @@ export const custom: PaymentProvider = {
       type: "text",
       placeholder: "subscription_cycle",
       help: "The value at the renewal path that means “renewal”. Leave empty to treat any truthy value (true, 1, \"yes\") as a renewal.",
+    },
+    {
+      key: "subscriptionIdPath",
+      label: "Subscription id path",
+      type: "text",
+      placeholder: "data.subscription_id",
+      help: "Dotted path to the subscription id. Payments that share one are counted as one subscription in MRR.",
+    },
+    {
+      key: "intervalPath",
+      label: "Billing interval path",
+      type: "text",
+      placeholder: "data.plan.interval",
+      help: "Dotted path to how often the subscription bills (`month`, `year`, `weekly`, `annually`…). Optional: without it MRR infers the interval from the gaps between renewals.",
+    },
+    {
+      key: "intervalCountPath",
+      label: "Interval count path",
+      type: "text",
+      placeholder: "data.plan.interval_count",
+      help: "Dotted path to the number of intervals per charge, e.g. 3 for every 3 months. Optional, defaults to 1.",
     },
   ],
   events: [],

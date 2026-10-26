@@ -96,6 +96,23 @@ Each row: `value`, `meta` (favicon domain for sources, country code for regions/
 
 DataFast-style aliases also work: `/analytics/pages`, `/analytics/referrers`, `/analytics/countries`, `/analytics/regions`, `/analytics/cities`, `/analytics/devices`, `/analytics/browsers`, `/analytics/operating-systems`, `/analytics/campaigns`, `/analytics/hostnames`, `/analytics/exit-clicks`, `/analytics/channels`, `/analytics/goals`.
 
+### `GET /analytics/mrr`
+
+Monthly recurring revenue for the range, from subscription payments ([how it's computed](../features/mrr.md)). `data.summary` has:
+- `mrr`, `arr`, `subscribers` and `arpu` at the end of the range.
+- `mrr_start` and `subscribers_start`, at its start.
+- `net_change`.
+- The movements: `new`, `expansion`, `reactivation`, `contraction` and `churn`, where losses are negative.
+- `new_subscribers` and `churned_subscribers`.
+- `churn_rate`, `revenue_churn_rate` and `net_revenue_retention`: ratios, or `null` when no subscriber was active at the start.
+- `assumed_interval`: subscriptions assumed to bill monthly.
+
+`data.timeseries` has one point per `interval`, with `mrr`, `subscribers` and that point's movements. Amounts are in minor units.
+
+### `GET /analytics/mrr/breakdown`
+
+Current MRR, `subscribers`, `new_mrr`, `new_subscribers` and `churned_mrr` in the range, grouped by what brought each subscription in. `group` is `channel` (the default), `source`, `utm_campaign` or `country`.
+
 ### `GET /analytics/realtime`
 
 Visitors active in the last 5 minutes, live sessions (current page, source, location, buyer-intent score), recent events and payments.
@@ -143,6 +160,8 @@ curl -X POST "$OPENREV/api/v1/payments" \
 | `openrev_session_id` | | Optional, the `openrev_session_id` cookie. `datafast_session_id` is accepted. |
 | `email`, `name`, `customer_id` | | Used to link renewals and identify customers. |
 | `renewal` | | `true` for recurring charges. |
+| `subscription_id` | | Groups a subscription's payments, for [MRR](../features/mrr.md). |
+| `interval`, `interval_count` | | How often the subscription bills: `day`, `week`, `month` or `year` (`monthly`, `annually`, `quarterly`… work too), and how many of them per payment (default 1), up to 3 years in all. Without it, MRR infers the interval from the gaps between payments. |
 | `refunded` | | `true` for refunds (`amount` = refunded amount). Use `related_transaction_id` to inherit the original attribution. |
 | `timestamp` | | ISO 8601 or unix seconds/ms. Defaults to now. |
 | `provider` | | Label shown in the dashboard (default `api`). |
@@ -215,4 +234,4 @@ claude mcp add --transport http openrev https://analytics.example.com/mcp --head
 }
 ```
 
-Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.
+Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `get_mrr`, `get_mrr_breakdown`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.
