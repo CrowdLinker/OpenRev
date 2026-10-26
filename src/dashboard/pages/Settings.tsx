@@ -1,7 +1,7 @@
 import { AlertTriangle, Bell, CheckCircle2, Download, ExternalLink, KeyRound, Plus, Trash2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { InstallGuide, QUEUE_SNIPPET, scriptUrl, VerifyInstall } from "../components/InstallGuide";
+import { InstallGuide, QUEUE_SNIPPET, scriptUrl, snippet, VerifyInstall } from "../components/InstallGuide";
 import { LiveBadge } from "../components/LiveBadge";
 import { Badge, Button, Card, CodeBlock, CopyButton, cx, Empty, ErrorBox, Field, Loading, Modal, Section, Toggle } from "../components/ui";
 import { api, useApi } from "../lib/api";
@@ -285,6 +285,34 @@ function TrackingSettings({ site }: { site: Site }) {
         <p className="mt-4 mb-2 text-sm text-zinc-600 dark:text-zinc-400">Identify logged-in users (shows names in journeys & realtime):</p>
         <CodeBlock code={`openrev("identify", { user_id: "usr_123", name: "Jane Doe", email: "jane@example.com", plan: "pro" });`} />
       </Section>
+      {!site.settings.cookieless && (
+        <Section
+          title="Cookie consent"
+          description="Showing a cookie banner? Use the consent build instead: it tracks without cookies until the visitor accepts, then switches to cookies and keeps the same visit."
+        >
+          <CodeBlock code={snippet(site, "consent")} />
+          <p className="mt-4 mb-2 text-sm text-zinc-600 dark:text-zinc-400">Then tell OpenRev what the visitor chose, from your banner's buttons (with the queue snippet above):</p>
+          <CodeBlock
+            code={`// When the visitor accepts analytics cookies:
+openrev("consent", true);
+
+// When they reject them, or withdraw consent later:
+openrev("consent", false);`}
+          />
+          <p className="mt-4 text-sm text-zinc-500">
+            Using Google Consent Mode? Add <code className="code">data-consent="google"</code> and OpenRev follows <code className="code">analytics_storage</code>{" "}
+            instead.{" "}
+            <a
+              className="text-brand-600 hover:underline"
+              href="https://github.com/CrowdLinker/OpenRev/blob/main/docs/tracking/privacy-and-cookies.md#cookieless-until-consent"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Consent guide
+            </a>
+          </p>
+        </Section>
+      )}
       <Section title="Script options">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -298,6 +326,7 @@ function TrackingSettings({ site }: { site: Site }) {
                 ["data-allow-file-protocol", "Set to true to track pages opened from file://."],
                 ["data-hash", "Set to true for hash-based routing (or use script.hash.js)."],
                 ["data-cookieless", "Set to true for cookieless tracking (or use script.cookieless.js)."],
+                ["data-consent", 'With script.consent.js: set to "google" to follow Google Consent Mode instead of openrev("consent", …).'],
                 ["data-disable-payments", "Disable automatic payment link tagging & checkout detection."],
                 ["data-disable-outbound", "Disable outbound link tracking."],
                 ["data-disable-console", "Silence console messages."],

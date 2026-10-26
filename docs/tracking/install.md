@@ -21,6 +21,7 @@ In the examples below, `https://analytics.example.com` is your OpenRev instance 
 - `data-website-id` is required. Without it nothing is tracked.
 - `data-domain` is your root domain. It lets visitor and session cookies be shared across subdomains (`www.example.com`, `app.example.com`…).
 - If you turned on **Cookieless mode** in **Settings → General**, the snippet uses `/js/script.cookieless.js` instead. See [Privacy & cookies](privacy-and-cookies.md).
+- If you show a cookie banner, use `/js/script.consent.js` to stay cookieless until the visitor accepts. See [Cookieless until consent](privacy-and-cookies.md#cookieless-until-consent).
 
 Every option is listed in the [script reference](script-reference.md).
 
