@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { RowIcon, rowLabel } from "../components/Breakdown";
 import { MrrChart, type MrrChartPoint } from "../components/Chart";
 import { FilterBar, PeriodPicker } from "../components/Filters";
-import { Card, Empty, Spinner, Tabs } from "../components/ui";
+import { Card, Empty, ErrorBox, Spinner, Tabs } from "../components/ui";
 import { useApi } from "../lib/api";
 import { canEdit, useSite } from "../lib/context";
 import { money, num, pct } from "../lib/format";
@@ -191,6 +191,8 @@ export function MrrPage() {
             </p>
           )}
         </>
+      ) : report.error ? (
+        <ErrorBox error={report.error} />
       ) : null}
     </div>
   );

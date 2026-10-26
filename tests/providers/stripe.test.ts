@@ -121,6 +121,28 @@ describe("stripe.parse", () => {
       data: { object: { id: "in_4", subscription: "sub_3", amount_paid: 3000, currency: "usd", lines: { data: [{ period: { start: 1735689600, end: 1743465600 } }] } } },
     });
     expect(quarterly.payments[0].interval).toEqual({ unit: "month", count: 3 });
+    // A setup fee listed before the plan doesn't decide the interval.
+    const withFee = parseStripeEvent({
+      type: "invoice.paid",
+      data: {
+        object: {
+          id: "in_5",
+          subscription: "sub_4",
+          billing_reason: "subscription_create",
+          amount_paid: 17000,
+          currency: "usd",
+          period_start: 1735689600,
+          period_end: 1735689600,
+          lines: {
+            data: [
+              { amount: 5000, period: { start: 1735689600, end: 1735689600 } },
+              { amount: 12000, price: { recurring: { interval: "year", interval_count: 1 } }, period: { start: 1735689600, end: 1767225600 } },
+            ],
+          },
+        },
+      },
+    });
+    expect(withFee.payments[0].interval).toEqual({ unit: "year", count: 1 });
   });
 
   it("records cumulative refunds linked to the original payment", () => {

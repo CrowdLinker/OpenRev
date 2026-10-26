@@ -126,7 +126,8 @@ export async function loadSubscriptions(db: Database, q: StatsQuery, now = Date.
      FROM payments
      WHERE site_id = ? AND subscription_id IS NOT NULL AND type <> 'refund' AND revenue > 0 AND ts < ?
      ORDER BY ts`,
-    [q.site.id, Math.min(q.range.to, now)],
+    // Renewals up to the grace period after the range still tell whether a subscription was active at its end.
+    [q.site.id, Math.min(q.range.to + GRACE_MS, now)],
   );
   const byKey = new Map<string, Charge[]>();
   for (const r of rows) {
@@ -222,7 +223,7 @@ export async function mrrReport(db: Database, q: StatsQuery, interval?: Interval
       churn_rate: activeAtStart.length ? activeAtStart.filter((s) => mrrAt(s, end) === 0).length / activeAtStart.length : null,
       revenue_churn_rate: mrrStart ? lostFromStart / mrrStart : null,
       net_revenue_retention: mrrStart ? activeAtStart.reduce((n, s) => n + mrrAt(s, end), 0) / mrrStart : null,
-      assumed_interval: subs.filter((s) => s.assumedInterval && s.segments.some((g) => g.to > q.range.from)).length,
+      assumed_interval: subs.filter((s) => s.assumedInterval && s.firstTs < q.range.to && s.segments.some((g) => g.to > q.range.from)).length,
       ...sums,
     },
     timeseries,

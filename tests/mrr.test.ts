@@ -170,6 +170,20 @@ describe.each([
     expect(breakdown.json.rows).toEqual([expect.objectContaining({ value: "__unattributed__", mrr: 5000, subscribers: 2 })]);
   });
 
+  it("counts a renewal up to 7 days after a past range's end as continuing, not churn", async () => {
+    const other = (await call("/api/sites", { body: { domain: "late.example", timezone: "UTC", currency: "USD" } })).json.site.id;
+    const key = (await call(`/api/sites/${other}/keys`, { body: { name: "test" } })).json.key;
+    const at = (transaction_id: string, timestamp: number) =>
+      call("/api/v1/payments", {
+        body: { transaction_id, subscription_id: "sub_late", amount: 50, currency: "USD", timestamp, interval: "month" },
+        headers: { Authorization: `Bearer ${key}` },
+      });
+    await at("l1", Date.UTC(2026, 2, 1, 12));
+    await at("l2", Date.UTC(2026, 3, 4, 12)); // the March period ends around Mar 31; this renewal is ~3.5 days late
+    const r = await call(`/api/sites/${other}/stats/mrr?from=2026-03-01&to=2026-03-31`);
+    expect(r.json.summary).toMatchObject({ mrr: 5000, subscribers: 1, churned_subscribers: 0, churn: 0, assumed_interval: 0 });
+  });
+
   it("stores the interval sent with a payment", async () => {
     const row = await rt.db.first<{ billing_interval: string; billing_interval_count: number }>(
       "SELECT billing_interval, billing_interval_count FROM payments WHERE site_id = ? AND transaction_id = 'b1'",

@@ -32,7 +32,9 @@ function invoiceMetadata(invoice: Obj): Obj[] {
 
 /** The billing interval of a subscription invoice: the price's recurring interval, else its line's period. */
 function invoiceInterval(invoice: Obj): BillingInterval | null {
-  const line: Obj = invoice.lines?.data?.find((l: Obj) => l?.price?.recurring || l?.plan || l?.period) ?? {};
+  // Every line has a period, so prefer the subscription's own line over a setup fee or one-off item listed first.
+  const lines: Obj[] = invoice.lines?.data ?? [];
+  const line: Obj = lines.find((l) => l?.price?.recurring || l?.plan) ?? lines.find((l) => l?.period) ?? {};
   const recurring: Obj | undefined = line.price?.recurring ?? line.plan;
   return (
     parseInterval(recurring?.interval, recurring?.interval_count) ??
