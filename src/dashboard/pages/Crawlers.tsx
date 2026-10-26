@@ -52,7 +52,7 @@ function Tile({ label, value, sub, dot, tone, help }: { label: string; value: st
 }
 
 export function CrawlersPage() {
-  const { statsBase, meta, role, isPublic } = useSite();
+  const { statsBase, meta, role, isPublic, canSeeRevenue } = useSite();
   const [q] = useDashQuery();
   const [category, setCategory] = useState<"all" | Category>("all");
   const report = useApi<CrawlerResponse>(`${statsBase}/crawlers?${toSearch(q, { category: category === "all" ? undefined : category })}`);
@@ -60,7 +60,7 @@ export function CrawlersPage() {
   const s = d?.summary;
   const cur = d?.currency ?? meta?.site.currency ?? "USD";
   const editor = !isPublic && canEdit(role);
-  const hideRevenue = meta?.site.hideRevenue;
+  const hideRevenue = !canSeeRevenue;
 
   return (
     <div className="space-y-4">

@@ -149,14 +149,15 @@ export function BreakdownList({
 }
 
 export function BreakdownPanel({ id, title, tabs, extra }: { id: string; title: ReactNode; tabs: PanelTab[]; extra?: ReactNode }) {
-  const { statsBase, site, meta } = useSite();
+  const { statsBase, site, meta, canSeeRevenue: showRevenue } = useSite();
   const [q, setQ] = useDashQuery();
   const [tabKey, setTabKey] = useLocalStorage(`openrev_tab_${id}`, tabs[0].key);
-  const [sort, setSort] = useLocalStorage<"visitors" | "revenue">(`openrev_sort_${id}`, "visitors");
+  const [savedSort, setSort] = useLocalStorage<"visitors" | "revenue">(`openrev_sort_${id}`, "visitors");
+  // A sort by revenue saved earlier doesn't apply once revenue is hidden.
+  const sort = showRevenue ? savedSort : "visitors";
   const [details, setDetails] = useState(false);
   const tab = tabs.find((t) => t.key === tabKey) ?? tabs[0];
   const currency = meta?.site.currency ?? site?.currency ?? "USD";
-  const showRevenue = !(meta?.site.hideRevenue ?? site?.settings.hideRevenue);
   const path = tab.map
     ? `${statsBase}/breakdown/country?${toSearch(q, { limit: "250" })}`
     : `${statsBase}/breakdown/${tab.dim}?${toSearch(q, { limit: "10", sort })}`;
@@ -213,13 +214,12 @@ export function BreakdownPanel({ id, title, tabs, extra }: { id: string; title: 
 }
 
 function DetailsModal({ tab, onClose, onSelect }: { tab: PanelTab; onClose: () => void; onSelect: (r: BreakdownRow) => void }) {
-  const { statsBase, meta, site } = useSite();
+  const { statsBase, meta, site, canSeeRevenue: showRevenue } = useSite();
   const [q] = useDashQuery();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<keyof BreakdownRow>("visitors");
   const { data, loading } = useApi<{ rows: BreakdownRow[] }>(`${statsBase}/breakdown/${tab.dim}?${toSearch(q, { limit: "500", sort: "visitors" })}`);
   const currency = meta?.site.currency ?? site?.currency ?? "USD";
-  const showRevenue = !(meta?.site.hideRevenue ?? site?.settings.hideRevenue);
   const rows = useMemo(() => {
     const list = (data?.rows ?? []).filter((r) => rowLabel(tab.dim, r).toLowerCase().includes(search.toLowerCase()));
     return [...list].sort((a, b) => Number(b[sort] ?? 0) - Number(a[sort] ?? 0));

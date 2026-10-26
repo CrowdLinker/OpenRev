@@ -17,6 +17,8 @@ export interface SiteState {
   meta: SiteMeta | null;
   role: Role | null;
   isPublic: boolean;
+  /** Whether this viewer sees revenue. When not, the API leaves it out: hide the cards, tabs and columns. */
+  canSeeRevenue: boolean;
   reloadSite: () => void;
   reloadMeta: () => void;
 }
@@ -26,6 +28,7 @@ export const SiteContext = createContext<SiteState>({
   meta: null,
   role: null,
   isPublic: false,
+  canSeeRevenue: false,
   reloadSite: () => {},
   reloadMeta: () => {},
 });

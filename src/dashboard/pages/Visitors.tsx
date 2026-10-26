@@ -10,10 +10,12 @@ import { toSearch, useDashQuery } from "../lib/query";
 import type { Row } from "../lib/types";
 
 export function VisitorsPage() {
-  const { statsBase, meta } = useSite();
+  const { statsBase, meta, canSeeRevenue } = useSite();
   const [q] = useDashQuery();
   const [search, setSearch] = useState("");
-  const [customers, setCustomers] = useState(false);
+  const [onlyCustomers, setCustomers] = useState(false);
+  // Listing customers is revenue data: the filter is only offered (and sent) to members who can see revenue.
+  const customers = canSeeRevenue && onlyCustomers;
   const [goal, setGoal] = useState("");
   const [page, setPage] = useState(0);
   const path = `${statsBase}/visitors?${toSearch(q, { search: search || undefined, customers: customers ? "1" : undefined, goal: goal || undefined, offset: String(page * 50) })}`;
@@ -48,7 +50,7 @@ export function VisitorsPage() {
               ))}
             </select>
           )}
-          {!meta?.site.hideRevenue && <Toggle checked={customers} onChange={setCustomers} label="Customers only" />}
+          {canSeeRevenue && <Toggle checked={customers} onChange={setCustomers} label="Customers only" />}
           {loading && <Spinner />}
         </div>
         <ErrorBox error={error} />
@@ -63,7 +65,7 @@ export function VisitorsPage() {
                   <th className="pb-2 font-medium">First source</th>
                   <th className="pb-2 font-medium">Location</th>
                   <th className="pb-2 text-right font-medium">Visits</th>
-                  {!meta?.site.hideRevenue && <th className="pb-2 text-right font-medium">Revenue</th>}
+                  {canSeeRevenue && <th className="pb-2 text-right font-medium">Revenue</th>}
                   <th className="pb-2 text-right font-medium">Last seen</th>
                 </tr>
               </thead>
@@ -93,7 +95,7 @@ export function VisitorsPage() {
                         </span>
                       </td>
                       <td className="py-2.5 text-right tabular">{num(Number(v.sessions), false)}</td>
-                      {!meta?.site.hideRevenue && (
+                      {canSeeRevenue && (
                         <td className="py-2.5 text-right font-medium tabular text-money-600 dark:text-money-400">{Number(v.revenue) ? money(Number(v.revenue), currency) : "–"}</td>
                       )}
                       <td className="py-2.5 text-right text-xs text-zinc-500">{timeAgo(Number(v.last_seen))}</td>
@@ -122,8 +124,9 @@ interface Profile {
   visitor: Row;
   sessions: Row[];
   events: Row[];
-  payments: Row[];
-  revenue: number;
+  /** Left out for viewers who can't see revenue. */
+  payments?: Row[];
+  revenue?: number;
 }
 
 export function VisitorProfilePage({ visitorId }: { visitorId: string }) {
@@ -137,7 +140,8 @@ export function VisitorProfilePage({ visitorId }: { visitorId: string }) {
   const currency = data.currency;
   const first = data.sessions[data.sessions.length - 1];
   const pageviews = data.sessions.reduce((a, s) => a + Number(s.pageviews), 0);
-  const firstPayment = [...data.payments].reverse().find((p) => p.type !== "refund");
+  const payments = data.payments ?? [];
+  const firstPayment = [...payments].reverse().find((p) => p.type !== "refund");
   const daysToConvert = firstPayment && first ? Math.round((Number(firstPayment.ts) - Number(first.started_at)) / 86_400_000) : null;
 
   // Group events and payments under sessions for the timeline
@@ -164,7 +168,7 @@ export function VisitorProfilePage({ visitorId }: { visitorId: string }) {
                 {v.user_id && v.user_id !== v.email && <div className="truncate font-mono text-xs text-zinc-400">id: {v.user_id}</div>}
               </div>
             </div>
-            {data.revenue > 0 && (
+            {!!data.revenue && data.revenue > 0 && (
               <div className="mt-4 rounded-xl bg-money-50 p-3 dark:bg-money-500/10">
                 <div className="text-xs text-money-700 dark:text-money-400">Lifetime revenue</div>
                 <div className="text-2xl font-semibold text-money-700 tabular dark:text-money-400">{money(data.revenue, currency)}</div>
@@ -220,7 +224,7 @@ export function VisitorProfilePage({ visitorId }: { visitorId: string }) {
           <div className="space-y-6">
             {data.sessions.map((s) => {
               const events = [...(eventsBySession.get(String(s.id)) ?? [])].reverse();
-              const payments = data.payments.filter((p) => p.last_session_id === s.id || p.touch_session_id === s.id);
+              const sessionPayments = payments.filter((p) => p.last_session_id === s.id || p.touch_session_id === s.id);
               return (
                 <div key={String(s.id)} className="relative border-l-2 border-zinc-200 pl-5 dark:border-zinc-800">
                   <span className="absolute top-1 -left-[7px] h-3 w-3 rounded-full border-2 border-white bg-brand-500 dark:border-zinc-900" />
@@ -260,7 +264,7 @@ export function VisitorProfilePage({ visitorId }: { visitorId: string }) {
                         )}
                       </div>
                     ))}
-                    {payments.map((p) => (
+                    {sessionPayments.map((p) => (
                       <div key={String(p.id)} className="flex items-center gap-2 rounded-lg bg-money-50 px-2 py-1.5 text-sm text-money-800 dark:bg-money-500/10 dark:text-money-300">
                         <DollarSign className="h-3.5 w-3.5" />
                         <b>{money(Math.abs(Number(p.revenue)), currency)}</b> {p.type === "refund" ? "refunded" : p.type === "renewal" ? "renewal" : "payment"} via {p.provider}
@@ -271,7 +275,7 @@ export function VisitorProfilePage({ visitorId }: { visitorId: string }) {
                 </div>
               );
             })}
-            {data.payments
+            {payments
               .filter((p) => !data.sessions.some((s) => s.id === p.last_session_id || s.id === p.touch_session_id))
               .map((p) => (
                 <div key={String(p.id)} className="flex items-center gap-2 rounded-lg bg-money-50 px-3 py-2 text-sm text-money-800 dark:bg-money-500/10 dark:text-money-300">

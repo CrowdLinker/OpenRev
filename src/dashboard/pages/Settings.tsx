@@ -167,7 +167,12 @@ function GeneralSettings({ site }: { site: Site }) {
           <Toggle checked={form.cookieless} onChange={(v) => set({ cookieless: v })} label="Cookieless mode" help="No cookies: visitors are identified by a daily-rotating anonymous hash. Better for GDPR, less accurate for multi-day attribution." />
           <Toggle checked={form.strictHostnames} onChange={(v) => set({ strictHostnames: v })} label="Only accept events from my domains" help="Ignore events from hostnames that aren't your domain, its subdomains or additional domains." />
           <Toggle checked={form.allowLocalhost} onChange={(v) => set({ allowLocalhost: v })} label="Accept events from localhost" help="Useful while developing. Also add data-allow-localhost=&quot;true&quot; to the script tag." />
-          <Toggle checked={form.hideRevenue} onChange={(v) => set({ hideRevenue: v })} label="Hide revenue features" help="For sites that don't sell anything." />
+          <Toggle
+            checked={form.hideRevenue}
+            onChange={(v) => set({ hideRevenue: v })}
+            label="Hide revenue on share links"
+            help="Public share links leave out revenue, payments and customer counts. Team members follow their own “Can see revenue” (Settings → Team)."
+          />
         </div>
         <SaveRow
           busy={busy}
@@ -193,7 +198,10 @@ function GeneralSettings({ site }: { site: Site }) {
         />
       </Section>
 
-      <Section title="Public dashboard" description="Share a read-only dashboard with anyone (investors, “open startup” pages…). Visitor names and emails are never shown.">
+      <Section
+        title="Public dashboard"
+        description={`Share a read-only dashboard with anyone (investors, “open startup” pages…). Visitor names and emails are never shown${site.settings.hideRevenue ? ", and neither is revenue" : ""}.`}
+      >
         {site.share_token ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -476,15 +484,16 @@ function IntegrationRow({ site, integration: i, provider, onChange, onEdit }: { 
   const runImport = async () => {
     setImportError(null);
     let cursor: string | null = null;
-    let total = 0;
+    let total: number | null = 0;
     try {
       do {
-        setImporting(`Importing… ${total} payments`);
-        const r: { imported: number; nextCursor: string | null } = await api(`/api/sites/${site.id}/integrations/${i.id}/import`, { body: { cursor } });
-        total += r.imported;
+        setImporting(total === null ? "Importing…" : `Importing… ${total} payments`);
+        // Without "Can see revenue" the count is left out, and so is it here.
+        const r: { imported?: number; nextCursor: string | null } = await api(`/api/sites/${site.id}/integrations/${i.id}/import`, { body: { cursor } });
+        total = r.imported === undefined || total === null ? null : total + r.imported;
         cursor = r.nextCursor;
       } while (cursor);
-      setImporting(`Imported ${total} payments ✓`);
+      setImporting(total === null ? "Imported ✓" : `Imported ${total} payments ✓`);
       onChange();
     } catch (err) {
       setImportError(err);
@@ -747,35 +756,73 @@ function ExclusionSettings({ site }: { site: Site }) {
 
 function TeamSettings({ site }: { site: Site }) {
   const { user, instance } = useAuth();
-  const { role } = useSite();
-  const { data, reload } = useApi<{ members: Row[]; invites: Row[] }>(`/api/sites/${site.id}/members`);
+  const { role, reloadSite, reloadMeta } = useSite();
+  const { data, reload } = useApi<{ members: Row[]; invites: Row[]; revenue_notice: boolean }>(`/api/sites/${site.id}/members`);
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("viewer");
+  const [inviteRevenue, setInviteRevenue] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const update = async (m: Row, body: { role?: string; can_see_revenue?: boolean }) => {
+    try {
+      await api(`/api/sites/${site.id}/members/${m.id}`, { method: "PATCH", body });
+    } catch (err) {
+      alert((err as Error).message);
+    }
+    reload();
+    // Turning your own "Can see revenue" on or off changes what this dashboard shows.
+    if (m.id === user?.id) {
+      reloadSite();
+      reloadMeta();
+    }
+  };
   return (
     <>
-      <Section title="Members" description="Owners manage everything, admins manage settings, viewers can only see the dashboard.">
-        <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+      {data?.revenue_notice && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-500/10">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <div className="font-medium text-amber-900 dark:text-amber-200">Revenue is now hidden from team members until you allow it</div>
+            <p className="mt-0.5 text-amber-800/90 dark:text-amber-300/90">
+              Since this update, only owners see revenue by default. Turn on <a href="#members" className="font-medium underline">“Can see revenue”</a> for the members who
+              should keep seeing it. “Hide revenue” now only applies to public share links.
+            </p>
+          </div>
+          <button
+            className="text-xs font-medium text-amber-800 hover:underline dark:text-amber-300"
+            onClick={async () => {
+              await api(`/api/sites/${site.id}/revenue-notice`, { method: "DELETE" });
+              reload();
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      <Section
+        title="Members"
+        description="Owners manage everything, admins manage settings, viewers can only see the dashboard. Only members with “Can see revenue” see revenue, payments and customers; owners always do."
+      >
+        <div id="members" className="divide-y divide-zinc-100 dark:divide-zinc-800">
           {data?.members.map((m) => (
-            <div key={String(m.id)} className="flex items-center gap-3 py-2.5 text-sm">
+            <div key={String(m.id)} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
               <div className="min-w-0 flex-1">
                 <div className="font-medium">{m.name || m.email}</div>
                 <div className="text-xs text-zinc-500">{m.email}</div>
               </div>
+              <Toggle
+                checked={!!m.can_see_revenue}
+                disabled={m.role === "owner"}
+                title={m.role === "owner" ? "Owners always see revenue" : undefined}
+                onChange={(v) => update(m, { can_see_revenue: v })}
+                label={<span className="text-xs font-normal text-zinc-600 dark:text-zinc-400">Can see revenue</span>}
+              />
               <select
                 className="input !w-auto !py-1 text-xs"
                 value={m.role}
                 disabled={m.id === user?.id}
-                onChange={async (e) => {
-                  try {
-                    await api(`/api/sites/${site.id}/members/${m.id}`, { method: "PATCH", body: { role: e.target.value } });
-                  } catch (err) {
-                    alert((err as Error).message);
-                  }
-                  reload();
-                }}
+                onChange={(e) => update(m, { role: e.target.value })}
               >
                 <option value="owner" disabled={role !== "owner"}>
                   Owner
@@ -811,9 +858,12 @@ function TeamSettings({ site }: { site: Site }) {
             setError(null);
             setLink(null);
             try {
-              const r = await api<{ url?: string; added?: boolean; emailed?: boolean }>(`/api/sites/${site.id}/invites`, { body: { email: email || undefined, role: inviteRole } });
+              const r = await api<{ url?: string; added?: boolean; emailed?: boolean }>(`/api/sites/${site.id}/invites`, {
+                body: { email: email || undefined, role: inviteRole, can_see_revenue: inviteRevenue },
+              });
               if (r.url) setLink(r.url);
               setEmail("");
+              setInviteRevenue(false);
               reload();
             } catch (err) {
               setError(err);
@@ -833,6 +883,10 @@ function TeamSettings({ site }: { site: Site }) {
               <option value="admin">Admin</option>
             </select>
           </Field>
+          <label className="flex h-[38px] cursor-pointer items-center gap-2 text-sm">
+            <input type="checkbox" checked={inviteRevenue} onChange={(e) => setInviteRevenue(e.target.checked)} />
+            Can see revenue
+          </label>
           <Button variant="primary" type="submit" loading={busy}>
             Create invite
           </Button>
@@ -849,7 +903,10 @@ function TeamSettings({ site }: { site: Site }) {
             <div className="mb-1 text-xs font-medium text-zinc-500">Pending invitations</div>
             {data.invites.map((i) => (
               <div key={String(i.id)} className="flex items-center gap-2 py-1 text-sm">
-                <span className="flex-1">{i.email || "Invite link"} · {i.role}</span>
+                <span className="flex-1">
+                  {i.email || "Invite link"} · {i.role}
+                  {i.can_see_revenue ? " · can see revenue" : ""}
+                </span>
                 <span className="text-xs text-zinc-400">expires {dateTime(Number(i.expires_at))}</span>
                 <button
                   className="text-zinc-400 hover:text-red-500"
@@ -931,7 +988,10 @@ function ApiSettings({ site }: { site: Site }) {
   const origin = window.location.origin;
   return (
     <>
-      <Section title="API keys" description="Website keys (or_…) can read this website's analytics and send payments, goals and identities.">
+      <Section
+        title="API keys"
+        description="Website keys (or_…) can read this website's analytics and send payments, goals and identities. They act as you: they see revenue when you can."
+      >
         <KeysList label="API key" listPath={`/api/sites/${site.id}/keys`} createPath={`/api/sites/${site.id}/keys`} deletePath={(id) => `/api/sites/${site.id}/keys/${id}`} />
       </Section>
       <Section title="REST API" description={<>OpenAPI spec: <a className="text-brand-600 hover:underline" href="/api/v1/openapi.json" target="_blank">/api/v1/openapi.json</a></>}>
@@ -1090,7 +1150,14 @@ function AlertEditor({ site, alert, emailEnabled, onClose, onSaved }: { site: Si
       </div>
     ),
     email: (
-      <Field label="Recipients" help={emailEnabled ? "Comma-separated." : "⚠️ Email isn't configured on this instance (set RESEND_API_KEY)."}>
+      <Field
+        label="Recipients"
+        help={
+          emailEnabled
+            ? "Comma-separated. Members without “Can see revenue” get no payment alerts, and digests without revenue."
+            : "⚠️ Email isn't configured on this instance (set RESEND_API_KEY)."
+        }
+      >
         <input className="input" value={String(config.email ?? "")} onChange={(e) => set("email", e.target.value)} placeholder="you@example.com" />
       </Field>
     ),
@@ -1206,7 +1273,7 @@ function AlertEditor({ site, alert, emailEnabled, onClose, onSaved }: { site: Si
 // ---------------------------------------------------------------------------
 
 function DataSettings({ site }: { site: Site }) {
-  const { role } = useSite();
+  const { role, canSeeRevenue } = useSite();
   const [, navigate] = useLocation();
   const [confirmText, setConfirmText] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -1216,7 +1283,7 @@ function DataSettings({ site }: { site: Site }) {
       {(role === "owner" || role === "admin") && <ImportHistory />}
       <Section title="Export your data" description="Download raw data as CSV. It's your data — take it anywhere.">
         <div className="flex flex-wrap gap-2">
-          {["sessions", "events", "payments", "visitors"].map((k) => (
+          {["sessions", "events", ...(canSeeRevenue ? ["payments"] : []), "visitors"].map((k) => (
             <a key={k} href={`/api/sites/${site.id}/export/${k}`} download>
               <Button>
                 <Download className="h-4 w-4" /> {k}.csv
