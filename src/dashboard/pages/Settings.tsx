@@ -24,7 +24,7 @@ export function SettingsPage({ tab = "general" }: { tab?: string }) {
   const { site } = useSite();
   if (!site) return <Loading />;
   return (
-    <div className="grid gap-6 lg:grid-cols-[200px_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[200px_1fr]">
       <nav className="flex gap-1 overflow-x-auto lg:flex-col">
         {TABS.map((t) => (
           <Link

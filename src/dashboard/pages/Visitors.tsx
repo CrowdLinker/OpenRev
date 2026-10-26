@@ -153,7 +153,7 @@ export function VisitorProfilePage({ visitorId }: { visitorId: string }) {
       <Link href="/visitors" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
         <ArrowLeft className="h-4 w-4" /> Visitors
       </Link>
-      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
         <div className="space-y-4">
           <Card className="p-5">
             <div className="flex items-center gap-3">

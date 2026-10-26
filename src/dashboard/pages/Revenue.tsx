@@ -53,7 +53,7 @@ export function RevenuePage() {
         <Tile label="Customers" value={num(c?.customers ?? 0, false)} delta={d(c?.customers, p?.customers)} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BreakdownPanel
           id="revenue-sources"
           title="Revenue by source"
