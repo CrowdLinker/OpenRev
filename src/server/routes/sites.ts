@@ -6,6 +6,7 @@ import { sha256Hex } from "../lib/crypto";
 import { randomId, randomToken, uuid } from "../lib/ids";
 import { isValidTimezone, resolveRange } from "../lib/time";
 import { publicHttpsUrl } from "../lib/net";
+import { REVENUE_HIDDEN, withoutRevenue } from "../lib/revenue";
 import { isEmail, sanitizeGoalName } from "../lib/validate";
 import { getProvider, providerCatalog } from "../providers";
 import { ALERT_CHANNELS, ALERT_TYPES, invalidateAlerts, sendTestAlert, TELEGRAM_TOKEN, type AlertRow } from "../services/alerts";
@@ -22,10 +23,12 @@ import {
   getSite,
   invalidateSite,
   isValidDomain,
+  joinStatement,
   normalizeAppId,
   normalizeDomain,
   parseSite,
   roleAtLeast,
+  seesRevenue,
   type AttributionModel,
   type Role,
   type SiteSettings,
@@ -49,34 +52,37 @@ export function siteRoutes() {
   app.get("/sites", async (c) => {
     const user = requireUser(c);
     const db = c.get("rt").db;
+    // Instance admins see every website, as an owner where they aren't a member.
     const rows = await db.all<Record<string, unknown>>(
       user.is_admin
-        ? `SELECT s.*, COALESCE(m.role, 'owner') AS role FROM sites s LEFT JOIN site_members m ON m.site_id = s.id AND m.user_id = ? ORDER BY s.created_at ASC`
-        : `SELECT s.*, m.role FROM sites s JOIN site_members m ON m.site_id = s.id AND m.user_id = ? ORDER BY s.created_at ASC`,
+        ? `SELECT s.*, COALESCE(m.role, 'owner') AS role, m.can_see_revenue FROM sites s LEFT JOIN site_members m ON m.site_id = s.id AND m.user_id = ? ORDER BY s.created_at ASC`
+        : `SELECT s.*, m.role, m.can_see_revenue FROM sites s JOIN site_members m ON m.site_id = s.id AND m.user_id = ? ORDER BY s.created_at ASC`,
       [user.id],
     );
     const sites = await Promise.all(
       rows.map(async (row) => {
         const site = parseSite(row as never);
+        const canSeeRevenue = seesRevenue(row.role as string, row.can_see_revenue);
         const range = resolveRange(site.timezone, { period: "7d" });
-        const q = { site, range, filters: [] };
+        const q = { site, range, filters: [], revenue: canSeeRevenue };
         const [series, realtime] = await Promise.all([
           stats.timeseries(db, q, "day"),
           db.first<{ v: number }>("SELECT COUNT(DISTINCT visitor_id) AS v FROM sessions WHERE site_id = ? AND last_seen_at > ?", [site.id, Date.now() - stats.REALTIME_WINDOW]),
         ]);
-        return {
+        const summary = {
           id: site.id,
           name: site.name,
           domain: site.domain,
           currency: site.currency,
           timezone: site.timezone,
           role: row.role,
-          hideRevenue: !!site.settings.hideRevenue,
+          canSeeRevenue,
           visitors: series.reduce((a, p) => a + p.visitors, 0),
           revenue: series.reduce((a, p) => a + p.revenue, 0),
           online: Number(realtime?.v ?? 0),
           series: series.map((p) => ({ date: p.date, visitors: p.visitors, revenue: p.revenue })),
         };
+        return canSeeRevenue ? summary : withoutRevenue(summary);
       }),
     );
     return c.json({ sites });
@@ -97,7 +103,7 @@ export function siteRoutes() {
         sql: "INSERT INTO sites (id, domain, name, timezone, currency, settings, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         params: [id, domain, body.name?.trim() || domain, timezone, currency, JSON.stringify({ attribution: "last_non_direct" }), user.id, now],
       },
-      { sql: "INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)", params: [id, user.id, now] },
+      { sql: "INSERT INTO site_members (site_id, user_id, role, can_see_revenue, created_at) VALUES (?, ?, 'owner', 1, ?)", params: [id, user.id, now] },
     ]);
     return c.json({ site: await getSite(db, id) });
   });
@@ -105,8 +111,8 @@ export function siteRoutes() {
   // ---- single site -------------------------------------------------------------
 
   app.get("/sites/:siteId", async (c) => {
-    const { site, role } = await siteForUser(c, c.req.param("siteId"));
-    return c.json({ site, role });
+    const { site, role, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"));
+    return c.json({ site, role, canSeeRevenue });
   });
 
   app.patch("/sites/:siteId", async (c) => {
@@ -217,9 +223,11 @@ export function siteRoutes() {
 
   const statsApp = statsRoutes();
   app.use("/sites/:siteId/stats/*", async (c, next) => {
-    const { site } = await siteForUser(c, c.req.param("siteId")!);
+    const { site, canSeeRevenue } = await siteForUser(c, c.req.param("siteId")!);
     c.set("site", site);
     c.set("isPublic", false);
+    // Members follow their own "Can see revenue"; "Hide revenue on share links" doesn't apply here.
+    c.set("canSeeRevenue", canSeeRevenue);
     await next();
   });
   app.route("/sites/:siteId/stats", statsApp);
@@ -230,30 +238,50 @@ export function siteRoutes() {
   // ---- team -------------------------------------------------------------------
 
   app.get("/sites/:siteId/members", async (c) => {
-    const { site } = await siteForUser(c, c.req.param("siteId"));
+    const { site, role } = await siteForUser(c, c.req.param("siteId"));
+    const user = requireUser(c);
     const db = c.get("rt").db;
     const [members, invites] = await Promise.all([
-      db.all("SELECT u.id, u.email, u.name, m.role, m.created_at FROM site_members m JOIN users u ON u.id = m.user_id WHERE m.site_id = ? ORDER BY m.created_at ASC", [site.id]),
-      db.all("SELECT id, email, role, created_at, expires_at FROM invites WHERE site_id = ? AND expires_at > ? ORDER BY created_at DESC", [site.id, Date.now()]),
+      db.all<Record<string, unknown>>(
+        "SELECT u.id, u.email, u.name, m.role, m.can_see_revenue, m.revenue_notice, m.created_at FROM site_members m JOIN users u ON u.id = m.user_id WHERE m.site_id = ? ORDER BY m.created_at ASC",
+        [site.id],
+      ),
+      db.all("SELECT id, email, role, can_see_revenue, created_at, expires_at FROM invites WHERE site_id = ? AND expires_at > ? ORDER BY created_at DESC", [site.id, Date.now()]),
     ]);
-    return c.json({ members, invites: invites.map((i) => ({ ...i, id: String(i.id).slice(0, 12) })) });
+    const me = members.find((m) => m.id === user.id);
+    return c.json({
+      members: members.map(({ revenue_notice: _notice, ...m }) => ({ ...m, can_see_revenue: seesRevenue(m.role as string, m.can_see_revenue) })),
+      invites: invites.map((i) => ({ ...i, id: String(i.id).slice(0, 12), can_see_revenue: Number(i.can_see_revenue) === 1 })),
+      // Shown once to the owners and admins of websites whose members lost revenue in the upgrade (migration 7).
+      revenue_notice: roleAtLeast(role, "admin") && Number(me?.revenue_notice) === 1,
+    });
+  });
+
+  /** Dismisses the "revenue is now hidden from team members" notice, for the signed-in member. */
+  app.delete("/sites/:siteId/revenue-notice", async (c) => {
+    const { site } = await siteForUser(c, c.req.param("siteId"));
+    const user = requireUser(c);
+    await c.get("rt").db.run("UPDATE site_members SET revenue_notice = 0 WHERE site_id = ? AND user_id = ?", [site.id, user.id]);
+    return c.json({ ok: true });
   });
 
   app.post("/sites/:siteId/invites", async (c) => {
     const { site } = await siteForUser(c, c.req.param("siteId"), "admin");
     const rt = c.get("rt");
     const user = requireUser(c);
-    const body = await readJson<{ email?: string; role?: Role }>(c);
+    const body = await readJson<{ email?: string; role?: Role; can_see_revenue?: boolean }>(c);
     const role: Role = body.role && ROLES.includes(body.role) && body.role !== "owner" ? body.role : "viewer";
     const email = body.email && isEmail(body.email) ? body.email.toLowerCase() : null;
     // Everyone gets a link, even if an account with this email exists: account emails aren't verified,
     // so membership is only granted to whoever opens the link sent to that mailbox.
     const token = randomToken(24);
-    await rt.db.run("INSERT INTO invites (id, site_id, email, role, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+    await rt.db.run("INSERT INTO invites (id, site_id, email, role, can_see_revenue, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
       await sha256Hex(token),
       site.id,
       email,
       role,
+      // New members don't see revenue unless whoever invites them ticks "Can see revenue".
+      body.can_see_revenue === true ? 1 : 0,
       user.id,
       Date.now(),
       Date.now() + 14 * 86_400_000,
@@ -281,23 +309,31 @@ export function siteRoutes() {
     return c.json({ ok: true });
   });
 
+  /** Changes a member's role, or "Can see revenue" (`can_see_revenue`). Owners and admins can do both. */
   app.patch("/sites/:siteId/members/:userId", async (c) => {
     const { site, role: myRole } = await siteForUser(c, c.req.param("siteId"), "admin");
-    const body = await readJson<{ role?: Role }>(c);
-    if (!body.role || !ROLES.includes(body.role)) fail(400, "Invalid role");
+    const body = await readJson<{ role?: Role; can_see_revenue?: boolean }>(c);
+    if (body.role === undefined && typeof body.can_see_revenue !== "boolean") fail(400, "Nothing to change");
+    if (body.role !== undefined && !ROLES.includes(body.role)) fail(400, "Invalid role");
     if (body.role === "owner" && myRole !== "owner") fail(403, "Only owners can grant the owner role");
     const db = c.get("rt").db;
     const target = c.req.param("userId");
     const current = await getMemberRole(db, site.id, target);
-    if (current === "owner" && body.role !== "owner") {
+    if (!current) fail(404, "Member not found");
+    const role = body.role ?? current;
+    if (current === "owner" && role !== "owner") {
       if (myRole !== "owner") fail(403, "Only owners can change an owner's role");
       const owners = await db.first<{ n: number }>("SELECT COUNT(*) AS n FROM site_members WHERE site_id = ? AND role = 'owner'", [site.id]);
       if (Number(owners?.n ?? 0) <= 1) fail(400, "A website needs at least one owner");
     }
+    // Owners always see revenue. An owner who becomes an admin or viewer keeps it until someone turns it off.
+    if (role === "owner" && body.can_see_revenue === false) fail(400, "Owners always see revenue");
+    const revenue = role === "owner" ? true : body.can_see_revenue;
     await db.batch([
-      { sql: "UPDATE site_members SET role = ? WHERE site_id = ? AND user_id = ?", params: [body.role, site.id, target] },
+      { sql: "UPDATE site_members SET role = ? WHERE site_id = ? AND user_id = ?", params: [role, site.id, target] },
+      ...(revenue === undefined ? [] : [{ sql: "UPDATE site_members SET can_see_revenue = ? WHERE site_id = ? AND user_id = ?", params: [revenue ? 1 : 0, site.id, target] }]),
       // A member who can no longer invite loses the invitation links they created.
-      ...(roleAtLeast(body.role, "admin") ? [] : [{ sql: "DELETE FROM invites WHERE site_id = ? AND created_by = ?", params: [site.id, target] }]),
+      ...(roleAtLeast(role, "admin") ? [] : [{ sql: "DELETE FROM invites WHERE site_id = ? AND created_by = ?", params: [site.id, target] }]),
     ]);
     return c.json({ ok: true });
   });
@@ -331,12 +367,8 @@ export function siteRoutes() {
     const db = c.get("rt").db;
     const invite = await claimInvite(db, await sha256Hex(c.req.param("token")));
     if (!invite) fail(404, "This invitation is invalid or has expired");
-    await db.run("INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING", [
-      invite.site_id,
-      user.id,
-      invite.role,
-      Date.now(),
-    ]);
+    const join = joinStatement(invite, user.id);
+    await db.run(join.sql, join.params);
     return c.json({ siteId: invite.site_id });
   });
 
@@ -438,13 +470,15 @@ export function siteRoutes() {
 
   /** Imports one page of past payments. The dashboard calls this repeatedly until `nextCursor` is null. */
   app.post("/sites/:siteId/integrations/:integrationId/import", async (c) => {
-    const { site } = await siteForUser(c, c.req.param("siteId"), "admin");
+    const { site, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"), "admin");
     const rt = c.get("rt");
     const row = await rt.db.first<IntegrationRow>("SELECT * FROM integrations WHERE id = ? AND site_id = ?", [c.req.param("integrationId"), site.id]);
     if (!row) fail(404, "Integration not found");
     const body = await readJson<{ cursor?: string | null }>(c);
     try {
-      return c.json(await importPage(rt, row, body.cursor ?? null));
+      const page = await importPage(rt, row, body.cursor ?? null);
+      // How many payments came in is a payment count: admins without "Can see revenue" only get the cursor.
+      return c.json(canSeeRevenue ? page : { nextCursor: page.nextCursor });
     } catch (err) {
       fail(400, err instanceof Error ? err.message : String(err));
     }
@@ -555,13 +589,19 @@ export function siteRoutes() {
   };
 
   app.get("/sites/:siteId/alerts", async (c) => {
-    const { site } = await siteForUser(c, c.req.param("siteId"), "admin");
+    const { site, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"), "admin");
     const db = c.get("rt").db;
     const [alerts, history] = await Promise.all([
       db.all<AlertRow>("SELECT * FROM alerts WHERE site_id = ? ORDER BY created_at ASC", [site.id]),
-      db.all("SELECT * FROM alert_history WHERE site_id = ? ORDER BY ts DESC LIMIT 50", [site.id]),
+      db.all<Record<string, unknown>>("SELECT * FROM alert_history WHERE site_id = ? ORDER BY ts DESC LIMIT 50", [site.id]),
     ]);
-    return c.json({ alerts: alerts.map(publicAlert), history, emailEnabled: emailEnabled(c.get("rt")) });
+    // Payment alerts are logged with their amount: without revenue, the history only keeps the other alerts.
+    const others = new Set(alerts.filter((a) => a.type !== "payment").map((a) => a.id));
+    return c.json({
+      alerts: alerts.map(publicAlert),
+      history: canSeeRevenue ? history : history.filter((h) => others.has(String(h.alert_id))),
+      emailEnabled: emailEnabled(c.get("rt")),
+    });
   });
 
   const cleanAlert = (body: Record<string, unknown>, existing?: Record<string, unknown>) => {
@@ -637,8 +677,9 @@ export function siteRoutes() {
   // ---- data export ------------------------------------------------------------------------
 
   app.get("/sites/:siteId/export/:kind", async (c) => {
-    const { site } = await siteForUser(c, c.req.param("siteId"), "admin");
+    const { site, canSeeRevenue } = await siteForUser(c, c.req.param("siteId"), "admin");
     const kind = c.req.param("kind");
+    if (kind === "payments" && !canSeeRevenue) fail(403, REVENUE_HIDDEN);
     const tables: Record<string, string> = {
       sessions: "SELECT * FROM sessions WHERE site_id = ? ORDER BY started_at DESC LIMIT 100000",
       events: "SELECT * FROM events WHERE site_id = ? ORDER BY ts DESC LIMIT 100000",

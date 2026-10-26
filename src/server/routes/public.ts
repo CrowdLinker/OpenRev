@@ -72,8 +72,11 @@ export function publicRoutes() {
     if (!/^[a-z0-9]{10,40}$/.test(token)) fail(404, "Dashboard not found");
     const row = await c.get("rt").db.first("SELECT * FROM sites WHERE share_token = ?", [token]);
     if (!row) fail(404, "Dashboard not found");
-    c.set("site", parseSite(row as never));
+    const site = parseSite(row as never);
+    c.set("site", site);
     c.set("isPublic", true);
+    // "Hide revenue on share links" only applies here: members follow their own "Can see revenue".
+    c.set("canSeeRevenue", !site.settings.hideRevenue);
     await next();
   });
   app.route("/api/share/:token/stats", statsRoutes());

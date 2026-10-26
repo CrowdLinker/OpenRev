@@ -54,6 +54,7 @@ export function createApp(resolveRuntime: (c: Context) => Runtime | Promise<Runt
     c.set("user", null);
     c.set("apiKey", null);
     c.set("isPublic", false);
+    c.set("canSeeRevenue", false);
     const path = c.req.path;
     if (path.startsWith("/api") || path.startsWith("/mcp")) {
       await ensureMigrated(rt.db, rt.dbKey ?? rt.db);

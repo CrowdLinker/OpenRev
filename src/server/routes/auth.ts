@@ -17,7 +17,7 @@ import {
 } from "../services/auth";
 import { emailEnabled } from "../services/email";
 import { setInstanceValue } from "../services/instance";
-import { claimInvite } from "../services/sites";
+import { claimInvite, joinStatement } from "../services/sites";
 import { fail, readJson, requireUser } from "./helpers";
 
 // Best-effort, per-isolate throttling of login and signup attempts.
@@ -116,12 +116,8 @@ export function authRoutes() {
     if (body.invite && !invite) fail(400, "This invitation is invalid or has expired");
     const user = await createUser(rt.db, { email: body.email, password: body.password, name: body.name, isAdmin: first });
     if (invite) {
-      await rt.db.run("INSERT INTO site_members (site_id, user_id, role, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING", [
-        invite.site_id,
-        user.id,
-        invite.role,
-        Date.now(),
-      ]);
+      const join = joinStatement(invite, user.id);
+      await rt.db.run(join.sql, join.params);
     }
     await startSession(c, user.id);
     return c.json({ user });

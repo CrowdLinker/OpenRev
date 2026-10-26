@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { VERSION, type AppEnv, type ApiKeyAuth, type Runtime } from "../context";
 import { uuid } from "../lib/ids";
+import { REVENUE_HIDDEN, withoutRevenue } from "../lib/revenue";
 import { verifyApiKey } from "../services/auth";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
 import { crawlerReport } from "../services/crawlers";
 import { searchKeywords } from "../services/search-console";
 import { socialReport } from "../services/social";
-import { getMemberRole, getSite, roleAtLeast, type Role, type Site } from "../services/sites";
+import { getMembership, getSite, roleAtLeast, type Role, type Site } from "../services/sites";
 import * as stats from "../services/stats";
 import { buildStatsQuery, rangeInfo } from "./helpers";
 import { resolveDimension } from "./v1";
@@ -110,17 +111,21 @@ const TOOLS = [
   },
 ];
 
-async function resolveSite(rt: Runtime, key: ApiKeyAuth, args: Args): Promise<{ site: Site; role: Role }> {
+/** The website a call is about, with the key's role there and whether it sees revenue (keys act as their creator). */
+async function resolveSite(rt: Runtime, key: ApiKeyAuth, args: Args): Promise<{ site: Site; role: Role; canSeeRevenue: boolean }> {
   const id = key.siteId ?? (typeof args.websiteId === "string" ? args.websiteId : null);
   if (!id) throw new Error("websiteId is required with account tokens. Call list_websites first.");
   if (key.siteId && key.siteId !== id) throw new Error("This API key belongs to another website");
   const site = await getSite(rt.db, id);
   if (!site) throw new Error("Website not found");
   const user = await rt.db.first<{ is_admin: number }>("SELECT is_admin FROM users WHERE id = ?", [key.userId]);
-  const role = (await getMemberRole(rt.db, id, key.userId)) ?? (user?.is_admin ? "owner" : null);
-  if (!role) throw new Error("Website not found");
-  return { site, role };
+  const member = (await getMembership(rt.db, id, key.userId)) ?? (user?.is_admin ? { role: "owner" as const, canSeeRevenue: true } : null);
+  if (!member) throw new Error("Website not found");
+  return { site, ...member };
 }
+
+/** Tools that are revenue as a whole: refused to keys that can't see revenue. */
+const REVENUE_TOOLS = new Set(["list_payments", "get_ltv", "get_mrr", "get_mrr_breakdown"]);
 
 function queryArgs(args: Args): Record<string, string | undefined> {
   return {
@@ -138,9 +143,20 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
       ? rt.db.all("SELECT id, domain, name, timezone, currency FROM sites WHERE id = ?", [key.siteId])
       : rt.db.all("SELECT s.id, s.domain, s.name, s.timezone, s.currency FROM sites s JOIN site_members m ON m.site_id = s.id WHERE m.user_id = ?", [key.userId]);
   }
-  const { site, role } = await resolveSite(rt, key, args);
-  const q = await buildStatsQuery(rt.db, site, queryArgs(args));
-  const money = { currency: site.currency, note: "Monetary values are in minor units (cents) of `currency`." };
+  const { site, role, canSeeRevenue } = await resolveSite(rt, key, args);
+  if (!canSeeRevenue && (REVENUE_TOOLS.has(name) || (name === "list_visitors" && args.customers_only))) throw new Error(REVENUE_HIDDEN);
+  const result = await siteTool(rt, key, name, args, site, role, canSeeRevenue);
+  if (canSeeRevenue) return result;
+  // Without revenue the reports skip payments, and what's left of the revenue fields is removed here (lib/revenue.ts).
+  const dimension = name === "get_breakdown" ? String(args.dimension ?? "") : "";
+  return withoutRevenue(result, { purchaseConversion: name === "get_overview" || (name === "get_breakdown" && resolveDimension(dimension) !== "goal") });
+}
+
+async function siteTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args, site: Site, role: Role, canSeeRevenue: boolean): Promise<unknown> {
+  const q = await buildStatsQuery(rt.db, site, queryArgs(args), { revenue: canSeeRevenue });
+  const money = canSeeRevenue
+    ? { currency: site.currency, note: "Monetary values are in minor units (cents) of `currency`." }
+    : { currency: site.currency, note: "Revenue is left out: the member this key belongs to can't see revenue on this website." };
   switch (name) {
     case "get_overview":
       return { range: rangeInfo(q), ...money, ...(await stats.overview(rt.db, q)) };
@@ -152,13 +168,13 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
       return { range: rangeInfo(q), ...money, rows: await stats.breakdown(rt.db, q, dim, { limit: Number(args.limit ?? 20), sort: args.sort as never }) };
     }
     case "get_realtime": {
-      const r = await stats.realtime(rt.db, site);
+      const r = await stats.realtime(rt.db, site, Date.now(), { revenue: canSeeRevenue });
       return { visitors_online: r.visitors, sessions: r.sessions.slice(0, 50), recent_payments: r.payments, ...money };
     }
     case "list_visitors":
       return { range: rangeInfo(q), ...money, visitors: await stats.listVisitors(rt.db, q, { search: args.search as string, customersOnly: !!args.customers_only, goal: (args.goal as string) ?? null }) };
     case "get_visitor":
-      return { ...money, ...(await stats.visitorProfile(rt.db, site, String(args.visitor_id))) };
+      return { ...money, ...(await stats.visitorProfile(rt.db, site, String(args.visitor_id), { revenue: canSeeRevenue })) };
     case "list_payments":
       return { range: rangeInfo(q), ...money, payments: await stats.listPayments(rt.db, q, { limit: Number(args.limit ?? 50) }) };
     case "get_ltv":
@@ -195,7 +211,7 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
       const text = String(args.text ?? "").trim();
       if (!text) throw new Error("text is required");
       const date = typeof args.date === "string" ? args.date : null;
-      const range = await buildStatsQuery(rt.db, site, date ? { from: date, to: date } : { period: "today" });
+      const range = await buildStatsQuery(rt.db, site, date ? { from: date, to: date } : { period: "today" }, { revenue: canSeeRevenue });
       const id = uuid();
       await rt.db.run("INSERT INTO notes (id, site_id, ts, text, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)", [id, site.id, range.range.from, text.slice(0, 500), key.userId, Date.now()]);
       return { id, created: true };

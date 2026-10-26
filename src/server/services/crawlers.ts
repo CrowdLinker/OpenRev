@@ -2,7 +2,7 @@ import type { Database, SqlValue, Statement } from "../db/types";
 import { CRAWLER_CATEGORIES, CRAWLER_PATTERN, CRAWLERS, crawlerByName, matchCrawler, type CrawlerCategory } from "../lib/crawlers";
 import { localParts, planBuckets, startOfLocalDay, zonedTime, type Interval } from "../lib/time";
 import type { Site } from "./sites";
-import { attributionColumn, type StatsQuery } from "./stats";
+import { attributionColumn, includesRevenue, type StatsQuery } from "./stats";
 
 /** A request the website's server saw, as reported to POST /api/v1/crawls. */
 export interface CrawlHit {
@@ -88,6 +88,11 @@ export async function crawlerReport(db: Database, q: StatsQuery, opts: { timezon
   const exact = [q.site.id, q.range.from, q.range.to];
   const category = (CRAWLER_CATEGORIES as readonly string[]).includes(opts.category ?? "") ? (opts.category as CrawlerCategory) : null;
   const attr = attributionColumn(q.site, q.attribution);
+  // Viewers who can't see revenue (`q.revenue` false) get the AI visits without what they paid.
+  const withRevenue = includesRevenue(q);
+  const aiRevenue = withRevenue
+    ? `(SELECT SUM(p.revenue) FROM payments p JOIN sessions ps ON ps.id = p.${attr} WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ? AND ps.channel = 'AI')`
+    : "0";
   // Pages are added up in SQL: a large website can have tens of thousands of crawled paths in a range.
   const names = category ? CRAWLERS.filter((c) => c.category === category).map((c) => c.name) : [];
   const botFilter = category ? ` AND bot IN (${names.map(() => "?").join(", ")})` : "";
@@ -108,11 +113,9 @@ export async function crawlerReport(db: Database, q: StatsQuery, opts: { timezon
     ),
     db.first<{ n: number }>("SELECT COUNT(DISTINCT path) AS n FROM crawler_stats WHERE site_id = ? AND ts >= ? AND ts < ?", base),
     db.first<{ visitors: number; sessions: number; revenue: number }>(
-      `SELECT COUNT(DISTINCT s.visitor_id) AS visitors, COUNT(DISTINCT s.id) AS sessions,
-              (SELECT SUM(p.revenue) FROM payments p JOIN sessions ps ON ps.id = p.${attr}
-               WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ? AND ps.channel = 'AI') AS revenue
+      `SELECT COUNT(DISTINCT s.visitor_id) AS visitors, COUNT(DISTINCT s.id) AS sessions, ${aiRevenue} AS revenue
        FROM sessions s WHERE s.site_id = ? AND s.started_at >= ? AND s.started_at < ? AND s.channel = 'AI'`,
-      [...exact, ...exact],
+      withRevenue ? [...exact, ...exact] : exact,
     ),
   ]);
 
