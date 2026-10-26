@@ -25,9 +25,10 @@ const WORDS: [RegExp, BillingInterval][] = [
   [/^(twoyears|biennial|biennially|2y|p2y)$/, { unit: "year", count: 2 }],
 ];
 
+/** A positive whole count, or 1 when it's missing or not a number. Too large a count fails the 3-year check below. */
 function clampCount(n: unknown): number {
   const v = Math.round(Number(n));
-  return Number.isFinite(v) && v >= 1 && v <= 1000 ? v : 1;
+  return Number.isFinite(v) && v >= 1 ? v : 1;
 }
 
 /** Parses a provider's interval word (and optional count), or returns null when it isn't one. */

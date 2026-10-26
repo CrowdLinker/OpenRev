@@ -31,6 +31,9 @@ describe("billing intervals", () => {
     expect(parseInterval("week", "0")).toEqual({ unit: "week", count: 1 });
     expect(parseInterval("month", 36)).toEqual({ unit: "month", count: 36 });
     expect(parseInterval("year", 50)).toBeNull();
+    expect(parseInterval("year", 1001)).toBeNull();
+    expect(parseInterval("day", 1099)).toBeNull();
+    expect(parseInterval("day", 1095)).toEqual({ unit: "day", count: 1095 });
     expect(parseInterval("hourly")).toBeNull();
     expect(parseInterval(42)).toBeNull();
   });
