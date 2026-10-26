@@ -10,13 +10,19 @@ const CAMPAIGN_PARAMS = /^(utm_[a-z]+|ref|via|source|gclid|gbraid|wbraid|msclkid
 // Same as the server accepts.
 const ID = /^[A-Za-z0-9_-]{8,64}$/;
 
-const uuid = () =>
-  globalThis.crypto?.randomUUID
-    ? globalThis.crypto.randomUUID()
-    : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-        const r = (Math.random() * 16) | 0;
-        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-      });
+/**
+ * A random v4 UUID from the platform's secure random source. React Native has none built in: index.js loads
+ * react-native-get-random-values, which provides crypto.getRandomValues.
+ */
+function uuid() {
+  const c = globalThis.crypto;
+  if (c.randomUUID) return c.randomUUID();
+  const b = c.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
 
 async function readJson(storage, key) {
   try {
@@ -57,8 +63,14 @@ export function createClient(options) {
   const now = options.now ?? (() => Date.now());
   if (!host || !websiteId || !options.appId) throw new Error("OpenRev: host, websiteId and appId are required");
   if (!storage) throw new Error("OpenRev: pass a storage with getItem and setItem");
+  if (!globalThis.crypto?.randomUUID && !globalThis.crypto?.getRandomValues) {
+    throw new Error("OpenRev: no secure random source for ids. In React Native, install react-native-get-random-values.");
+  }
   const appId = String(options.appId).toLowerCase();
-  const endpoint = `${String(host).replace(/\/+$/, "")}/api/events`;
+  // Trailing slashes are trimmed without a regular expression, which a long run of slashes would make slow.
+  let base = String(host);
+  while (base.endsWith("/")) base = base.slice(0, -1);
+  const endpoint = `${base}/api/events`;
   const log = (...args) => debug && console.log("[OpenRev]", ...args);
 
   let visitor = null; // { id, createdAt }

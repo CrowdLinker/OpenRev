@@ -5,7 +5,7 @@ dashboard as your website, and web-to-app funnels where a visitor who goes from 
 visitor, with the revenue they bring.
 
 ```bash
-npx expo install openrev-react-native @react-native-async-storage/async-storage
+npx expo install openrev-react-native @react-native-async-storage/async-storage react-native-get-random-values
 ```
 
 ```tsx

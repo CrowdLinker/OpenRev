@@ -9,12 +9,13 @@ page and end on an app screen, and revenue made in the app keeps the source that
 
 1. In OpenRev, open **Settings → Tracking code → Mobile apps** and add your app ids: the iOS bundle id and the Android
    package name, like `com.example.app`. OpenRev ignores events from other apps.
-2. Install the SDK and AsyncStorage, where it keeps the visitor and session ids:
+2. Install the SDK, AsyncStorage, where it keeps the visitor and session ids, and react-native-get-random-values,
+   which gives React Native the secure random numbers those ids are made from:
 
    ```bash
-   npx expo install openrev-react-native @react-native-async-storage/async-storage
+   npx expo install openrev-react-native @react-native-async-storage/async-storage react-native-get-random-values
    # or, without Expo
-   npm install openrev-react-native @react-native-async-storage/async-storage
+   npm install openrev-react-native @react-native-async-storage/async-storage react-native-get-random-values
    ```
 
 3. Start it once, when the app starts:

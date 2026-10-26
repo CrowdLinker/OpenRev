@@ -34,8 +34,8 @@ export function MobileAppsSettings({ site }: { site: Site }) {
   const appId = site.settings.appIds?.[0] ?? "com.example.app";
 
   const code: Record<Step, string> = {
-    install: `npx expo install openrev-react-native @react-native-async-storage/async-storage
-# or: npm install openrev-react-native @react-native-async-storage/async-storage
+    install: `npx expo install openrev-react-native @react-native-async-storage/async-storage react-native-get-random-values
+# or: npm install openrev-react-native @react-native-async-storage/async-storage react-native-get-random-values
 
 // App.tsx, once at startup
 import OpenRev from "openrev-react-native";

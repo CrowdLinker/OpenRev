@@ -1,4 +1,6 @@
 // OpenRev for React Native and Expo: screens, goals, deep links and web-to-app attribution.
+// crypto.getRandomValues for the visitor and session ids: React Native has no secure random source of its own.
+import "react-native-get-random-values";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState, Dimensions, Linking, Platform } from "react-native";
 import { createClient, VERSION } from "./core.js";

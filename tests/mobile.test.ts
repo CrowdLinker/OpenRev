@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import sdkPackage from "../packages/react-native/package.json";
 import { createClient, VERSION } from "../packages/react-native/core.js";
 import { createApp } from "../src/server/app";
@@ -13,8 +13,45 @@ const CHROME = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.
 const OKHTTP = "okhttp/4.12.0";
 
 describe("React Native SDK package", () => {
+  const options = (sent: string[], host = "https://openrev.test") => ({
+    host,
+    websiteId: "site1234",
+    appId: "com.lumen.app",
+    storage: { getItem: () => null, setItem: () => {} },
+    fetch: (async (url: string, init?: RequestInit) => {
+      sent.push(url, String(init?.body));
+      return new Response("{}");
+    }) as typeof fetch,
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("reports the version in its package.json", () => {
     expect(VERSION).toBe(sdkPackage.version);
+  });
+
+  it("makes ids only from a secure random source", async () => {
+    // React Native with react-native-get-random-values: getRandomValues, no randomUUID.
+    const real = globalThis.crypto;
+    vi.stubGlobal("crypto", { getRandomValues: (a: Uint8Array<ArrayBuffer>) => real.getRandomValues(a) });
+    const client = createClient(options([]));
+    expect(await client.visitorId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+
+    // Without one, it says what to install instead of making guessable ids.
+    vi.stubGlobal("crypto", undefined);
+    expect(() => createClient(options([]))).toThrow(/react-native-get-random-values/);
+  });
+
+  it("trims the host's trailing slashes, quickly even for a long run of them", async () => {
+    const sent: string[] = [];
+    await createClient(options(sent, "https://openrev.test///")).screen("Home");
+    expect(sent[0]).toBe("https://openrev.test/api/events");
+
+    const started = performance.now();
+    createClient(options([], `https://openrev.test${"/".repeat(100_000)}x`));
+    expect(performance.now() - started).toBeLessThan(100);
   });
 });
 
