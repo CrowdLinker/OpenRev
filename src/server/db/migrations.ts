@@ -334,6 +334,35 @@ CREATE TABLE IF NOT EXISTS import_chunks (
 );
 `,
   },
+  {
+    id: 4,
+    name: "google search console",
+    // A website's Search Console connection (the property and an encrypted service account key) and the clicks,
+    // impressions and positions it reports per day, query and landing page. `position` is a sum weighted by
+    // impressions, so averages can be taken over any range. `oldest`/`newest` are the days synced so far.
+    sql: `
+CREATE TABLE IF NOT EXISTS search_console (
+  site_id TEXT PRIMARY KEY,
+  property TEXT NOT NULL,
+  config TEXT NOT NULL,
+  oldest TEXT,
+  newest TEXT,
+  recent_synced_at BIGINT,
+  last_error TEXT,
+  created_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS search_stats (
+  site_id TEXT NOT NULL,
+  ts BIGINT NOT NULL,
+  query TEXT NOT NULL,
+  page TEXT NOT NULL,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  impressions INTEGER NOT NULL DEFAULT 0,
+  position DOUBLE PRECISION NOT NULL DEFAULT 0,
+  PRIMARY KEY (site_id, ts, query, page)
+);
+`,
+  },
 ];
 
 export const LATEST_MIGRATION = migrations[migrations.length - 1].id;

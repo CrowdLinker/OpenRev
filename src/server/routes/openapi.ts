@@ -94,6 +94,17 @@ export function openApiSpec(origin: string) {
           responses: ok("MRR by acquisition source"),
         },
       },
+      "/analytics/search-keywords": {
+        get: {
+          summary: "Google Search Console keywords: clicks, impressions, CTR, position, top landing page and estimated revenue",
+          parameters: [
+            ...rangeParams,
+            { name: "sort", in: "query", schema: { type: "string", enum: ["clicks", "revenue", "impressions"] } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 1000 } },
+          ],
+          responses: ok("Search keywords"),
+        },
+      },
       "/analytics/realtime": { get: { summary: "Visitors online now, live sessions, recent events and payments", parameters: rangeParams.slice(-1), responses: ok("Realtime") } },
       "/analytics/breakdowns/{dimension}": {
         get: {

@@ -173,6 +173,8 @@ export interface SiteMeta {
   goals: string[];
   /** Completed history imports (Plausible, Google Analytics). */
   imports?: { source: "plausible" | "ga4"; date_from: string; date_to: string }[];
+  /** Google Search Console is connected. */
+  searchConsole?: boolean;
 }
 
 export interface Note {

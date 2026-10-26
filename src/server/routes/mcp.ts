@@ -3,6 +3,7 @@ import { VERSION, type AppEnv, type ApiKeyAuth, type Runtime } from "../context"
 import { uuid } from "../lib/ids";
 import { verifyApiKey } from "../services/auth";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
+import { searchKeywords } from "../services/search-console";
 import { getMemberRole, getSite, roleAtLeast, type Role, type Site } from "../services/sites";
 import * as stats from "../services/stats";
 import { buildStatsQuery, rangeInfo } from "./helpers";
@@ -77,6 +78,15 @@ const TOOLS = [
     description: "Current MRR, MRR won and MRR churned in a period, grouped by the channel, source, campaign or country that brought each subscription in.",
     inputSchema: { type: "object", properties: { ...websiteProp, ...rangeProps, group_by: { type: "string", enum: ["channel", "source", "utm_campaign", "country"] } } },
   },
+  {
+    name: "get_search_keywords",
+    description:
+      "Google Search Console keywords for a period (when connected): clicks, impressions, CTR, average position, the top landing page and estimated revenue (the revenue of Google organic visits to each landing page, shared between its keywords by clicks).",
+    inputSchema: {
+      type: "object",
+      properties: { ...websiteProp, ...rangeProps, sort: { type: "string", enum: ["clicks", "revenue", "impressions"] }, limit: { type: "number" } },
+    },
+  },
   { name: "list_funnels", description: "List the funnels defined for a website.", inputSchema: { type: "object", properties: { ...websiteProp } } },
   { name: "get_funnel", description: "Conversion and drop-off for each step of a funnel.", inputSchema: { type: "object", required: ["funnel_id"], properties: { ...websiteProp, ...rangeProps, funnel_id: { type: "string" } } } },
   {
@@ -144,6 +154,10 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
     case "get_mrr_breakdown": {
       const group = mrrGroup(args.group_by);
       return { range: rangeInfo(q), ...money, group, rows: await mrrBreakdown(rt.db, q, group) };
+    }
+    case "get_search_keywords": {
+      const sort = args.sort === "revenue" || args.sort === "impressions" ? args.sort : "clicks";
+      return { range: rangeInfo(q), ...money, ...(await searchKeywords(rt.db, q, { sort, limit: Number(args.limit ?? 20) })) };
     }
     case "list_funnels": {
       const rows = await rt.db.all<{ id: string; name: string; steps: string }>("SELECT id, name, steps FROM funnels WHERE site_id = ?", [site.id]);

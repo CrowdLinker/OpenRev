@@ -4,6 +4,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    /** The response body, for errors that carry more than a message. */
+    public data?: unknown,
   ) {
     super(message);
   }
@@ -31,7 +33,7 @@ export async function api<T = unknown>(path: string, opts: { method?: Method; bo
     if (res.status === 401 && !path.startsWith("/api/auth") && !path.startsWith("/api/share")) {
       window.dispatchEvent(new CustomEvent("openrev:unauthorized"));
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, data);
   }
   return data as T;
 }

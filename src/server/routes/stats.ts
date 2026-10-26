@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../context";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
+import { searchKeywords } from "../services/search-console";
 import * as stats from "../services/stats";
 import { fail, rangeInfo, readJson, statsQuery } from "./helpers";
 
@@ -128,6 +129,16 @@ export function statsRoutes() {
     return c.json({ range: rangeInfo(q), currency: q.site.currency, interval: q.range.interval, ...report });
   });
 
+  app.get("/search-keywords", async (c) => {
+    const q = await statsQuery(c, c.get("site"));
+    const sort = c.req.query("sort");
+    const report = await searchKeywords(c.get("rt").db, q, {
+      limit: Number(c.req.query("limit") || 10),
+      sort: sort === "revenue" || sort === "impressions" ? sort : "clicks",
+    });
+    return c.json({ range: rangeInfo(q), currency: q.site.currency, ...report });
+  });
+
   app.get("/mrr/breakdown", async (c) => {
     const q = await statsQuery(c, c.get("site"));
     const group = mrrGroup(c.req.query("group"));
@@ -165,7 +176,7 @@ export function statsRoutes() {
   app.get("/meta", async (c) => {
     const site = c.get("site");
     const db = c.get("rt").db;
-    const [funnels, goals, imports] = await Promise.all([
+    const [funnels, goals, imports, searchConsole] = await Promise.all([
       db.all<{ id: string; name: string; steps: string }>("SELECT id, name, steps FROM funnels WHERE site_id = ? ORDER BY created_at ASC", [site.id]),
       db.all<{ name: string }>(
         "SELECT DISTINCT name FROM events WHERE site_id = ? AND type = 'goal' AND ts > ? ORDER BY name LIMIT 200",
@@ -175,6 +186,7 @@ export function statsRoutes() {
         "SELECT source, date_from, date_to FROM imports WHERE site_id = ? AND status = 'done' ORDER BY date_from",
         [site.id],
       ),
+      db.first<{ oldest: string | null }>("SELECT oldest FROM search_console WHERE site_id = ?", [site.id]),
     ]);
     return c.json({
       site: {
@@ -192,6 +204,8 @@ export function statsRoutes() {
       goals: goals.map((g) => g.name),
       /** Completed history imports: the dashboard says when a chart includes them, or leaves them out under filters. */
       imports,
+      /** Whether Google Search Console is connected, so the dashboard shows search keywords. */
+      searchConsole: !!searchConsole,
     });
   });
 

@@ -31,6 +31,7 @@ import {
 import * as stats from "../services/stats";
 import { fail, readJson, requireUser, siteForUser, stringList } from "./helpers";
 import { importRoutes } from "./imports";
+import { searchConsoleRoutes } from "./search-console";
 import { statsRoutes } from "./stats";
 
 const ROLES: Role[] = ["owner", "admin", "viewer"];
@@ -212,6 +213,7 @@ export function siteRoutes() {
   });
   app.route("/sites/:siteId/stats", statsApp);
   app.route("/sites/:siteId/imports", importRoutes());
+  app.route("/sites/:siteId/search-console", searchConsoleRoutes());
 
   // ---- team -------------------------------------------------------------------
 
@@ -655,13 +657,15 @@ export function siteRoutes() {
 }
 
 export function deleteSiteStatements(siteId: string, includeSite: boolean): Statement[] {
-  const analytics = ["events", "sessions", "visitors", "payments", "customers", "checkout_refs", "imported_stats", "imports"];
-  const config = ["site_members", "invites", "api_keys", "integrations", "funnels", "notes", "alerts", "alert_history"];
+  const analytics = ["events", "sessions", "visitors", "payments", "customers", "checkout_refs", "imported_stats", "imports", "search_stats"];
+  const config = ["site_members", "invites", "api_keys", "integrations", "funnels", "notes", "alerts", "alert_history", "search_console"];
   const tables = includeSite ? [...analytics, ...config] : analytics;
   const out: Statement[] = [
     { sql: "DELETE FROM import_chunks WHERE import_id IN (SELECT id FROM imports WHERE site_id = ?)", params: [siteId] },
     ...tables.map((t) => ({ sql: `DELETE FROM ${t} WHERE site_id = ?`, params: [siteId] })),
   ];
   if (includeSite) out.push({ sql: "DELETE FROM sites WHERE id = ?", params: [siteId] });
+  // A reset keeps the Search Console connection but syncs its history again.
+  else out.push({ sql: "UPDATE search_console SET oldest = NULL, newest = NULL, recent_synced_at = NULL WHERE site_id = ?", params: [siteId] });
   return out;
 }
