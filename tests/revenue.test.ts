@@ -52,11 +52,18 @@ function expectNoRevenue(label: string, body: Json) {
   expect(revenueKeys(body), label).toEqual([]);
 }
 
-/** Calls the app as one person: each client keeps its own session cookie. */
+let clients = 0;
+
+/**
+ * Calls the app as one person: each client keeps its own session cookie, and has its own address, so the signups of a
+ * whole run (one per member, on every database) stay under the per-address signup limit.
+ */
 function client(app: ReturnType<typeof createApp>) {
   let cookie = "";
+  const n = ++clients;
+  const ip = `10.0.${n >> 8}.${n & 255}`;
   return async (path: string, init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}) => {
-    const headers: Record<string, string> = { "User-Agent": CHROME, ...(init.headers ?? {}) };
+    const headers: Record<string, string> = { "User-Agent": CHROME, "X-Forwarded-For": ip, ...(init.headers ?? {}) };
     if (cookie) headers.Cookie = cookie;
     if (init.body !== undefined) headers["Content-Type"] = "application/json";
     const res = await app.request(BASE + path, {
