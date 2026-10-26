@@ -5,11 +5,13 @@ search keywords, social posts and AI crawlers. It talks to the [REST API](../api
 dependencies, and runs on Node.js 18.3 or later.
 
 ```bash
-npx openrev login
-npx openrev stats
+npx openrev-cli login
+npx openrev-cli stats
 ```
 
-Or install it once: `npm install -g openrev`.
+Or install it once with `npm install -g openrev-cli` and run `openrev stats`. The examples below use the installed
+`openrev` command; with npx, type `npx openrev-cli` in its place. (npm refuses `openrev` as a package name, as too
+close to `opener`, so the package and the command have different names.)
 
 AI assistants are better served by the [MCP server](../api/README.md#mcp-server), which exposes the same data.
 
@@ -81,7 +83,7 @@ Sending the same log twice counts its requests twice, so send each log once, for
 a daily cron job:
 
 ```bash
-15 0 * * * OPENREV_URL=https://analytics.example.com OPENREV_API_KEY=or_xxx npx -y openrev crawls send /var/log/nginx/access.log.1
+15 0 * * * OPENREV_URL=https://analytics.example.com OPENREV_API_KEY=or_xxx npx -y openrev-cli crawls send /var/log/nginx/access.log.1
 ```
 
 It needs a key whose user is an admin of the website.
