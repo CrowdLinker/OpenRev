@@ -660,7 +660,7 @@ export function siteRoutes() {
 }
 
 export function deleteSiteStatements(siteId: string, includeSite: boolean): Statement[] {
-  const analytics = ["events", "sessions", "visitors", "payments", "customers", "checkout_refs", "imported_stats", "imports", "search_stats"];
+  const analytics = ["events", "sessions", "visitors", "payments", "customers", "checkout_refs", "imported_stats", "imports", "search_stats", "crawler_stats"];
   const config = ["site_members", "invites", "api_keys", "integrations", "funnels", "notes", "alerts", "alert_history", "search_console"];
   const tables = includeSite ? [...analytics, ...config] : analytics;
   const out: Statement[] = [

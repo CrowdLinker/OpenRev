@@ -24,7 +24,7 @@ curl https://analytics.example.com/api/v1/analytics/overview \
 | Website key | `or_` | Website → Settings → API & MCP | One website (inferred). |
 | Account token | `ort_` | Account → Account tokens | Every website you can access — add `websiteId=<id>` to each request. |
 
-Keys act with the current role of the user who created them on each website. Viewers can only read: sending payments, goals and identities (`POST /payments`, `/goals`, `/identify`), deleting payments and the MCP `add_note` tool require the **admin** role (the REST API answers `403` otherwise). Keep keys server-side.
+Keys act with the current role of the user who created them on each website. Viewers can only read: sending payments, goals, identities and crawler requests (`POST /payments`, `/goals`, `/identify`, `/crawls`), deleting payments and the MCP `add_note` tool require the **admin** role (the REST API answers `403` otherwise). Keep keys server-side.
 
 Responses use an envelope:
 
@@ -118,6 +118,10 @@ Current MRR, `subscribers`, `new_mrr`, `new_subscribers` and `churned_mrr` in th
 
 Google search keywords in the range, when [Search Console is connected](../features/search-console.md). Each row has `query`, `clicks`, `impressions`, `ctr`, `position` (average), `page` (the landing page with the most clicks) and `revenue`: an estimate, from the revenue of Google organic visits to each landing page shared between its keywords by clicks. `sort` is `clicks` (default), `revenue` or `impressions`; `limit` defaults to 50. `meta.totals` has `clicks`, `impressions`, `revenue` (shared out) and `organic_revenue` (Google organic revenue on all landing pages). Filters don't apply.
 
+### `GET /analytics/crawlers`
+
+Crawler requests in the range, as [reported by the website's server](../features/ai-crawlers.md). `data.summary` has `hits`, the hits per category (`ai_training`, `ai_search`, `ai_user`, `search`), `crawlers`, `pages`, and `ai_visitors`, `ai_sessions` and `ai_revenue`: visits and revenue from the AI channel. `data.timeseries` has the hits per category for each day (or week, or month), `data.crawlers` has `name`, `operator`, `category`, `hits`, `pages` and `last_seen` per crawler, and `data.pages` the 50 most requested pages with their `crawlers`. `category` narrows `crawlers` and `pages` to one category. Hits are counted per day in the website's timezone, so they cover every day the range overlaps (`period=24h` reads yesterday and today), while the AI visits and revenue use the exact range. `data.pattern` is a regular expression (source, case-insensitive) that matches every crawler OpenRev knows, for your server code. Filters don't apply.
+
 ### `GET /analytics/realtime`
 
 Visitors active in the last 5 minutes, live sessions (current page, source, location, buyer-intent score), recent events and payments.
@@ -179,6 +183,18 @@ Payments in the range with the attributed session (`source`, `channel`, `country
 
 Delete by OpenRev id or `transaction_id` (admin keys).
 
+## Crawlers
+
+### `POST /crawls`
+
+Records requests from crawlers that your website's server received ([how to set it up](../features/ai-crawlers.md)). Send one request, or up to 1,000 in `hits`:
+
+```json
+{ "hits": [{ "path": "/pricing", "user_agent": "Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)", "timestamp": "2026-10-26T09:12:00Z" }] }
+```
+
+`path` can be a full `url`, and `user_agent` can be spelled `userAgent`. `timestamp` is optional (milliseconds, seconds or ISO 8601; defaults to now). Requests from user agents that OpenRev doesn't recognize are ignored. Returns `{ "recorded": 1, "ignored": 0 }`. Needs a key whose user is an admin of the website.
+
 ## Goals
 
 ### `POST /goals`
@@ -239,4 +255,4 @@ claude mcp add --transport http openrev https://analytics.example.com/mcp --head
 }
 ```
 
-Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `get_mrr`, `get_mrr_breakdown`, `get_search_keywords`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.
+Tools: `list_websites`, `get_overview`, `get_timeseries`, `get_breakdown`, `get_realtime`, `list_visitors`, `get_visitor`, `list_payments`, `get_ltv`, `get_mrr`, `get_mrr_breakdown`, `get_search_keywords`, `get_crawlers`, `list_funnels`, `get_funnel`, `add_note`. With an account token (`ort_`), pass `websiteId` to each tool (use `list_websites` first). `add_note` needs a key whose user is an admin of the website. JSON-RPC batches are limited to 20 requests.

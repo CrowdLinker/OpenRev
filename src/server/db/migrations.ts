@@ -363,6 +363,22 @@ CREATE TABLE IF NOT EXISTS search_stats (
 );
 `,
   },
+  {
+    id: 5,
+    name: "crawler hits",
+    // Requests from known crawlers (AI crawlers and search engines), reported by the website's server, counted per
+    // day, crawler and path. `ts` is the start of the day in the website's timezone.
+    sql: `
+CREATE TABLE IF NOT EXISTS crawler_stats (
+  site_id TEXT NOT NULL,
+  ts BIGINT NOT NULL,
+  bot TEXT NOT NULL,
+  path TEXT NOT NULL,
+  hits INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (site_id, ts, bot, path)
+);
+`,
+  },
 ];
 
 export const LATEST_MIGRATION = migrations[migrations.length - 1].id;

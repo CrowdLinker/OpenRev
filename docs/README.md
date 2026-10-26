@@ -23,6 +23,7 @@
 - [Using the dashboard](features/dashboard.md)
 - [MRR and churn](features/mrr.md)
 - [Google Search Console](features/search-console.md) (keywords and their estimated revenue)
+- [AI crawlers](features/ai-crawlers.md) (GPTBot, ClaudeBot and others, reported by your server)
 - [Alerts & digests](features/alerts.md)
 - [Team, access & public dashboards](features/team-and-sharing.md)
 - [Live badge](features/live-badge.md) (visitors online and today, linking to your public dashboard)

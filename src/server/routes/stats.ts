@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../context";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
+import { crawlerReport } from "../services/crawlers";
 import { searchKeywords } from "../services/search-console";
 import * as stats from "../services/stats";
 import { fail, rangeInfo, readJson, statsQuery } from "./helpers";
@@ -129,6 +130,12 @@ export function statsRoutes() {
     return c.json({ range: rangeInfo(q), currency: q.site.currency, interval: q.range.interval, ...report });
   });
 
+  app.get("/crawlers", async (c) => {
+    const q = await statsQuery(c, c.get("site"));
+    const report = await crawlerReport(c.get("rt").db, q, { timezone: c.get("site").timezone, category: c.req.query("category") });
+    return c.json({ range: rangeInfo(q), currency: q.site.currency, ...report });
+  });
+
   app.get("/search-keywords", async (c) => {
     const q = await statsQuery(c, c.get("site"));
     const sort = c.req.query("sort");
@@ -176,7 +183,7 @@ export function statsRoutes() {
   app.get("/meta", async (c) => {
     const site = c.get("site");
     const db = c.get("rt").db;
-    const [funnels, goals, imports, searchConsole] = await Promise.all([
+    const [funnels, goals, imports, searchConsole, crawlers] = await Promise.all([
       db.all<{ id: string; name: string; steps: string }>("SELECT id, name, steps FROM funnels WHERE site_id = ? ORDER BY created_at ASC", [site.id]),
       db.all<{ name: string }>(
         "SELECT DISTINCT name FROM events WHERE site_id = ? AND type = 'goal' AND ts > ? ORDER BY name LIMIT 200",
@@ -187,6 +194,7 @@ export function statsRoutes() {
         [site.id],
       ),
       db.first<{ oldest: string | null }>("SELECT oldest FROM search_console WHERE site_id = ?", [site.id]),
+      db.first("SELECT 1 AS found FROM crawler_stats WHERE site_id = ? LIMIT 1", [site.id]),
     ]);
     return c.json({
       site: {
@@ -206,6 +214,8 @@ export function statsRoutes() {
       imports,
       /** Whether Google Search Console is connected, so the dashboard shows search keywords. */
       searchConsole: !!searchConsole,
+      /** Whether the website's server has reported crawler requests: shared dashboards only show the Crawlers page then. */
+      crawlers: !!crawlers,
     });
   });
 

@@ -3,6 +3,7 @@ import { VERSION, type AppEnv, type ApiKeyAuth, type Runtime } from "../context"
 import { uuid } from "../lib/ids";
 import { verifyApiKey } from "../services/auth";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
+import { crawlerReport } from "../services/crawlers";
 import { searchKeywords } from "../services/search-console";
 import { getMemberRole, getSite, roleAtLeast, type Role, type Site } from "../services/sites";
 import * as stats from "../services/stats";
@@ -87,6 +88,12 @@ const TOOLS = [
       properties: { ...websiteProp, ...rangeProps, sort: { type: "string", enum: ["clicks", "revenue", "impressions"] }, limit: { type: "number" } },
     },
   },
+  {
+    name: "get_crawlers",
+    description:
+      "Crawler traffic reported by the website's server: hits from AI training crawlers (GPTBot, ClaudeBot…), AI search crawlers, AI assistants fetching pages for a user (ChatGPT-User, Claude-User…) and search engines, per crawler and page, plus visitors and revenue from AI assistants.",
+    inputSchema: { type: "object", properties: { ...websiteProp, ...rangeProps, category: { type: "string", enum: ["ai_training", "ai_search", "ai_user", "search"] } } },
+  },
   { name: "list_funnels", description: "List the funnels defined for a website.", inputSchema: { type: "object", properties: { ...websiteProp } } },
   { name: "get_funnel", description: "Conversion and drop-off for each step of a funnel.", inputSchema: { type: "object", required: ["funnel_id"], properties: { ...websiteProp, ...rangeProps, funnel_id: { type: "string" } } } },
   {
@@ -158,6 +165,10 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
     case "get_search_keywords": {
       const sort = args.sort === "revenue" || args.sort === "impressions" ? args.sort : "clicks";
       return { range: rangeInfo(q), ...money, ...(await searchKeywords(rt.db, q, { sort, limit: Number(args.limit ?? 20) })) };
+    }
+    case "get_crawlers": {
+      const { pattern: _pattern, ...report } = await crawlerReport(rt.db, q, { timezone: site.timezone, category: typeof args.category === "string" ? args.category : null });
+      return { range: rangeInfo(q), ...money, ...report };
     }
     case "list_funnels": {
       const rows = await rt.db.all<{ id: string; name: string; steps: string }>("SELECT id, name, steps FROM funnels WHERE site_id = ?", [site.id]);

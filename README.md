@@ -193,6 +193,7 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 
 - **MRR and churn**: MRR, ARR, new, expansion, contraction and churned MRR, churn rates and net revenue retention, with MRR by the channel that brought each subscriber in ([docs](docs/features/mrr.md)).
 - **Google Search Console**: the searches that bring visitors, with clicks, position and an estimate of the revenue each keyword earns ([docs](docs/features/search-console.md)).
+- **AI crawlers**: which AI crawlers (GPTBot, ClaudeBot, ChatGPT-User…) read which pages, reported by a few lines of server middleware, next to the visitors and revenue that AI assistants send ([docs](docs/features/ai-crawlers.md)).
 - **Team and sharing**: unlimited websites and members (owner, admin, viewer), invitation links, and public read-only dashboards that hide personal data.
 - **Live badge**: show "3 online · 1,297 visitors today" on your site, linking to your public dashboard ([docs](docs/features/live-badge.md)).
 - **Alerts**: new sales and refunds with source, country and journey, goal completions, traffic spikes, and daily or weekly digests to Slack, Discord, Telegram, email or webhooks.
@@ -352,7 +353,6 @@ Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Adding a paym
 
 - Social mentions and 𝕏 post and link-in-bio attribution
 - React Native / mobile SDK and web-to-app funnels
-- AI crawler (bot) traffic reports via server middleware
 - Historical import for more providers (Polar, Paddle, Dodo…)
 - An analytics CLI for terminals (the MCP server already covers agents)
 

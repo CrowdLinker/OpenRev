@@ -5,6 +5,7 @@ import { useApi } from "../lib/api";
 import { SiteContext } from "../lib/context";
 import type { SiteMeta } from "../lib/types";
 import { Moon, Sun } from "lucide-react";
+import { CrawlersPage } from "./Crawlers";
 import { DashboardPage } from "./Dashboard";
 import { FunnelsPage } from "./Funnels";
 import { RealtimePage } from "./Realtime";
@@ -51,13 +52,14 @@ export function SharePage({ token }: { token: string }) {
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-          <SiteNav isPublic role={null} hideRevenue={meta.data?.site.hideRevenue} />
+          <SiteNav isPublic role={null} hideRevenue={meta.data?.site.hideRevenue} crawlers={!!meta.data?.crawlers} />
           <Switch>
             <Route path="/" component={DashboardPage} />
             <Route path="/realtime" component={RealtimePage} />
             <Route path="/revenue" component={RevenuePage} />
             <Route path="/mrr" component={MrrPage} />
             <Route path="/funnels" component={FunnelsPage} />
+            <Route path="/crawlers" component={CrawlersPage} />
           </Switch>
         </main>
       </div>
