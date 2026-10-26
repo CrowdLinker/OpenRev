@@ -188,7 +188,7 @@ describe.each([
     await rt.db.run("UPDATE social_config SET x_reads = x_monthly_cap WHERE site_id = ?", [siteId]);
     const third = fakeApis();
     const paused = await syncSocial(rt, site, (await getSocialConfig(rt.db, siteId))!, { now: NOW + 14 * 3_600_000, fetchFn: third.fetchFn });
-    expect(third.calls.some((c) => c.includes("api.x.com"))).toBe(false);
+    expect(third.calls.some((c) => new URL(c).hostname === "api.x.com")).toBe(false);
     expect(paused.error).toMatch(/Paused: 500 𝕏 posts read this month/);
     await rt.db.run("UPDATE social_config SET x_reads = 2 WHERE site_id = ?", [siteId]);
   });
