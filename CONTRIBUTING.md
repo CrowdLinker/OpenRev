@@ -41,7 +41,7 @@ Small, focused PRs with a clear description. Include tests for behaviour changes
 
 ## Releasing the npm packages
 
-Two packages live in `packages/`:
+Three packages live in `packages/`:
 
 - [`create-openrev`](https://www.npmjs.com/package/create-openrev), the installer behind `npm create openrev`;
 - [`openrev`](https://www.npmjs.com/package/openrev), the [CLI](docs/guides/cli.md);

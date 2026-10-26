@@ -142,7 +142,16 @@ export function createClient(options) {
     }
   }
 
-  async function send(type, data = {}, path = screen) {
+  let chain = Promise.resolve();
+  // One send at a time: the retry queue is flushed in order, and no event is posted twice or dropped. The screen is
+  // read when the call is made.
+  function send(type, data = {}, path = screen) {
+    const run = chain.then(() => sendNow(type, data, path));
+    chain = run.catch(() => {});
+    return run;
+  }
+
+  async function sendNow(type, data, path) {
     await ready;
     if (optedOut) return;
     // Events that couldn't be sent go first, in order.
@@ -203,7 +212,13 @@ export function createClient(options) {
       await ready;
       if (!referrer || (await readJson(storage, KEYS.referrer))) return;
       writeJson(storage, KEYS.referrer, true);
-      applyLink(queryOf(decodeURIComponent(String(referrer))), "the install referrer");
+      let text = String(referrer);
+      try {
+        text = decodeURIComponent(text);
+      } catch {
+        /* not encoded (a lone "%"): use it as it is */
+      }
+      applyLink(queryOf(text), "the install referrer");
     },
     /** Engaged time: call when the app goes to the background and comes back (index.js does it). */
     background() {

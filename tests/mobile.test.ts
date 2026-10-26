@@ -44,6 +44,33 @@ describe("React Native SDK package", () => {
     expect(() => createClient(options([]))).toThrow(/react-native-get-random-values/);
   });
 
+  it("sends one event at a time, so events queued while offline go out once and in order", async () => {
+    const sent: string[] = [];
+    let online = false;
+    const client = createClient({
+      ...options([]),
+      fetch: (async (_url: string, init?: RequestInit) => {
+        if (!online) throw new Error("offline");
+        sent.push(JSON.parse(String(init?.body)).name);
+        await new Promise((r) => setTimeout(r, 5));
+        return new Response("{}");
+      }) as typeof fetch,
+    });
+    await client.track("a");
+    await client.track("b");
+    online = true;
+    await Promise.all([client.track("c"), client.track("d")]);
+    expect(sent).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("reads an install referrer that isn't percent-encoded", async () => {
+    const sent: string[] = [];
+    const client = createClient(options(sent));
+    await client.setInstallReferrer("utm_source=google-play&utm_campaign=100%");
+    await client.screen("Home");
+    expect(JSON.parse(sent[1]).href).toBe("app://com.lumen.app/Home?utm_source=google-play&utm_campaign=100%25");
+  });
+
   it("trims the host's trailing slashes, quickly even for a long run of them", async () => {
     const sent: string[] = [];
     await createClient(options(sent, "https://openrev.test///")).screen("Home");
