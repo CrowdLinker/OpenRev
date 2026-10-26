@@ -126,7 +126,12 @@ export function SearchConsoleSettings() {
                 className="input py-1.5"
                 onChange={async (e) => {
                   const f = e.target.files?.[0];
-                  if (f) setKey(await f.text());
+                  if (!f) return;
+                  // A new key may read other properties: the old list and error belong to the previous one.
+                  setKey(await f.text());
+                  setError(null);
+                  setProperties([]);
+                  setProperty("");
                 }}
               />
             </Field>

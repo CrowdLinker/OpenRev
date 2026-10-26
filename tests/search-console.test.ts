@@ -153,6 +153,21 @@ describe.each([
     expect(res.json.totals).toMatchObject({ revenue: 4900, organic_revenue: 4900 });
   });
 
+  it("syncs the history again when the website's timezone changes, so no day counts twice", async () => {
+    const days = async () => (await rt.db.all<{ ts: number }>("SELECT DISTINCT ts FROM search_stats WHERE site_id = ? ORDER BY ts", [siteId])).map((r) => Number(r.ts));
+    expect(await days()).toContain(Date.UTC(2026, 5, 14));
+
+    const patched = await call(`/api/sites/${siteId}`, { method: "PATCH", body: { timezone: "America/New_York" } });
+    expect(patched.status).toBe(200);
+    expect(await days()).toEqual([]);
+    expect(await getSearchConsole(rt.db, siteId)).toMatchObject({ property: "sc-domain:example.com", oldest: null, newest: null, recent_synced_at: null });
+
+    const site = (await getSite(rt.db, siteId))!;
+    await syncSearchConsole(rt, site, (await getSearchConsole(rt.db, siteId))!, { now: Date.UTC(2026, 5, 15, 12), fetchFn: fakeGoogle().fetchFn });
+    // Midnight in New York (UTC-4 in June) for June 12-14, and nothing left at the UTC midnights.
+    expect(await days()).toEqual([12, 13, 14].map((d) => Date.UTC(2026, 5, d, 4)));
+  });
+
   it("disconnects and deletes the synced data", async () => {
     expect((await call(`/api/sites/${siteId}/search-console`, { method: "DELETE" })).status).toBe(200);
     expect(await rt.db.first("SELECT COUNT(*) AS n FROM search_stats")).toEqual({ n: 0 });

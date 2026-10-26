@@ -14,6 +14,7 @@ import { clearBadgeCache } from "../services/badge";
 import { emailEnabled, escapeHtml, sendEmail } from "../services/email";
 import { decryptConfig, encryptConfig, importPage, publicIntegration, type IntegrationRow } from "../services/integrations";
 import { recomputeRevenue } from "../services/payments";
+import { resyncStatements } from "../services/search-console";
 import {
   claimInvite,
   findInvite,
@@ -158,7 +159,9 @@ export function siteRoutes() {
     }
     const keys = Object.keys(updates);
     if (keys.length) {
-      await rt.db.run(`UPDATE sites SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`, [...keys.map((k) => updates[k]), site.id]);
+      const statements: Statement[] = [{ sql: `UPDATE sites SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`, params: [...keys.map((k) => updates[k]), site.id] }];
+      if (updates.timezone && updates.timezone !== site.timezone) statements.push(...resyncStatements(site.id));
+      await rt.db.batch(statements);
     }
     invalidateSite(site.id);
     const updated = (await getSite(rt.db, site.id))!;

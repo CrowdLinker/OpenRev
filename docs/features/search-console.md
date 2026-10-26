@@ -46,6 +46,8 @@ reuse it.
   from a different website each time, so the history can take longer to fill in.
 - OpenRev stores up to 10,000 keyword and landing page pairs per day, the ones with the most clicks first. Pages that
   differ only by protocol or query string are added together, and landing pages are stored as paths, like entry pages.
+- Changing the website's timezone deletes the synced days and syncs them again, so each day starts at midnight in the
+  new timezone.
 - The key is stored encrypted with `OPENREV_SECRET`. **Disconnect** deletes it and the synced data.
 
 ## Limits

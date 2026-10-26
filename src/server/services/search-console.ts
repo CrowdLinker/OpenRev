@@ -128,6 +128,17 @@ export function disconnectStatements(siteId: string): Statement[] {
   ];
 }
 
+/**
+ * Deletes the synced days and starts the history again, keeping the connection. Days are stored at their start in the
+ * website's timezone, so a new timezone needs new rows: the old ones wouldn't be replaced and would count twice.
+ */
+export function resyncStatements(siteId: string): Statement[] {
+  return [
+    { sql: "DELETE FROM search_stats WHERE site_id = ?", params: [siteId] },
+    { sql: "UPDATE search_console SET oldest = NULL, newest = NULL, recent_synced_at = NULL WHERE site_id = ?", params: [siteId] },
+  ];
+}
+
 /** The landing page as OpenRev stores entry pages: the path, decoded, without a trailing slash. */
 export function pagePath(url: string): string {
   let path: string;
