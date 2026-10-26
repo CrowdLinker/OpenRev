@@ -493,7 +493,9 @@ async function cmdCrawlers(ctx) {
 }
 
 // 1.2.3.4 - - [26/Oct/2026:09:12:00 +0000] "GET /pricing HTTP/1.1" 200 5120 "-" "Mozilla/5.0 (compatible; GPTBot/1.2)"
-const LOG_LINE = /^\S+ \S+ \S+ \[([^\]]+)\] "(?:GET|HEAD) (\S+)[^"]*" \d{3} \S+ "[^"]*" "([^"]*)"/;
+// The path stops at a space or quote, so no two parts of the pattern can match the same characters: a crafted request
+// line can't make it backtrack.
+const LOG_LINE = /^\S+ \S+ \S+ \[([^\]]+)\] "(?:GET|HEAD) ([^\s"]+)(?: [^"]*)?" \d{3} \S+ "[^"]*" "([^"]*)"/;
 
 /** Parses one access log line in the "combined" format: { path, user_agent, timestamp } or null. */
 export function parseLogLine(line) {

@@ -75,6 +75,10 @@ describe("openrev CLI", () => {
       timestamp: Date.UTC(2026, 9, 26, 9, 12),
     });
     expect(parseLogLine("garbage")).toBeNull();
+    // Request paths come from anyone: a long crafted line is rejected at once, not after quadratic backtracking.
+    const started = performance.now();
+    expect(parseLogLine(`! ! ! [\\] "GET ${"!".repeat(100_000)}`)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(100);
     expect(configPath({ XDG_CONFIG_HOME: "/x" })).toBe(join("/x", "openrev", "config.json"));
   });
 
