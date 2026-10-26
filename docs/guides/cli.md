@@ -50,7 +50,7 @@ Options for every report:
 
 - `-p, --period`: `today`, `yesterday`, `24h`, `7d` (the default), `30d`, `90d`, `wtd`, `mtd`, `ytd`, `12m` or `all`.
 - `--from 2026-09-01 --to 2026-09-30`: a date range, in the website's time zone.
-- `-n, --limit`: how many rows (10 by default).
+- `-n, --limit`: how many rows, from 1 to 200 (10 by default).
 - `--json`: the API's JSON, for `jq` and scripts.
 - `--no-color` (or `NO_COLOR=1`): plain text. Colors are off anyway when the output isn't a terminal.
 

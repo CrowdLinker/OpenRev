@@ -1,8 +1,10 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { configPath, main, parseLogLine } from "../packages/openrev/index.mjs";
+import { configPath, main, parseLogLine, VERSION } from "../packages/openrev/index.mjs";
+import cliPackage from "../packages/openrev/package.json";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
 import { ingestEvent } from "../src/server/services/ingest";
@@ -22,7 +24,7 @@ describe("openrev CLI", () => {
   let siteId = "";
 
   /** Runs the CLI against the app in this process, as if OpenRev were at https://openrev.test. */
-  const cli = async (argv: string[], env: Record<string, string> = {}) => {
+  const cli = async (argv: string[], env: Record<string, string> = {}, stdin: Readable = Readable.from([])) => {
     let stdout = "";
     let stderr = "";
     const code = await main(argv, {
@@ -31,6 +33,7 @@ describe("openrev CLI", () => {
       stderr: { write: (s: string) => (stderr += s) },
       env: { XDG_CONFIG_HOME: join(home, "config"), ...env },
       home,
+      stdin,
     });
     return { code, stdout, stderr };
   };
@@ -91,12 +94,30 @@ describe("openrev CLI", () => {
     expect(bad.code).toBe(1);
     expect(bad.stderr).toMatch(/Invalid|invalid/);
 
+    // Without input to answer the questions (stdin closed, or a piped address only), login says what's missing.
+    expect(await cli(["login"])).toMatchObject({ code: 1, stderr: expect.stringContaining("No OpenRev address") });
+    expect(await cli(["login"], {}, Readable.from(["openrev.test\n"]))).toMatchObject({ code: 1, stderr: expect.stringContaining("No API key") });
+
+    // A config file left readable by others is made private before the key is written to it.
+    const file = join(home, "config", "openrev", "config.json");
+    await mkdir(join(home, "config", "openrev"), { recursive: true });
+    await writeFile(file, "{}", { mode: 0o644 });
     const ok = await cli(["login", "--url", "https://openrev.test/", "--key", key]);
     expect(ok.code).toBe(0);
     expect(ok.stdout).toContain("example.com");
-    const file = join(home, "config", "openrev", "config.json");
     expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ url: "https://openrev.test", key });
     if (process.platform !== "win32") expect((await stat(file)).mode & 0o077).toBe(0);
+  });
+
+  it("reports its package version and refuses a bad --limit", async () => {
+    expect(VERSION).toBe(cliPackage.version);
+    expect((await cli(["--version"])).stdout.trim()).toBe(cliPackage.version);
+    for (const bad of ["abc", "0", "201", "1.5"]) {
+      expect(await cli(["top", "pages", "--limit", bad], { OPENREV_URL: "https://openrev.test", OPENREV_API_KEY: key })).toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining("--limit is a whole number from 1 to 200"),
+      });
+    }
   });
 
   it("shows the overview, top reports, live visitors and payments", async () => {

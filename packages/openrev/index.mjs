@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // openrev: OpenRev analytics in the terminal. No dependencies; Node.js 18 or later.
 import { createReadStream, realpathSync } from "node:fs";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-export const VERSION = "0.1.0";
+/** From package.json, so a release bumps the version in one place. */
+export const VERSION = createRequire(import.meta.url)("./package.json").version;
 
 const HELP = `openrev ${VERSION}: OpenRev analytics in your terminal
 
@@ -35,7 +37,7 @@ Options
       --from <date>     Start date (YYYY-MM-DD), with --to
       --to <date>       End date (YYYY-MM-DD)
   -s, --site <site>     Website id or domain (keys for one website don't need it)
-  -n, --limit <n>       Rows to show (default 10)
+  -n, --limit <n>       Rows to show, 1 to 200 (default 10)
       --by <metric>     Sort "top" by visitors (default), revenue or conversion
       --watch           Keep "live" open, refreshing every 5 seconds
       --dry-run         "crawls send": count what would be sent, send nothing
@@ -217,7 +219,9 @@ function makeApi(io, url, key) {
   };
 }
 
+/** Asks one question. Without input (stdin closed or at its end, as in CI) the answer is empty. */
 async function prompt(io, question, { hidden = false } = {}) {
+  if (io.stdin.readableEnded) return "";
   const rl = createInterface({ input: io.stdin, output: io.stdout, terminal: !!io.stdin.isTTY });
   if (hidden && io.stdin.isTTY) {
     // Echo nothing while the key is typed.
@@ -225,7 +229,11 @@ async function prompt(io, question, { hidden = false } = {}) {
       if (s.includes(question)) io.stdout.write(s);
     };
   }
-  const answer = await new Promise((resolve) => rl.question(question, resolve));
+  // readline never answers a question once the input ends: its close event does.
+  const answer = await new Promise((resolve) => {
+    rl.once("close", () => resolve(""));
+    rl.question(question, resolve);
+  });
   rl.close();
   if (hidden && io.stdin.isTTY) io.stdout.write("\n");
   return answer.trim();
@@ -562,14 +570,19 @@ async function cmdLogin(ctx) {
   let url = ctx.values.url ?? ctx.env.OPENREV_URL;
   let key = ctx.values.key ?? ctx.env.OPENREV_API_KEY;
   if (!url) url = await prompt(ctx.io, "OpenRev address (https://analytics.example.com): ");
+  if (!url) throw new CliError("No OpenRev address: pass --url or set OPENREV_URL");
   if (!/^https?:\/\//.test(url)) url = `https://${url}`;
   if (!key) key = await prompt(ctx.io, "API key (Settings → API & MCP): ", { hidden: true });
-  if (!key) throw new CliError("No API key");
+  if (!key) throw new CliError("No API key: pass --key or set OPENREV_API_KEY");
   const api = makeApi(ctx.io, url, key);
   const sites = (await api("/websites")).data ?? [];
   const config = { url: url.replace(/\/+$/, ""), key };
   if (ctx.values.site) config.site = ctx.values.site;
   await mkdir(dirname(ctx.configFile), { recursive: true, mode: 0o700 });
+  // writeFile's mode only applies to a new file: an existing one is made private before the key goes in.
+  await chmod(ctx.configFile, 0o600).catch((err) => {
+    if (err.code !== "ENOENT") throw err;
+  });
   await writeFile(ctx.configFile, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
   print(`${c.green("✓")} Saved to ${ctx.configFile}`);
   print(`  ${sites.length === 1 ? "Website" : "Websites"}: ${sites.map((s) => s.domain).join(", ") || "none"}`);
@@ -628,7 +641,9 @@ export async function main(argv, io = {}) {
       run = cmdCrawlsSend;
     }
     if (!run) throw new CliError(`Unknown command "${name}". Run "openrev --help".`);
-    const ctx = { io, env: io.env, values, positionals, out, config, configFile, limit: Math.max(1, Math.min(Number(values.limit) || 10, 200)) };
+    const limit = values.limit === undefined ? 10 : Number(values.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new CliError("--limit is a whole number from 1 to 200");
+    const ctx = { io, env: io.env, values, positionals, out, config, configFile, limit };
     if (run !== cmdLogin && run !== cmdLogout) {
       const url = values.url ?? io.env.OPENREV_URL ?? config.url;
       const key = values.key ?? io.env.OPENREV_API_KEY ?? config.key;
