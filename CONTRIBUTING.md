@@ -39,17 +39,25 @@ One file in `src/server/providers/` implementing `PaymentProvider`, registered i
 
 Small, focused PRs with a clear description. Include tests for behaviour changes and update the docs when user-facing behaviour changes.
 
-## Releasing the installer
+## Releasing the npm packages
 
-`npm create openrev` runs the [`create-openrev`](https://www.npmjs.com/package/create-openrev) package in
-`packages/create-openrev`. It's published by the **Publish create-openrev to npm** workflow through npm trusted
-publishing, so no npm token is stored anywhere, and every release needs a maintainer's 2FA:
+Two packages live in `packages/`:
 
-1. Bump `version` in `packages/create-openrev/package.json` and merge the PR.
-2. Run the workflow from the Actions tab on `main`. It stages the release with `npm stage publish`. It doesn't run on
-   tags, so publishing an OpenRev release (`v0.1.0`, ...) never republishes the installer.
-3. A package maintainer approves the staged version on npmjs.com (create-openrev → Staged Packages) with 2FA. It goes
+- [`create-openrev`](https://www.npmjs.com/package/create-openrev), the installer behind `npm create openrev`;
+- [`openrev`](https://www.npmjs.com/package/openrev), the [CLI](docs/guides/cli.md).
+
+Both are published by the **Publish an npm package** workflow through npm trusted publishing, so no npm token is
+stored anywhere, and every release needs a maintainer's 2FA:
+
+1. Bump `version` in `packages/<package>/package.json` and merge the PR.
+2. Run the workflow from the Actions tab on `main`, picking the package. It stages the release with
+   `npm stage publish`. It doesn't run on tags, so an OpenRev release (`v0.1.0`, ...) never republishes them.
+3. A package maintainer approves the staged version on npmjs.com (package → Staged Packages) with 2FA. It goes
    public with a provenance attestation that links it to the workflow run.
 
+Each package needs a trusted publisher on npmjs.com (package → Settings → Trusted publishing: GitHub Actions,
+`CrowdLinker/OpenRev`, workflow `publish-cli.yml`). If npm doesn't offer that before a package exists, a maintainer
+publishes its first version once by hand (`npm publish` in its folder, with 2FA), then adds the trusted publisher.
+
 The installer clones `main`, so most changes to OpenRev reach users without a new installer release. Release it only
-when `packages/create-openrev` itself changes.
+when `packages/create-openrev` itself changes. Release the CLI when `packages/openrev` changes.

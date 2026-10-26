@@ -1,12 +1,18 @@
-name: Publish create-openrev to npm
+name: Publish an npm package
 
 on:
   workflow_dispatch:
+    inputs:
+      package:
+        description: Package in packages/ to publish
+        type: choice
+        options: [create-openrev, openrev]
+        default: create-openrev
 
-# Manual only: OpenRev's own release tags (v0.1.0, ...) must not try to republish the installer.
-# npm trusted publishing: npm trusts this workflow (set on npmjs.com → create-openrev → Settings), so no token is
-# stored anywhere. The run stages the release; a maintainer approves it with 2FA on npmjs.com (create-openrev →
-# Staged Packages) before it goes public. Bump the version in packages/create-openrev/package.json before each run.
+# Manual only: OpenRev's own release tags (v0.1.0, ...) must not try to republish the packages.
+# npm trusted publishing: npm trusts this workflow (set on npmjs.com → <package> → Settings), so no token is stored
+# anywhere. The run stages the release; a maintainer approves it with 2FA on npmjs.com (<package> → Staged Packages)
+# before it goes public. Bump the version in packages/<package>/package.json before each run.
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -22,5 +28,5 @@ jobs:
       - name: Use npm 11.21.1 (staged publishing needs 11.15 or newer)
         run: npm install -g npm@11.21.1
       - name: Stage the release
-        working-directory: packages/create-openrev
+        working-directory: packages/${{ inputs.package }}
         run: npm stage publish
