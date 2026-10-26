@@ -222,6 +222,8 @@ function PlausibleImport({ base, native, busy, setProgress, setError, onDone }: 
       if (input.current) input.current.value = "";
     } catch (err) {
       setError(err);
+      // A stopped upload is marked failed, which drops the rows it stored, so the export can be imported again.
+      if (id) await api(`${base}/${id}/finish`, { body: { error: `The upload stopped: ${err instanceof Error ? err.message : String(err)}` } }).catch(() => {});
     } finally {
       onDone();
     }

@@ -120,11 +120,24 @@ export async function createImport(
     created_at: now,
     updated_at: now,
   };
-  await db.run(
-    `INSERT INTO imports (id, site_id, source, status, date_from, date_to, config, cursor, imported_rows, error, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
-    [row.id, row.site_id, row.source, row.status, row.date_from, row.date_to, row.config, row.cursor, row.created_by, now, now],
-  );
+  await db.batch([
+    // Holds the site's row until the transaction ends, so two requests for the same site take turns below.
+    { sql: "UPDATE sites SET name = name WHERE id = ?", params: [site.id] },
+    {
+      sql: `INSERT INTO imports (id, site_id, source, status, date_from, date_to, config, cursor, imported_rows, error, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
+      params: [row.id, row.site_id, row.source, row.status, row.date_from, row.date_to, row.config, row.cursor, row.created_by, now, now],
+    },
+    // The overlap check again, under the lock: an import created since the check above wins, and this one is dropped.
+    {
+      sql: `DELETE FROM imports WHERE id = ? AND EXISTS (
+              SELECT 1 FROM imports o WHERE o.site_id = ? AND o.id <> ? AND o.status <> 'failed' AND o.date_from <= ? AND ? <= o.date_to)`,
+      params: [row.id, site.id, row.id, dateTo, dateFrom],
+    },
+  ]);
+  if (!(await db.first("SELECT 1 AS x FROM imports WHERE id = ?", [row.id]))) {
+    throw new ImportError("Another import of these days was just started. Delete it first, or import other dates.");
+  }
   return row;
 }
 
@@ -135,6 +148,7 @@ export async function finishImport(db: Database, imp: ImportRecord, error: strin
       ? [
           { sql: "DELETE FROM imported_stats WHERE import_id = ?", params: [imp.id] },
           { sql: "DELETE FROM import_chunks WHERE import_id = ?", params: [imp.id] },
+          { sql: "UPDATE imports SET imported_rows = 0 WHERE id = ?", params: [imp.id] },
         ]
       : []),
     // Credentials are only kept while an import runs.

@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
-import type { Database } from "../src/server/db/types";
+import type { Database, SqlValue } from "../src/server/db/types";
 import { accessToken, clearGoogleTokens, parseServiceAccountKey } from "../src/server/lib/google";
 import { GA4_REPORTS, GA4_SCOPE, parsePropertyId } from "../src/server/services/ga4";
 import { mapRow } from "../src/server/services/imports";
@@ -310,7 +310,7 @@ describe.each([
     await upload(first);
     expect((await stats(`overview?${range}`)).json.current.visitors).toBe(0); // not complete yet
     const failed = await call(`/api/sites/${siteId}/imports/${first}/finish`, { body: { error: "The upload stopped" } });
-    expect(failed.json.import).toMatchObject({ status: "failed" });
+    expect(failed.json.import).toMatchObject({ status: "failed", imported_rows: 0 });
     expect(await rt.db.first("SELECT COUNT(*) AS n FROM imported_stats WHERE import_id = ?", [first])).toEqual({ n: 0 });
 
     // Importing the same days again counts them once.
@@ -318,5 +318,19 @@ describe.each([
     await upload(second);
     await call(`/api/sites/${siteId}/imports/${second}/finish`, { body: {} });
     expect((await stats(`overview?${range}`)).json.current.visitors).toBe(40);
+  });
+
+  it("creates only one of two overlapping imports sent at the same time", async () => {
+    const create = () => call(`/api/sites/${siteId}/imports`, { body: { source: "plausible", date_from: "2022-01-01", date_to: "2022-01-31" } });
+    // Both requests read the existing imports before either one writes, as two app instances can.
+    const all = rt.db.all;
+    rt.db.all = (async (sql: string, params?: SqlValue[]) => {
+      const rows = await all.call(rt.db, sql, params);
+      if (sql.includes("FROM imports WHERE site_id")) await new Promise((r) => setTimeout(r, 50));
+      return rows;
+    }) as typeof all;
+    const results = await Promise.all([create(), create()]).finally(() => (rt.db.all = all));
+    expect(results.map((r) => r.status).sort()).toEqual([200, 400]);
+    expect(await rt.db.first("SELECT COUNT(*) AS n FROM imports WHERE site_id = ? AND date_from = '2022-01-01'", [siteId])).toEqual({ n: 1 });
   });
 });
