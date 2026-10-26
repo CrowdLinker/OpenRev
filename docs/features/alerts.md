@@ -26,8 +26,10 @@ Recipients who are members of the website without it:
 - get goal and traffic spike alerts as usual.
 
 Other recipients get every alert in full: owners, members with **Can see revenue**, and addresses that aren't members
-of the website. Slack, Discord, Telegram and webhooks don't change either: whoever set up the alert, who can see
-revenue, chose where those go. When no recipient of a payment alert can see revenue, **Send test** says so.
+of the website. Slack, Discord, Telegram and webhooks don't change either: they get the alert as it is, wherever it
+points. Payment alerts and digests that existed before 0.2.0 keep sending to their destinations, even if whoever set
+them up has since lost **Can see revenue**, so owners should check those destinations after upgrading. When no
+recipient of a payment alert can see revenue, **Send test** says so.
 
 ## Channels
 

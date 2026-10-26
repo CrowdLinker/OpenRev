@@ -22,6 +22,10 @@ should keep seeing it.** A notice there reminds each owner once (and each admin,
 members who can see revenue can grant it, so an admin who lost it can't turn it back on for themselves. Invitations
 that were pending start without it too.
 
+Payment alerts and digests that already exist keep sending to their Slack, Discord, Telegram, webhook and outside
+email destinations, whoever set them up. **Check them in Settings → Alerts after updating**, and delete any that point
+somewhere that shouldn't see revenue. From now on only members who can see revenue can create or change them.
+
 **Hide revenue** is now **Hide revenue on share links**. It keeps its value, but only applies to public share links,
 where it now removes revenue on the server. Owners and members with **Can see revenue** see revenue in the dashboard
 even when it's on.

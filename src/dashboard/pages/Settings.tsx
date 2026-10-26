@@ -786,7 +786,8 @@ function TeamSettings({ site }: { site: Site }) {
             <div className="font-medium text-amber-900 dark:text-amber-200">Revenue is now hidden from team members until you allow it</div>
             <p className="mt-0.5 text-amber-800/90 dark:text-amber-300/90">
               Since this update, only owners see revenue by default. Turn on <a href="#members" className="font-medium underline">“Can see revenue”</a> for the members who
-              should keep seeing it. “Hide revenue” now only applies to public share links.
+              should keep seeing it. Payment alerts and digests keep sending where they point, so check them under Alerts. “Hide revenue” now
+              only applies to public share links.
             </p>
           </div>
           <button
