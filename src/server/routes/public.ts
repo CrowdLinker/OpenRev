@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { getClientIpInfo, type AppEnv } from "../context";
 import { geoFromHeaders } from "../lib/geo";
+import { BADGE_TTL_MS, badgeData, badgeSvg, isShareToken } from "../services/badge";
 import { handleWebhook } from "../services/integrations";
 import { ingestEvent, type IncomingEvent } from "../services/ingest";
 import { parseSite } from "../services/sites";
@@ -76,6 +77,28 @@ export function publicRoutes() {
     await next();
   });
   app.route("/api/share/:token/stats", statsRoutes());
+
+  // ---- live badge, embedded on other sites (docs/features/live-badge.md) --------------------------------
+
+  const badgeHeaders = { "Access-Control-Allow-Origin": "*", "Cache-Control": `public, max-age=${BADGE_TTL_MS / 1000}` };
+
+  app.get("/api/badge/:token", async (c) => {
+    const token = c.req.param("token");
+    const data = isShareToken(token) ? await badgeData(c.get("rt").db, token) : null;
+    if (!data) return c.json({ error: "Badge not found" }, 404, badgeHeaders);
+    return c.json(data, 200, badgeHeaders);
+  });
+
+  app.get("/api/badge/:token/badge.svg", async (c) => {
+    const token = c.req.param("token");
+    const data = isShareToken(token) ? await badgeData(c.get("rt").db, token) : null;
+    if (!data) return c.text("Badge not found", 404, badgeHeaders);
+    return c.body(badgeSvg(data, c.req.query("theme") === "dark" ? "dark" : "light"), 200, {
+      ...badgeHeaders,
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+    });
+  });
 
   // ---- favicons for referrers (proxied so visitors' browsers don't call third parties) ----------
 

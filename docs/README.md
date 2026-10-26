@@ -23,6 +23,7 @@
 - [Using the dashboard](features/dashboard.md)
 - [Alerts & digests](features/alerts.md)
 - [Team, access & public dashboards](features/team-and-sharing.md)
+- [Live badge](features/live-badge.md) (visitors online and today, linking to your public dashboard)
 
 ## Developers
 - [REST API](api/README.md) · [MCP server](api/README.md#mcp-server)

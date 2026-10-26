@@ -134,7 +134,7 @@ function staticFiles(root: string): MiddlewareHandler<AppEnv> {
     root,
     onFound: (path, c) => {
       if (/\/assets\//.test(path)) c.header("Cache-Control", "public, max-age=31536000, immutable");
-      else if (/\/js\/script/.test(path)) {
+      else if (/\/js\/(script|badge)/.test(path)) {
         c.header("Cache-Control", "public, max-age=3600");
         c.header("Access-Control-Allow-Origin", "*");
       }

@@ -10,6 +10,7 @@ import { isEmail, sanitizeGoalName } from "../lib/validate";
 import { getProvider, providerCatalog } from "../providers";
 import { ALERT_CHANNELS, ALERT_TYPES, invalidateAlerts, sendTestAlert, TELEGRAM_TOKEN, type AlertRow } from "../services/alerts";
 import { createApiKey } from "../services/auth";
+import { clearBadgeCache } from "../services/badge";
 import { emailEnabled, escapeHtml, sendEmail } from "../services/email";
 import { decryptConfig, encryptConfig, importPage, publicIntegration, type IntegrationRow } from "../services/integrations";
 import { recomputeRevenue } from "../services/payments";
@@ -194,6 +195,8 @@ export function siteRoutes() {
     const token = body.enabled ? site.share_token ?? randomId(20) : null;
     await c.get("rt").db.run("UPDATE sites SET share_token = ? WHERE id = ?", [token, site.id]);
     invalidateSite(site.id);
+    // The live badge caches counts per token; drop them so a turned-off link stops answering here at once.
+    if (!token && site.share_token) clearBadgeCache(site.share_token);
     return c.json({ share_token: token, url: token ? `${publicUrl(c)}/share/${token}` : null });
   });
 
