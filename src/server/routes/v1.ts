@@ -188,7 +188,7 @@ export function v1Routes() {
   app.get("/analytics/crawlers", async (c) => {
     const s = await site(c);
     const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
-    const report = await crawlerReport(c.get("rt").db, q, { category: c.req.query("category") });
+    const report = await crawlerReport(c.get("rt").db, q, { timezone: s.timezone, category: c.req.query("category") });
     return ok(c, report, { currency: s.currency, range: rangeInfo(q) });
   });
 

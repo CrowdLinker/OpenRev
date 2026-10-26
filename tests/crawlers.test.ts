@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
 import type { Database } from "../src/server/db/types";
@@ -107,5 +107,26 @@ describe.each([
     const userOnly = (await call(`/api/v1/analytics/crawlers?period=7d&category=ai_user`, { headers: auth })).json.data;
     expect(userOnly.crawlers.map((c: { name: string }) => c.name)).toEqual(["ChatGPT-User"]);
     expect(userOnly.pages).toEqual([{ path: "/pricing", hits: 1, crawlers: ["ChatGPT-User"] }]);
+  });
+
+  it("counts every website day a range overlaps, for Last 24 hours and in another timezone", async () => {
+    const auth = { Authorization: `Bearer ${apiKey}` };
+    const edge = (pages: { path: string; hits: number }[]) => pages.find((p) => p.path === "/day-edges")?.hits ?? 0;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-06-15T05:00:00Z"));
+      // 19 hours ago, stored on June 14 (the website is in UTC).
+      await call("/api/v1/crawls", { body: { path: "/day-edges", user_agent: UA.gptbot, timestamp: Date.UTC(2026, 5, 14, 10) }, headers: auth });
+
+      const last24h = (await call(`/api/sites/${siteId}/stats/crawlers?period=24h`)).json;
+      expect(edge(last24h.pages)).toBe(1);
+      expect(last24h.timeseries.map((p: { date: string }) => p.date)).toEqual(["2026-06-14", "2026-06-15"]);
+
+      // June 14 in New York starts at 04:00 UTC, after the stored midnight: the website's June 14 still counts.
+      const newYork = (await call("/api/v1/analytics/crawlers?from=2026-06-14&to=2026-06-14&timezone=America/New_York", { headers: auth })).json.data;
+      expect(edge(newYork.pages)).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,6 +1,6 @@
 import type { Database, SqlValue, Statement } from "../db/types";
 import { CRAWLER_CATEGORIES, CRAWLER_PATTERN, CRAWLERS, crawlerByName, matchCrawler, type CrawlerCategory } from "../lib/crawlers";
-import { planBuckets, startOfLocalDay, type Interval } from "../lib/time";
+import { localParts, planBuckets, startOfLocalDay, zonedTime, type Interval } from "../lib/time";
 import type { Site } from "./sites";
 import { attributionColumn, type StatsQuery } from "./stats";
 
@@ -73,10 +73,19 @@ const categoryOf = (bot: string): CrawlerCategory => crawlerByName(bot)?.categor
 /**
  * Crawler hits in the range: totals per category, over time, per crawler and per page, next to the visits and revenue
  * that AI assistants sent (the AI channel). Filters don't apply: crawler hits have no visitor attributes.
+ *
+ * Hits are stored per day at midnight in the website's timezone (`opts.timezone`, which the query may override). So
+ * the hits cover every website day the range overlaps: "Last 24 hours" reads yesterday and today. The AI visits and
+ * revenue use the exact range, like the rest of the dashboard.
  */
-export async function crawlerReport(db: Database, q: StatsQuery, opts: { interval?: Interval; category?: string | null } = {}) {
-  const plan = planBuckets(q.site.timezone, q.range.from, q.range.to, opts.interval ?? (q.range.interval === "hour" ? "day" : q.range.interval));
-  const base = [q.site.id, q.range.from, q.range.to];
+export async function crawlerReport(db: Database, q: StatsQuery, opts: { timezone: string; interval?: Interval; category?: string | null }) {
+  const tz = opts.timezone;
+  const from = startOfLocalDay(tz, q.range.from);
+  const last = localParts(tz, q.range.to - 1);
+  const to = zonedTime(tz, last.year, last.month, last.day + 1);
+  const plan = planBuckets(tz, from, to, opts.interval ?? (q.range.interval === "hour" ? "day" : q.range.interval));
+  const base = [q.site.id, from, to];
+  const exact = [q.site.id, q.range.from, q.range.to];
   const category = (CRAWLER_CATEGORIES as readonly string[]).includes(opts.category ?? "") ? (opts.category as CrawlerCategory) : null;
   const attr = attributionColumn(q.site, q.attribution);
   // Pages are added up in SQL: a large website can have tens of thousands of crawled paths in a range.
@@ -103,7 +112,7 @@ export async function crawlerReport(db: Database, q: StatsQuery, opts: { interva
               (SELECT SUM(p.revenue) FROM payments p JOIN sessions ps ON ps.id = p.${attr}
                WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ? AND ps.channel = 'AI') AS revenue
        FROM sessions s WHERE s.site_id = ? AND s.started_at >= ? AND s.started_at < ? AND s.channel = 'AI'`,
-      [...base, ...base],
+      [...exact, ...exact],
     ),
   ]);
 

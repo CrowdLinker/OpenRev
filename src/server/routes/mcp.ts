@@ -167,7 +167,7 @@ async function callTool(rt: Runtime, key: ApiKeyAuth, name: string, args: Args):
       return { range: rangeInfo(q), ...money, ...(await searchKeywords(rt.db, q, { sort, limit: Number(args.limit ?? 20) })) };
     }
     case "get_crawlers": {
-      const { pattern: _pattern, ...report } = await crawlerReport(rt.db, q, { category: typeof args.category === "string" ? args.category : null });
+      const { pattern: _pattern, ...report } = await crawlerReport(rt.db, q, { timezone: site.timezone, category: typeof args.category === "string" ? args.category : null });
       return { range: rangeInfo(q), ...money, ...report };
     }
     case "list_funnels": {

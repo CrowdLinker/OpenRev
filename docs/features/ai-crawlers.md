@@ -167,6 +167,7 @@ console.log(`Sent ${sent + batch.length} crawler requests`);
 - Requests from user agents OpenRev doesn't recognize are ignored, and the response says how many
   (`{"recorded": 12, "ignored": 3}`).
 - Days follow the website's time zone. Without a `timestamp`, a hit counts at the time OpenRev receives it.
+- Because hits are counted per day, a report covers whole days: **Last 24 hours** shows yesterday's and today's hits.
 - **Visitors from AI** and **Revenue from AI** are visits and payments from the AI channel: people who came from
   ChatGPT, Claude, Perplexity, Gemini, Copilot and other assistants. They come from the tracking script, like the rest
   of the dashboard, and use your attribution model.

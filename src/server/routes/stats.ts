@@ -132,7 +132,7 @@ export function statsRoutes() {
 
   app.get("/crawlers", async (c) => {
     const q = await statsQuery(c, c.get("site"));
-    const report = await crawlerReport(c.get("rt").db, q, { category: c.req.query("category") });
+    const report = await crawlerReport(c.get("rt").db, q, { timezone: c.get("site").timezone, category: c.req.query("category") });
     return c.json({ range: rangeInfo(q), currency: q.site.currency, ...report });
   });
 
