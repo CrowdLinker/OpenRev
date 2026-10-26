@@ -58,11 +58,11 @@ The script defines `window.openrev`. It also defines `window.datafast` with the 
 | `openrev("identify", { user_id, email, name, image, ...props })` | Attaches a user to the current visitor. See [Identify users](identify.md). |
 | `openrev("payment", { email })` | Tells OpenRev this visitor just paid with this email, so the payment can be matched when the provider reports it (a payment OpenRev already received is only linked if it's less than 2 hours old). Also accepts `ref`: the checkout reference your provider reports, such as a Stripe Checkout Session id. `transaction_id` is an alias, sent as `ref`. |
 | `openrev("pageview")` | Sends a pageview for the current URL, even if it was already counted. Only needed when your router doesn't use the History API. |
-| `openrev("consent", true)` | Consent build only: the visitor accepted cookies. `false` withdraws consent; `"granted"` and `"denied"` work too. Ignored by the other builds. See [Cookieless until consent](privacy-and-cookies.md#cookieless-until-consent). |
+| `openrev("consent", true)` | Consent build only: the visitor accepted cookies. `false` withdraws consent; `"granted"` and `"denied"` work too. In the other builds it's an ordinary goal named `consent`. See [Cookieless until consent](privacy-and-cookies.md#cookieless-until-consent). |
 | `openrev.visitorId()` | Returns the visitor id (also `openrev.getVisitorId()`). Returns `null` in cookieless mode. |
 | `openrev.sessionId()` | Returns the session id (also `openrev.getSessionId()`). |
 
-`identify`, `payment`, `pageview` and `consent` are reserved. Any other first argument is treated as a goal name.
+`identify`, `payment` and `pageview` are reserved, and `consent` in the consent build. Any other first argument is treated as a goal name.
 
 ### Calling the API before the script loads
 
@@ -84,7 +84,7 @@ export {};
 
 declare global {
   interface Window {
-    openrev?: ((event: string, data?: Record<string, unknown>) => void) & {
+    openrev?: ((event: string, data?: Record<string, unknown> | boolean | "granted" | "denied") => void) & {
       visitorId?: () => string | null;
       sessionId?: () => string;
     };
@@ -157,7 +157,7 @@ The script sends `POST` requests to `/api/events` (`/api/event` is accepted as a
 
 | Field | Sent with | Meaning |
 | --- | --- | --- |
-| `type` | all | `pageview`, `goal`, `engagement`, `outbound`, `identify` or `payment` |
+| `type` | all | `pageview`, `goal`, `engagement`, `outbound`, `identify`, `payment` or `consent` (the consent build, when the visitor accepts: it carries the new cookie `visitorId` and the current `sessionId`) |
 | `websiteId` | all | `data-website-id` |
 | `href` | all | Full page URL |
 | `referrer` | all | `document.referrer` |

@@ -110,41 +110,65 @@ function isExcluded(site: Site, hostname: string, path: string, meta: RequestMet
 
 /**
  * Consent mode (the `script.consent.js` build): the tracker runs cookieless until the visitor consents, then sends a
- * `consent` event with its new cookie visitor id and the session it's in. That session (its events, and payments attributed to it)
- * moves from the cookieless visitor to the new one, so the visit isn't split in two. It only moves when the session
- * belongs to the cookieless id of this very request (same site, IP, browser and day): a session id alone can't claim
- * someone else's visit. Earlier cookieless sessions stay as they were; consent doesn't reach back.
+ * `consent` event with its new cookie visitor id and the session it's in. That session (its events, its checkout refs
+ * and the payments attributed to it) moves from the cookieless visitor to the new one, so the visit isn't split in two.
+ * It only moves when the session belongs to the cookieless id of this browser (same site, IP and user agent) on the
+ * day the session started, today or yesterday: a session id alone can't claim someone else's visit. Earlier cookieless
+ * sessions stay as they were; consent doesn't reach back.
  */
+const IDENTITY_FIELDS = ["user_id", "name", "email", "image", "props"];
+
 async function adoptConsentedVisitor(rt: Runtime, site: Site, body: IncomingEvent, meta: RequestMeta, now: number): Promise<IngestResult> {
   const visitorId = body.visitorId;
   const sessionId = body.sessionId;
   if (site.settings.cookieless || !isValidClientId(visitorId) || !isValidClientId(sessionId)) return { ok: false, reason: "invalid_consent" };
-  const cookieless = await cookielessVisitorId(rt, site, meta, now);
   const session = await rt.db.first<{ visitor_id: string; started_at: number }>("SELECT visitor_id, started_at FROM sessions WHERE id = ? AND site_id = ?", [
     sessionId,
     site.id,
   ]);
-  if (!session || session.visitor_id !== cookieless || visitorId === cookieless) return { ok: true, visitorId, sessionId };
+  if (!session || session.visitor_id === visitorId) return { ok: true, visitorId, sessionId };
+  const owner = session.visitor_id;
+  const startedAt = Number(session.started_at);
+  const day = (t: number) => new Date(t).toISOString().slice(0, 10);
+  // A session that began before UTC midnight belongs to yesterday's cookieless id.
+  const ownedHere =
+    owner === (await cookielessVisitorId(rt, site, meta, now)) ||
+    (day(startedAt) === day(now - 86_400_000) && owner === (await cookielessVisitorId(rt, site, meta, startedAt)));
+  if (!ownedHere) return { ok: true, visitorId, sessionId };
+  // Every update checks the owner, so if two consent requests race for the session only the first one moves anything.
+  const counts = `UPDATE visitors SET sessions = (SELECT COUNT(*) FROM sessions s WHERE s.site_id = visitors.site_id AND s.visitor_id = visitors.id)
+                  WHERE site_id = ? AND id IN (?, ?)`;
   await rt.db.batch([
     {
-      sql: `INSERT INTO visitors (site_id, id, first_seen, last_seen, sessions) VALUES (?, ?, ?, ?, 1)
-            ON CONFLICT (site_id, id) DO UPDATE SET last_seen = excluded.last_seen, sessions = visitors.sessions + 1`,
-      params: [site.id, visitorId, Number(session.started_at), now],
+      sql: `INSERT INTO visitors (site_id, id, first_seen, last_seen, sessions) VALUES (?, ?, ?, ?, 0)
+            ON CONFLICT (site_id, id) DO UPDATE SET last_seen = excluded.last_seen`,
+      params: [site.id, visitorId, startedAt, now],
     },
-    { sql: "UPDATE sessions SET visitor_id = ? WHERE id = ? AND site_id = ?", params: [visitorId, sessionId, site.id] },
-    { sql: "UPDATE events SET visitor_id = ? WHERE session_id = ? AND site_id = ?", params: [visitorId, sessionId, site.id] },
+    { sql: "UPDATE sessions SET visitor_id = ? WHERE id = ? AND site_id = ? AND visitor_id = ?", params: [visitorId, sessionId, site.id, owner] },
+    { sql: "UPDATE events SET visitor_id = ? WHERE session_id = ? AND site_id = ? AND visitor_id = ?", params: [visitorId, sessionId, site.id, owner] },
     {
       sql: `UPDATE payments SET visitor_id = ? WHERE site_id = ? AND visitor_id = ?
             AND (first_session_id = ? OR last_session_id = ? OR touch_session_id = ?)`,
-      params: [visitorId, site.id, cookieless, sessionId, sessionId, sessionId],
+      params: [visitorId, site.id, owner, sessionId, sessionId, sessionId],
+    },
+    { sql: "UPDATE checkout_refs SET visitor_id = ? WHERE site_id = ? AND visitor_id = ? AND session_id = ?", params: [visitorId, site.id, owner, sessionId] },
+    {
+      // Customers whose payments just moved: their renewals belong to the consenting visitor too.
+      sql: `UPDATE customers SET visitor_id = ? WHERE site_id = ? AND visitor_id = ? AND EXISTS (
+              SELECT 1 FROM payments p WHERE p.site_id = customers.site_id AND p.provider = customers.provider
+              AND p.customer_id = customers.customer_id AND p.visitor_id = ?)`,
+      params: [visitorId, site.id, owner, visitorId],
     },
     {
-      sql: `UPDATE visitors SET sessions = sessions - 1 WHERE site_id = ? AND id = ? AND sessions > 0`,
-      params: [site.id, cookieless],
+      // What identify() stored on the cookieless visitor, where the consenting visitor has nothing yet.
+      sql: `UPDATE visitors SET ${IDENTITY_FIELDS.map((f) => `${f} = COALESCE(${f}, (SELECT o.${f} FROM visitors o WHERE o.site_id = ? AND o.id = ?))`).join(", ")}
+            WHERE site_id = ? AND id = ? AND EXISTS (SELECT 1 FROM sessions WHERE id = ? AND site_id = ? AND visitor_id = ?)`,
+      params: [...IDENTITY_FIELDS.flatMap(() => [site.id, owner]), site.id, visitorId, sessionId, site.id, visitorId],
     },
+    { sql: counts, params: [site.id, visitorId, owner] },
     {
       sql: `DELETE FROM visitors WHERE site_id = ? AND id = ? AND NOT EXISTS (SELECT 1 FROM sessions WHERE site_id = ? AND visitor_id = ?)`,
-      params: [site.id, cookieless, site.id, cookieless],
+      params: [site.id, owner, site.id, owner],
     },
   ]);
   return { ok: true, visitorId, sessionId };

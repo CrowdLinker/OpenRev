@@ -78,9 +78,9 @@ Do both. With only the setting, the old script keeps setting cookies (which the 
 If you show a cookie banner, use the consent build, `/js/script.consent.js`. It works like cookieless mode until the visitor accepts, then like cookie mode.
 
 - **Before consent:** no cookies and no visitor id in the browser. The server counts the visitor with the daily hash, like in cookieless mode, and the session id lives in the tab's `sessionStorage`.
-- **When the visitor accepts:** the script sets the visitor and session cookies, plus `openrev_consent=1` (1 year), and tells the server. The server moves the current visit (its pageviews, goals and payments) from the anonymous hash to the new visitor id. The visit isn't counted twice, and a payment keeps the source that brought the visitor in. Only the current visit moves; earlier visits stay anonymous.
+- **When the visitor accepts:** the script sets the visitor and session cookies, plus `openrev_consent=1` (1 year), and tells the server. The server moves the current visit (its pageviews, goals and payments, and what `identify` recorded) from the anonymous hash to the new visitor id, even if the visit began before midnight UTC, when the daily hash changes. If the request fails, the script retries twice. The visit isn't counted twice, and a payment keeps the source that brought the visitor in. Only the current visit moves; earlier visits stay anonymous.
 - **On later visits:** the `openrev_consent` cookie tells the script that the visitor accepted, so it uses cookies from the first pageview.
-- **When the visitor withdraws consent:** the script deletes its three cookies and goes back to cookieless.
+- **When the visitor withdraws consent:** the script deletes its three cookies and goes back to cookieless, in a new session.
 
 Leave **Settings → General → Cookieless mode** off: with it on, the server ignores visitor ids, consent included.
 

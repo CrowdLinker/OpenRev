@@ -231,7 +231,10 @@ interface Payload {
         nav.sendBeacon(api, new Blob([body], { type: "text/plain" }));
         return;
       }
-      fetch(api, { method: "POST", body, keepalive: true, headers: { "Content-Type": "text/plain" } }).catch(() => {});
+      const req = fetch(api, { method: "POST", body, keepalive: true, headers: { "Content-Type": "text/plain" } });
+      // The consent build needs to know whether it got through; the others don't wait.
+      if (__CONSENT__) return req.then((r) => r.status < 500, () => false);
+      req.catch(() => {});
     } catch {
       /* ignore */
     }
@@ -479,11 +482,22 @@ interface Payload {
           setCookie(CONSENT_COOKIE, "1", 31536000);
           mem.s = sid;
           setCookie(SESSION_COOKIE, sid, SESSION_TTL);
-          send("consent");
+          // Retry a few times if it doesn't get through, or the visit stays split between the two visitor ids.
+          const adopt = (attempt: number) =>
+            send("consent")?.then((ok) => {
+              if (!ok && !cookieless && attempt < 3) setTimeout(() => adopt(attempt + 1), 2000 * attempt);
+            });
+          adopt(1);
           log("Consent given: using cookies");
         } else {
           [VISITOR_COOKIE, SESSION_COOKIE, CONSENT_COOKIE].forEach((name) => setCookie(name, "", 0));
           mem.v = mem.s = null;
+          // Start a new cookieless session: the stored one now belongs to the consented visitor.
+          try {
+            sessionStorage.removeItem(SESSION_COOKIE);
+          } catch {
+            /* storage unavailable */
+          }
           cookieless = true;
           log("Consent withdrawn: cookies removed, cookieless from now on");
         }
@@ -531,9 +545,9 @@ interface Payload {
     } else if (cmd === "pageview") {
       lastPage = null;
       pageview();
-    } else if (cmd === "consent") {
-      // openrev("consent", true | false | "granted" | "denied"); ignored outside the consent build.
-      if (__CONSENT__) setConsent!((data as unknown) === true || (data as unknown) === "granted");
+    } else if (__CONSENT__ && cmd === "consent") {
+      // openrev("consent", true | false | "granted" | "denied"), consent build only: elsewhere it's a goal named "consent".
+      setConsent!((data as unknown) === true || (data as unknown) === "granted");
     } else {
       track(cmd, data);
     }

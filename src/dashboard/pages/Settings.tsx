@@ -290,14 +290,14 @@ function TrackingSettings({ site }: { site: Site }) {
           title="Cookie consent"
           description="Showing a cookie banner? Use the consent build instead: it tracks without cookies until the visitor accepts, then switches to cookies and keeps the same visit."
         >
+          <CodeBlock code={snippet(site, "consent")} />
+          <p className="mt-4 mb-2 text-sm text-zinc-600 dark:text-zinc-400">Then tell OpenRev what the visitor chose, from your banner's buttons (with the queue snippet above):</p>
           <CodeBlock
-            code={`${snippet(site, "consent")}
+            code={`// When the visitor accepts analytics cookies:
+openrev("consent", true);
 
-<script>
-  // In your banner's accept and reject handlers (with the queue snippet above):
-  openrev("consent", true);
-  openrev("consent", false);
-</script>`}
+// When they reject them, or withdraw consent later:
+openrev("consent", false);`}
           />
           <p className="mt-4 text-sm text-zinc-500">
             Using Google Consent Mode? Add <code className="code">data-consent="google"</code> and OpenRev follows <code className="code">analytics_storage</code>{" "}

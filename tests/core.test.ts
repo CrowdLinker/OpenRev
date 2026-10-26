@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Runtime } from "../src/server/context";
 import { resolveRange } from "../src/server/lib/time";
 import { ingestEvent, type RequestMeta } from "../src/server/services/ingest";
@@ -205,6 +205,7 @@ describe.each(DATABASES)("ingestion + stats (%s)", (_name, makeDb) => {
     const cookielessId = first.ok ? first.visitorId : "";
     await recordPayment(rt, site, { provider: "stripe", transactionId: "pi_c1", type: "new", amount: 900, currency: "USD", ref: "cs_test_c1" });
     await ingestEvent(rt, { type: "payment", ref: "cs_test_c1", ...page, href: "https://example.com/success?session_id=cs_test_c1" }, meta());
+    await ingestEvent(rt, { type: "identify", ...page, userId: "usr_1", email: "ada@example.com", name: "Ada" }, meta());
     const owner = () => rt.db.first<{ visitor_id: string }>("SELECT visitor_id FROM sessions WHERE id = 'session-consent-1'");
 
     // A request from another browser can't claim the session, even with its id.
@@ -217,8 +218,16 @@ describe.each(DATABASES)("ingestion + stats (%s)", (_name, makeDb) => {
     const events = await rt.db.all<{ visitor_id: string }>("SELECT DISTINCT visitor_id FROM events WHERE session_id = 'session-consent-1'");
     expect(events).toEqual([{ visitor_id: "visitor-consent-1" }]);
     expect((await rt.db.first<{ visitor_id: string }>("SELECT visitor_id FROM payments WHERE transaction_id = 'pi_c1'"))?.visitor_id).toBe("visitor-consent-1");
-    const visitors = await rt.db.all<{ id: string; sessions: number }>("SELECT id, sessions FROM visitors WHERE site_id = ? ORDER BY id", [site.id]);
-    expect(visitors).toEqual([{ id: "visitor-consent-1", sessions: 1 }]);
+    expect((await rt.db.first<{ visitor_id: string }>("SELECT visitor_id FROM checkout_refs WHERE ref = 'cs_test_c1'"))?.visitor_id).toBe("visitor-consent-1");
+    const visitors = await rt.db.all<{ id: string; sessions: number; user_id: string; email: string }>(
+      "SELECT id, sessions, user_id, email FROM visitors WHERE site_id = ? ORDER BY id",
+      [site.id],
+    );
+    expect(visitors).toEqual([{ id: "visitor-consent-1", sessions: 1, user_id: "usr_1", email: "ada@example.com" }]);
+
+    // A second consent for the same session, with another visitor id, changes nothing.
+    await ingestEvent(rt, { type: "consent", ...page, visitorId: "visitor-consent-x" }, meta());
+    expect((await owner())?.visitor_id).toBe("visitor-consent-1");
 
     // With cookies, the visit carries on in the same session.
     const next = await ingestEvent(rt, { type: "pageview", ...page, href: "https://example.com/checkout", visitorId: "visitor-consent-1" }, meta());
@@ -229,5 +238,31 @@ describe.each(DATABASES)("ingestion + stats (%s)", (_name, makeDb) => {
     await rt.db.run("UPDATE sites SET settings = ? WHERE id = ?", [JSON.stringify({ cookieless: true }), site.id]);
     invalidateSite(site.id);
     expect((await ingestEvent(rt, { type: "consent", ...page, visitorId: "visitor-consent-2" }, meta())).ok).toBe(false);
+  });
+
+  describe("consent across UTC midnight", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("moves a session that began before midnight, when the daily hash changed", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const page = { websiteId: site.id, href: "https://example.com/", sessionId: "session-midnight-1" };
+      vi.setSystemTime(new Date("2026-10-25T23:50:00Z"));
+      const before = await ingestEvent(rt, { type: "pageview", ...page }, meta());
+      vi.setSystemTime(new Date("2026-10-26T00:10:00Z"));
+      const consent = await ingestEvent(rt, { type: "consent", ...page, visitorId: "visitor-midnight-1" }, meta());
+      expect(consent.ok).toBe(true);
+      const session = await rt.db.first<{ visitor_id: string }>("SELECT visitor_id FROM sessions WHERE id = 'session-midnight-1'");
+      expect(session?.visitor_id).toBe("visitor-midnight-1");
+      expect(before.ok && before.visitorId).not.toBe("visitor-midnight-1");
+
+      // Two days later, a stale session id can't be claimed.
+      const old = { ...page, sessionId: "session-midnight-2" };
+      vi.setSystemTime(new Date("2026-10-26T12:00:00Z"));
+      await ingestEvent(rt, { type: "pageview", ...old }, meta());
+      vi.setSystemTime(new Date("2026-10-28T12:00:00Z"));
+      await ingestEvent(rt, { type: "consent", ...old, visitorId: "visitor-midnight-2" }, meta());
+      const stale = await rt.db.first<{ visitor_id: string }>("SELECT visitor_id FROM sessions WHERE id = 'session-midnight-2'");
+      expect(stale?.visitor_id).not.toBe("visitor-midnight-2");
+    });
   });
 });
