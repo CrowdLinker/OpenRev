@@ -42,6 +42,9 @@ export function openApiSpec(origin: string) {
             name: { type: "string" },
             customer_id: { type: "string" },
             renewal: { type: "boolean" },
+            subscription_id: { type: "string", description: "Groups a subscription's payments (used for MRR)" },
+            interval: { type: "string", description: "Billing interval: day, week, month or year (monthly, annually, quarterly… accepted)" },
+            interval_count: { type: "integer", minimum: 1, description: "Intervals per payment, default 1" },
             refunded: { type: "boolean" },
             timestamp: { type: "string", description: "ISO 8601 or unix timestamp; defaults to now." },
             description: { type: "string" },
@@ -69,6 +72,20 @@ export function openApiSpec(origin: string) {
           summary: "Metrics over time",
           parameters: [...rangeParams, { name: "interval", in: "query", schema: { type: "string", enum: ["hour", "day", "week", "month"] } }],
           responses: ok("Time series"),
+        },
+      },
+      "/analytics/mrr": {
+        get: {
+          summary: "Monthly recurring revenue over time: MRR, ARR, subscribers, new/expansion/reactivation/contraction/churn MRR and churn rates",
+          parameters: [...rangeParams, { name: "interval", in: "query", schema: { type: "string", enum: ["hour", "day", "week", "month"] } }],
+          responses: ok("MRR report"),
+        },
+      },
+      "/analytics/mrr/breakdown": {
+        get: {
+          summary: "Current MRR, new MRR and churned MRR by the channel, source, campaign or country that brought each subscription in",
+          parameters: [...rangeParams, { name: "group", in: "query", schema: { type: "string", enum: ["channel", "source", "utm_campaign", "country"] } }],
+          responses: ok("MRR by acquisition source"),
         },
       },
       "/analytics/realtime": { get: { summary: "Visitors online now, live sessions, recent events and payments", parameters: rangeParams.slice(-1), responses: ok("Realtime") } },

@@ -8,6 +8,7 @@ import { Moon, Sun } from "lucide-react";
 import { DashboardPage } from "./Dashboard";
 import { FunnelsPage } from "./Funnels";
 import { RealtimePage } from "./Realtime";
+import { MrrPage } from "./Mrr";
 import { RevenuePage } from "./Revenue";
 import { SiteNav } from "./SiteLayout";
 
@@ -55,6 +56,7 @@ export function SharePage({ token }: { token: string }) {
             <Route path="/" component={DashboardPage} />
             <Route path="/realtime" component={RealtimePage} />
             <Route path="/revenue" component={RevenuePage} />
+            <Route path="/mrr" component={MrrPage} />
             <Route path="/funnels" component={FunnelsPage} />
           </Switch>
         </main>

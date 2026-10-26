@@ -1,5 +1,6 @@
 import type { Runtime } from "../context";
 import type { Database, Statement } from "../db/types";
+import { isBillingUnit, type BillingInterval } from "../lib/billing";
 import { convertMinor, getRates, isValidCurrency } from "../lib/currency";
 import { isValidClientId, uuid } from "../lib/ids";
 import type { Site } from "./sites";
@@ -26,6 +27,8 @@ export interface NormalizedPayment {
   /** For refunds: the transaction (or ref) of the original payment. */
   relatedTransactionId?: string | null;
   subscriptionId?: string | null;
+  /** How often a subscription payment recurs, when the provider reports it (used for MRR). */
+  interval?: BillingInterval | null;
   description?: string | null;
   /**
    * When true, a later event for the same transaction replaces the amount instead of being ignored
@@ -65,6 +68,8 @@ export interface PaymentRow {
   name: string | null;
   ref: string | null;
   subscription_id: string | null;
+  billing_interval: string | null;
+  billing_interval_count: number | null;
   description: string | null;
   created_at: number;
 }
@@ -194,12 +199,15 @@ export async function recordPayment(rt: Runtime, site: Site, input: NormalizedPa
   const id = existing?.id ?? uuid();
   const now = Date.now();
   const email = input.email ? input.email.trim().toLowerCase().slice(0, 254) : null;
+  // Only subscription charges recur; a refund or one-off sale keeps no interval.
+  const interval = input.type !== "refund" && input.interval && isBillingUnit(input.interval.unit) ? input.interval : null;
 
   const statements: Statement[] = [
     {
       sql: `INSERT INTO payments (id, site_id, provider, transaction_id, type, amount, currency, revenue, revenue_currency, ts,
-              visitor_id, first_session_id, last_session_id, touch_session_id, customer_id, email, name, ref, subscription_id, description, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              visitor_id, first_session_id, last_session_id, touch_session_id, customer_id, email, name, ref, subscription_id, description, created_at,
+              billing_interval, billing_interval_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (site_id, provider, transaction_id) DO UPDATE SET
               visitor_id = COALESCE(payments.visitor_id, excluded.visitor_id),
               first_session_id = COALESCE(payments.first_session_id, excluded.first_session_id),
@@ -210,7 +218,9 @@ export async function recordPayment(rt: Runtime, site: Site, input: NormalizedPa
               name = COALESCE(payments.name, excluded.name),
               ref = COALESCE(payments.ref, excluded.ref),
               subscription_id = COALESCE(payments.subscription_id, excluded.subscription_id),
-              description = COALESCE(payments.description, excluded.description)`,
+              description = COALESCE(payments.description, excluded.description),
+              billing_interval = COALESCE(payments.billing_interval, excluded.billing_interval),
+              billing_interval_count = COALESCE(payments.billing_interval_count, excluded.billing_interval_count)`,
       params: [
         id,
         site.id,
@@ -233,6 +243,8 @@ export async function recordPayment(rt: Runtime, site: Site, input: NormalizedPa
         input.subscriptionId?.slice(0, 200) ?? null,
         input.description?.slice(0, 300) ?? null,
         now,
+        interval?.unit ?? null,
+        interval?.count ?? null,
       ],
     },
   ];

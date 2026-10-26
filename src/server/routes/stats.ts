@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../context";
+import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
 import * as stats from "../services/stats";
 import { fail, rangeInfo, readJson, statsQuery } from "./helpers";
 
@@ -119,6 +120,18 @@ export function statsRoutes() {
     const q = await statsQuery(c, c.get("site"));
     const group = (c.req.query("group") ?? "source") as "source" | "channel" | "country" | "utm_campaign";
     return c.json({ range: rangeInfo(q), currency: q.site.currency, rows: await stats.customerLtv(c.get("rt").db, q, group) });
+  });
+
+  app.get("/mrr", async (c) => {
+    const q = await statsQuery(c, c.get("site"));
+    const report = await mrrReport(c.get("rt").db, q);
+    return c.json({ range: rangeInfo(q), currency: q.site.currency, interval: q.range.interval, ...report });
+  });
+
+  app.get("/mrr/breakdown", async (c) => {
+    const q = await statsQuery(c, c.get("site"));
+    const group = mrrGroup(c.req.query("group"));
+    return c.json({ range: rangeInfo(q), currency: q.site.currency, group, rows: await mrrBreakdown(c.get("rt").db, q, group) });
   });
 
   app.get("/funnels/:funnelId", async (c) => {

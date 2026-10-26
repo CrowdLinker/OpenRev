@@ -1,11 +1,13 @@
 import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppEnv } from "../context";
+import { parseInterval } from "../lib/billing";
 import { isValidCurrency, toMinor } from "../lib/currency";
 import { isValidClientId } from "../lib/ids";
 import { clampString, isEmail, sanitizeGoalName, sanitizeProps } from "../lib/validate";
 import { verifyApiKey } from "../services/auth";
 import { identifyVisitor, recordServerGoal } from "../services/ingest";
+import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
 import { deletePayment, recordPayment } from "../services/payments";
 import { notifyPayment } from "../services/notify";
 import type { Site } from "../services/sites";
@@ -82,6 +84,7 @@ export async function createPaymentFromApi(c: Context<AppEnv>, site: Site, body:
     name: clampString(body.name, 200),
     description: clampString(body.description, 300),
     subscriptionId: clampString(body.subscription_id, 200),
+    interval: parseInterval(body.interval, body.interval_count),
     relatedTransactionId: clampString(body.related_transaction_id ?? (refunded ? body.original_transaction_id : null), 200),
   });
   if (created) rt.waitUntil(notifyPayment(rt, site, payment).catch(() => {}));
@@ -162,6 +165,20 @@ export function v1Routes() {
     });
     return ok(c, rows, { dimension: dim, currency: s.currency, range: rangeInfo(q) });
   };
+  // Registered before /analytics/:dimension, which would otherwise take "mrr".
+  app.get("/analytics/mrr", async (c) => {
+    const s = await site(c);
+    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    return ok(c, await mrrReport(c.get("rt").db, q), { currency: s.currency, interval: q.range.interval, range: rangeInfo(q) });
+  });
+
+  app.get("/analytics/mrr/breakdown", async (c) => {
+    const s = await site(c);
+    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const group = mrrGroup(c.req.query("group"));
+    return ok(c, await mrrBreakdown(c.get("rt").db, q, group), { currency: s.currency, group, range: rangeInfo(q) });
+  });
+
   app.get("/analytics/breakdowns/:dimension", (c) => breakdownHandler(c, c.req.param("dimension")));
   app.get("/analytics/:dimension", (c) => breakdownHandler(c, c.req.param("dimension")));
 

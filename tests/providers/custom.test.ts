@@ -104,6 +104,15 @@ describe("custom.parse", () => {
     expect(r.payments[0]).toMatchObject({ type: "renewal", visitorId: VISITOR, currency: "USD" });
   });
 
+  it("maps optional subscription id and billing interval paths", async () => {
+    const event = { ...payment, data: { ...payment.data, subscription: "sub_9", plan: { interval: "Monthly", count: 3 } } };
+    const config = { ...base, subscriptionIdPath: "data.subscription", intervalPath: "data.plan.interval", intervalCountPath: "data.plan.count" };
+    const r = await custom.parse(makeRequest(json(event)), config);
+    expect(r.payments[0]).toMatchObject({ subscriptionId: "sub_9", interval: { unit: "month", count: 3 } });
+    const plain = await custom.parse(makeRequest(json(payment)), base);
+    expect(plain.payments[0]).toMatchObject({ subscriptionId: null, interval: null });
+  });
+
   it("maps refund events with a prefixed transaction id and the original payment id", async () => {
     const event = { type: "refund.created", data: { id: "re_1", amount: -1500, currency: "usd", payment_id: "pay_1" } };
     const r = await custom.parse(makeRequest(json(event)), base);

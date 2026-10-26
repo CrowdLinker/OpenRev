@@ -53,6 +53,8 @@ Paths are dotted JSON paths. Array items use their index: `data.items.0.price`.
 | **Timestamp path** | `data.created_at` | Unix seconds, unix milliseconds or ISO 8601. Defaults to the time of receipt. |
 | **Checkout reference path** | `data.checkout_id` | Matched with `?checkout_id=` on your success page (detected by the tracker) or with `openrev("payment", { ref })`. |
 | **Renewal flag path** / **Renewal value** | `data.billing_reason` / `subscription_cycle` | If the value at the path equals the renewal value (case-insensitive), the payment is a renewal. With an empty renewal value, any truthy value (`true`, `1`, `"yes"`) means renewal. |
+| **Subscription id path** | `data.subscription_id` | Payments that share a subscription id count as one subscription in [MRR](../features/mrr.md). |
+| **Billing interval path** / **Interval count path** | `data.plan.interval` / `data.plan.interval_count` | How often the subscription bills (`month`, `year`, `weekly`, `annually`…) and how many intervals each payment covers. Optional: without them, MRR infers the interval from the gaps between payments. |
 
 ### Example
 

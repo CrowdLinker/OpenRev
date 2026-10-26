@@ -1,3 +1,4 @@
+import { parseInterval } from "../lib/billing";
 import type { NormalizedPayment } from "../services/payments";
 import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
 import { asObject, num, parseForm, parseJson, pickSessionId, pickVisitorId, str, toMs, truthy, urlTokenMatches } from "./util";
@@ -77,6 +78,8 @@ function salePayment(b: Obj, saleId: string, amount: number, base: Omit<Normaliz
     timestamp: toMs(b.sale_timestamp),
     sessionId,
     ref: str(b.order_number),
+    // Memberships send `recurrence`: monthly, quarterly, biannually, yearly or every_two_years.
+    interval: parseInterval(b.recurrence),
     description: typeof b.product_name === "string" ? b.product_name : null,
   };
 }

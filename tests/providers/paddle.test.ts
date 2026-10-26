@@ -76,6 +76,18 @@ describe("paddle.parse", () => {
     expect(zero.payments).toHaveLength(0);
   });
 
+  it("reads the billing interval from the price's billing cycle, or from the billing period", async () => {
+    const cycle = await paddle.parse(await signed(transaction({ items: [{ price: { billing_cycle: { interval: "month", frequency: 3 } }, quantity: 1 }] })), {});
+    expect(cycle.payments[0].interval).toEqual({ unit: "month", count: 3 });
+    const period = await paddle.parse(
+      await signed(transaction({ billing_period: { starts_at: "2024-04-12T10:18:48Z", ends_at: "2025-04-12T10:18:48Z" } })),
+      {},
+    );
+    expect(period.payments[0].interval).toEqual({ unit: "year", count: 1 });
+    const none = await paddle.parse(await signed(transaction()), {});
+    expect(none.payments[0].interval).toBeNull();
+  });
+
   it("records approved refund adjustments only", async () => {
     const adjustment = (status: string, action = "refund") => ({
       event_type: "adjustment.updated",

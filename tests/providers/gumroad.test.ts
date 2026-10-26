@@ -65,6 +65,13 @@ describe("gumroad.parse", () => {
     expect(r.payments[0]).toMatchObject({ type: "renewal", subscriptionId: "sub_gum_1" });
   });
 
+  it("reads membership recurrence as the billing interval", async () => {
+    const r = await gumroad.parse(makeRequest(ping({ subscription_id: "sub_gum_2", recurrence: "yearly" }), form), {});
+    expect(r.payments[0].interval).toEqual({ unit: "year", count: 1 });
+    const two = await gumroad.parse(makeRequest(ping({ subscription_id: "sub_gum_3", recurrence: "every_two_years" }), form), {});
+    expect(two.payments[0].interval).toEqual({ unit: "year", count: 2 });
+  });
+
   it("ignores the seller's test purchases and free products", async () => {
     expect((await gumroad.parse(makeRequest(ping({ test: "true" }), form), {})).payments).toHaveLength(0);
     expect((await gumroad.parse(makeRequest(ping({ price: "0" }), form), {})).payments).toHaveLength(0);

@@ -1,3 +1,4 @@
+import { parseInterval } from "../lib/billing";
 import type { NormalizedGoal, NormalizedPayment } from "../services/payments";
 import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
 import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyStandardWebhook } from "./util";
@@ -43,6 +44,10 @@ function orderPayment(o: Obj, eventTime?: unknown): NormalizedPayment | null {
     name: o.customer?.name ?? o.billing_name ?? null,
     ref: str(o.checkout_id),
     subscriptionId: str(o.subscription_id),
+    interval: parseInterval(
+      o.subscription?.recurring_interval ?? o.product?.recurring_interval,
+      o.subscription?.recurring_interval_count ?? o.product?.recurring_interval_count,
+    ),
     description: o.description ?? o.product?.name ?? null,
   };
 }

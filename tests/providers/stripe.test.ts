@@ -100,6 +100,29 @@ describe("stripe.parse", () => {
     expect(r.payments[0]).toMatchObject({ type: "renewal", subscriptionId: "sub_1", visitorId: VISITOR });
   });
 
+  it("reads the billing interval from the invoice line's price, or from its period", () => {
+    const yearly = parseStripeEvent({
+      type: "invoice.paid",
+      data: {
+        object: {
+          id: "in_3",
+          subscription: "sub_2",
+          billing_reason: "subscription_create",
+          amount_paid: 12000,
+          currency: "usd",
+          lines: { data: [{ price: { recurring: { interval: "year", interval_count: 1 } }, period: { start: 1735689600, end: 1767225600 } }] },
+        },
+      },
+    });
+    expect(yearly.payments[0].interval).toEqual({ unit: "year", count: 1 });
+    // Newer API versions don't expand the price; the line's period still says how long the charge covers.
+    const quarterly = parseStripeEvent({
+      type: "invoice.paid",
+      data: { object: { id: "in_4", subscription: "sub_3", amount_paid: 3000, currency: "usd", lines: { data: [{ period: { start: 1735689600, end: 1743465600 } }] } } },
+    });
+    expect(quarterly.payments[0].interval).toEqual({ unit: "month", count: 3 });
+  });
+
   it("records cumulative refunds linked to the original payment", () => {
     const r = parseStripeEvent({
       type: "charge.refunded",

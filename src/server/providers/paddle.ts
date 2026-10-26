@@ -1,3 +1,4 @@
+import { intervalFromPeriod, parseInterval } from "../lib/billing";
 import type { NormalizedGoal, NormalizedPayment } from "../services/payments";
 import type { PaymentProvider, ProviderResult, WebhookRequest } from "./types";
 import { currencyCode, num, parseJson, pickSessionId, pickVisitorId, str, toMs, verifyHmacSignature } from "./util";
@@ -54,6 +55,9 @@ function transactionPayment(t: Obj, occurredAt?: unknown): NormalizedPayment | n
     customerId: str(t.customer_id),
     ref: String(t.id),
     subscriptionId: str(t.subscription_id),
+    interval:
+      parseInterval(firstItem.price?.billing_cycle?.interval, firstItem.price?.billing_cycle?.frequency) ??
+      intervalFromPeriod(t.billing_period?.starts_at, t.billing_period?.ends_at),
     description: firstItem.price?.description ?? firstItem.price?.name ?? null,
   };
 }
