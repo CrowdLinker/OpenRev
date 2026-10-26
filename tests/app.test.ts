@@ -232,6 +232,19 @@ describe.each(DATABASES)("HTTP API (%s)", (_name, makeDb) => {
     expect(meta.json.site.domain).toBe("example.com");
     const visitors = await call(`/api/share/${token}/stats/visitors`);
     expect(visitors.status).toBe(403);
+    expect(meta.json.visitors).toBe(false);
+    // A demo instance (DEMO_MODE, made-up data only) also shows visitors on share links.
+    rt.config.demoMode = true;
+    try {
+      expect((await call(`/api/share/${token}/stats/meta`)).json.visitors).toBe(true);
+      const listed = await call(`/api/share/${token}/stats/visitors?period=today`);
+      expect(listed.status).toBe(200);
+      expect(listed.json.visitors.length).toBeGreaterThan(0);
+      const profile = await call(`/api/share/${token}/stats/visitors/${listed.json.visitors[0].id}`);
+      expect(profile.status).toBe(200);
+    } finally {
+      rt.config.demoMode = false;
+    }
     const payments = await call(`/api/share/${token}/stats/payments?period=today`);
     expect(payments.json.payments.every((p: { email: string | null }) => p.email === null)).toBe(true);
     const nope = await call(`/api/sites/${siteId}/stats/overview`);

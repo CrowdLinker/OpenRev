@@ -21,18 +21,21 @@ export function SiteNav({
   hideRevenue,
   crawlers = true,
   social = true,
+  visitors = !isPublic,
 }: {
   isPublic?: boolean;
   role: Role | null;
   hideRevenue?: boolean;
   crawlers?: boolean;
   social?: boolean;
+  /** Share links have no Visitors tab, except on a demo instance. */
+  visitors?: boolean;
 }) {
   const [location] = useLocation();
   const items = [
     { href: "/", label: "Dashboard", icon: BarChart3, match: (l: string) => l === "/" || l === "" },
     { href: "/realtime", label: "Realtime", icon: Radio },
-    ...(isPublic ? [] : [{ href: "/visitors", label: "Visitors", icon: Users }]),
+    ...(visitors ? [{ href: "/visitors", label: "Visitors", icon: Users }] : []),
     ...(hideRevenue
       ? []
       : [

@@ -35,6 +35,11 @@ function scrub<T extends Record<string, unknown>>(row: T): T {
   return out as T;
 }
 
+/** Visitor lists and profiles are personal data: members see them, share links only on a demo instance (DEMO_MODE). */
+function showsVisitors(c: Context<AppEnv>): boolean {
+  return !c.get("isPublic") || !!c.get("rt").config.demoMode;
+}
+
 /** Sends a response, without its revenue data for viewers who can't see revenue (lib/revenue.ts). */
 function send(c: Context<AppEnv>, data: Record<string, unknown>, opts: { purchaseConversion?: boolean } = {}) {
   return c.json(c.get("canSeeRevenue") ? data : withoutRevenue(data, opts));
@@ -96,7 +101,7 @@ export function statsRoutes() {
   });
 
   app.get("/visitors", async (c) => {
-    if (c.get("isPublic")) fail(403, "Visitor details are not available on public dashboards");
+    if (!showsVisitors(c)) fail(403, "Visitor details are not available on public dashboards");
     // Listing only the visitors who paid would list the customers.
     if (c.req.query("customers") === "1") requireRevenue(c);
     const q = await statsQuery(c, c.get("site"));
@@ -111,7 +116,7 @@ export function statsRoutes() {
   });
 
   app.get("/visitors/:visitorId", async (c) => {
-    if (c.get("isPublic")) fail(403, "Visitor details are not available on public dashboards");
+    if (!showsVisitors(c)) fail(403, "Visitor details are not available on public dashboards");
     const profile = await stats.visitorProfile(c.get("rt").db, c.get("site"), c.req.param("visitorId"), { revenue: c.get("canSeeRevenue") });
     if (!profile) fail(404, "Visitor not found");
     return send(c, { currency: c.get("site").currency, ...profile });
@@ -240,6 +245,8 @@ export function statsRoutes() {
       crawlers: !!crawlers,
       /** Whether posts on X or Hacker News were found: shared dashboards only show the Social page then. */
       social,
+      /** Whether this dashboard has the Visitors tab: always for members, on share links only on a demo instance. */
+      visitors: showsVisitors(c),
     });
   });
 

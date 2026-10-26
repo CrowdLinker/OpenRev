@@ -13,6 +13,7 @@ import { MrrPage } from "./Mrr";
 import { RevenuePage } from "./Revenue";
 import { SocialPage } from "./Social";
 import { RevenueOnly, SiteNav } from "./SiteLayout";
+import { VisitorProfilePage, VisitorsPage } from "./Visitors";
 
 /** Public, read-only dashboard: /share/:token */
 export function SharePage({ token }: { token: string }) {
@@ -55,10 +56,20 @@ export function SharePage({ token }: { token: string }) {
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-          <SiteNav isPublic role={null} hideRevenue={!ctx.canSeeRevenue} crawlers={!!meta.data?.crawlers} social={!!meta.data?.social} />
+          <SiteNav
+            isPublic
+            role={null}
+            hideRevenue={!ctx.canSeeRevenue}
+            crawlers={!!meta.data?.crawlers}
+            social={!!meta.data?.social}
+            visitors={!!meta.data?.visitors}
+          />
           <Switch>
             <Route path="/" component={DashboardPage} />
             <Route path="/realtime" component={RealtimePage} />
+            {/* Only on a demo instance (DEMO_MODE): share links never list visitors otherwise. */}
+            {meta.data?.visitors && <Route path="/visitors" component={VisitorsPage} />}
+            {meta.data?.visitors && <Route path="/visitors/:visitorId">{(p) => <VisitorProfilePage visitorId={p.visitorId} />}</Route>}
             <Route path="/revenue">{() => <RevenueOnly page={RevenuePage} />}</Route>
             <Route path="/mrr">{() => <RevenueOnly page={MrrPage} />}</Route>
             <Route path="/funnels" component={FunnelsPage} />

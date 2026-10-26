@@ -20,6 +20,11 @@ export interface AppConfig {
   /** Delete raw events older than this many days (0 / unset = keep forever). */
   retentionDays?: number;
   /**
+   * For instances with made-up data only, like the live demo: public share links also show the Visitors tab and
+   * visitor profiles, which they otherwise never do. Never set it where real people are tracked.
+   */
+  demoMode?: boolean;
+  /**
    * Whether to trust X-Forwarded-For style headers. For rate limits, `true` (the default) trusts them from
    * private or loopback peers, and a list trusts them only from those proxy addresses (IPs or IPv4 CIDRs).
    */
