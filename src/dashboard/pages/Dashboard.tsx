@@ -126,12 +126,11 @@ export function KpiRow({ overview, metric, setMetric, online, showRevenue, reven
 }
 
 function GoalsPanel() {
-  const { statsBase, meta, role, isPublic, site, reloadSite, reloadMeta } = useSite();
+  const { statsBase, meta, role, isPublic, site, reloadSite, reloadMeta, canSeeRevenue: showRevenue } = useSite();
   const [q, setQ] = useDashQuery();
   const [selected, setSelected] = useState<BreakdownRow | null>(null);
   const { data, loading } = useApi<{ rows: BreakdownRow[] }>(`${statsBase}/breakdown/goal?${toSearch(q, { limit: "20", sort: "visitors" })}`);
   const currency = meta?.site.currency ?? "USD";
-  const showRevenue = !meta?.site.hideRevenue;
   const rows = data?.rows ?? [];
   return (
     <div className="card flex flex-col p-4">
@@ -182,7 +181,7 @@ function GoalsPanel() {
 }
 
 function GoalModal({ goal, onClose, onFilter, onSetKpi, isKpi, canEdit: editable }: { goal: BreakdownRow; onClose: () => void; onFilter: () => void; onSetKpi: () => void; isKpi: boolean; canEdit: boolean }) {
-  const { statsBase, meta } = useSite();
+  const { statsBase, meta, canSeeRevenue } = useSite();
   const [q] = useDashQuery();
   const { data, loading } = useApi<{ properties: { key: string; values: { value: string; visitors: number; completions: number }[] }[] }>(
     `${statsBase}/goals/${encodeURIComponent(goal.value)}/properties?${toSearch(q)}`,
@@ -194,8 +193,8 @@ function GoalModal({ goal, onClose, onFilter, onSetKpi, isKpi, canEdit: editable
         <Stat label="Visitors" value={num(goal.visitors, false)} />
         <Stat label="Completions" value={num(goal.completions ?? 0, false)} />
         <Stat label="Conversion" value={pct(goal.conversion_rate, 2)} />
-        {!meta?.site.hideRevenue && <Stat label="Revenue" value={money(goal.revenue, currency)} />}
-        {!meta?.site.hideRevenue && <Stat label="Customers" value={num(goal.customers, false)} />}
+        {canSeeRevenue && <Stat label="Revenue" value={money(goal.revenue, currency)} />}
+        {canSeeRevenue && <Stat label="Customers" value={num(goal.customers, false)} />}
       </div>
       <h4 className="mb-2 text-sm font-semibold">Custom properties</h4>
       {loading ? (
@@ -266,8 +265,15 @@ export function FunnelBars({ results, currency, showRevenue }: { results: Funnel
   );
 }
 
+/** Without revenue the server stops a funnel before its first payment step: say so under the bars. */
+export function PaymentStepsHidden({ steps }: { steps: { type: string }[] }) {
+  const { canSeeRevenue } = useSite();
+  if (canSeeRevenue || !steps.some((s) => s.type === "payment")) return null;
+  return <p className="mt-2 text-xs text-zinc-500">Steps from the payment on aren't shown: revenue is hidden.</p>;
+}
+
 function FunnelPanel() {
-  const { statsBase, meta, isPublic } = useSite();
+  const { statsBase, meta, isPublic, canSeeRevenue } = useSite();
   const [q] = useDashQuery();
   const funnels = meta?.funnels ?? [];
   const [funnelId, setFunnelId] = useLocalStorage<string | null>(`openrev_funnel_${meta?.site.id}`, null);
@@ -297,7 +303,10 @@ function FunnelPanel() {
           to see where visitors drop off between landing and paying.
         </Empty>
       ) : data ? (
-        <FunnelBars results={data.results} currency={meta?.site.currency ?? "USD"} showRevenue={!meta?.site.hideRevenue} />
+        <>
+          <FunnelBars results={data.results} currency={meta?.site.currency ?? "USD"} showRevenue={canSeeRevenue} />
+          <PaymentStepsHidden steps={current.steps} />
+        </>
       ) : null}
     </div>
   );
@@ -360,7 +369,7 @@ function ImportedNote({ range, filtered }: { range?: { fromDate: string; toDate:
 }
 
 export function DashboardPage() {
-  const { statsBase, meta, site, role, isPublic } = useSite();
+  const { statsBase, meta, site, role, isPublic, canSeeRevenue: showRevenue } = useSite();
   const [q] = useDashQuery();
   const [metric, setMetric] = useLocalStorage<ChartMetric>("openrev_metric", "visitors");
   const [revenueBars, setRevenueBars] = useLocalStorage("openrev_revenue_bars", true);
@@ -370,7 +379,6 @@ export function DashboardPage() {
   const series = useApi<Timeseries>(`${statsBase}/timeseries?${search}`);
   const notes = useApi<{ notes: Note[] }>(`${statsBase}/notes?${search}`);
   const realtime = useApi<{ visitors: number }>(`${statsBase}/live`, { poll: 15000 });
-  const showRevenue = !(meta?.site.hideRevenue ?? site?.settings.hideRevenue);
   const currency = overview.data?.currency ?? meta?.site.currency ?? "USD";
   const effectiveMetric = !showRevenue && (metric === "conversion_rate" || metric === "revenue_per_visitor") ? "visitors" : metric === "conversions" && !overview.data?.current.kpi ? "visitors" : metric;
 

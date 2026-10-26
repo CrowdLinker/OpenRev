@@ -53,10 +53,10 @@ export function SitesPage() {
                   <div className="text-xs text-zinc-500">Visitors</div>
                   <div className="text-lg font-semibold tabular">{num(s.visitors)}</div>
                 </div>
-                {!s.hideRevenue && (
+                {s.canSeeRevenue && (
                   <div>
                     <div className="text-xs text-zinc-500">Revenue</div>
-                    <div className="text-lg font-semibold text-money-600 tabular dark:text-money-400">{money(s.revenue, s.currency, { compact: true })}</div>
+                    <div className="text-lg font-semibold text-money-600 tabular dark:text-money-400">{money(s.revenue ?? 0, s.currency, { compact: true })}</div>
                   </div>
                 )}
               </div>

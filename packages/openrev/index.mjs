@@ -89,7 +89,13 @@ const REPORTS = {
   "exit-clicks": "Exit link",
 };
 
-class CliError extends Error {}
+class CliError extends Error {
+  constructor(message, status) {
+    super(message);
+    /** The HTTP status of an API error. */
+    this.status = status;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Output
@@ -212,8 +218,8 @@ function makeApi(io, url, key) {
     const json = await res.json().catch(() => null);
     if (!res.ok || json?.status === "error") {
       const message = json?.error?.message ?? `${res.status} ${res.statusText}`;
-      if (res.status === 401) throw new CliError(`${message}. Run "openrev login" with a key from Settings → API & MCP.`);
-      throw new CliError(message);
+      if (res.status === 401) throw new CliError(`${message}. Run "openrev login" with a key from Settings → API & MCP.`, 401);
+      throw new CliError(message, res.status);
     }
     return json;
   };
@@ -270,6 +276,21 @@ async function resolveSite(ctx) {
   throw new CliError(`This key reads ${sites.length} websites: pick one with --site (${sites.map((s) => s.domain).join(", ")})`);
 }
 
+/**
+ * For reports that are only revenue (MRR, payments): keys whose member can't see revenue get a 403, which says so.
+ * Elsewhere the API leaves the revenue fields out for them, and the commands leave out the lines and columns.
+ */
+async function revenueReport(site, request) {
+  try {
+    return await request;
+  } catch (err) {
+    if (err instanceof CliError && err.status === 403) {
+      throw new CliError(`This key can't see revenue on ${site.domain}. An owner or admin can turn on "Can see revenue" for you in Settings → Team.`, 403);
+    }
+    throw err;
+  }
+}
+
 function header(ctx, site, range, title) {
   const { c, print } = ctx.out;
   print(`${c.bold(site.domain)}  ${c.dim(`${title}${range ? ` · ${rangeLabel(range)}` : ""}`)}`);
@@ -291,11 +312,16 @@ async function cmdStats(ctx) {
     ["Pageviews", num(d.pageviews), delta(ctx.out, d.pageviews, p.pageviews)],
     ["Bounce rate", pct(d.bounce_rate, 0), delta(ctx.out, d.bounce_rate, p.bounce_rate, true)],
     ["Visit duration", duration(d.avg_session_duration), delta(ctx.out, d.avg_session_duration, p.avg_session_duration)],
-    ["Revenue", c.green(money(d.revenue, cur)), delta(ctx.out, d.revenue, p.revenue)],
-    ["Customers", num(d.customers), delta(ctx.out, d.customers, p.customers)],
-    ["Conversion rate", pct(d.conversion_rate, 2), delta(ctx.out, d.conversion_rate, p.conversion_rate)],
-    ["Revenue per visitor", money(d.revenue_per_visitor, cur), delta(ctx.out, d.revenue_per_visitor, p.revenue_per_visitor)],
   ];
+  // Left out by the API when the key can't see revenue.
+  if ("revenue" in d) {
+    rows.push(
+      ["Revenue", c.green(money(d.revenue, cur)), delta(ctx.out, d.revenue, p.revenue)],
+      ["Customers", num(d.customers), delta(ctx.out, d.customers, p.customers)],
+      ["Conversion rate", pct(d.conversion_rate, 2), delta(ctx.out, d.conversion_rate, p.conversion_rate)],
+      ["Revenue per visitor", money(d.revenue_per_visitor, cur), delta(ctx.out, d.revenue_per_visitor, p.revenue_per_visitor)],
+    );
+  }
   if (d.kpi) rows.push([`Goal: ${d.kpi.goal}`, `${num(d.kpi.conversions)} (${pct(d.kpi.conversion_rate)})`, ""]);
   for (const [label, value, change] of rows) print(`  ${pad(c.dim(label), 22)}${pad(value, 14, true)}  ${change}`);
   const points = series.data ?? [];
@@ -324,8 +350,9 @@ async function cmdTop(ctx) {
   header(ctx, site, res.range, `Top ${report}`);
   if (!rows.length) return ctx.out.print(ctx.out.c.dim("  Nothing in this period"));
   const isGoal = report === "goals";
+  const revenue = "revenue" in rows[0];
   // The bars follow the sort, or visitors when sorting by a rate.
-  const metric = isGoal ? "completions" : by === "revenue" ? "revenue" : "visitors";
+  const metric = isGoal ? "completions" : by === "revenue" && revenue ? "revenue" : "visitors";
   const max = Math.max(...rows.map((r) => Number(r[metric]) || 0), 1);
   const countries = report === "countries" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
   const label = (r) => {
@@ -344,8 +371,9 @@ async function cmdTop(ctx) {
     { label: REPORTS[report], value: label, flex: true },
     { label: "", value: (r) => ctx.out.c.cyan(bar((Number(r[metric]) || 0) / max)) },
     isGoal ? { label: "Completions", value: (r) => num(r.completions), right: true } : { label: "Visitors", value: (r) => num(r.visitors), right: true },
-    { label: "Revenue", value: (r) => (Number(r.revenue) ? money(r.revenue, cur, true) : ctx.out.c.dim("—")), right: true },
-    { label: "Conv.", value: (r) => pct(r.conversion_rate), right: true },
+    ...(revenue ? [{ label: "Revenue", value: (r) => (Number(r.revenue) ? money(r.revenue, cur, true) : ctx.out.c.dim("—")), right: true }] : []),
+    // Goals keep their conversion rate; elsewhere it's the share of visitors who paid, left out with revenue.
+    ...("conversion_rate" in rows[0] ? [{ label: "Conv.", value: (r) => pct(r.conversion_rate), right: true }] : []),
   ]);
 }
 
@@ -390,7 +418,7 @@ async function cmdLive(ctx) {
 
 async function cmdMrr(ctx) {
   const site = await resolveSite(ctx);
-  const res = await ctx.api("/analytics/mrr", { query: { websiteId: site.id, ...rangeQuery(ctx.values) } });
+  const res = await revenueReport(site, ctx.api("/analytics/mrr", { query: { websiteId: site.id, ...rangeQuery(ctx.values) } }));
   if (ctx.values.json) return ctx.out.print(JSON.stringify(res, null, 2));
   const s = res.data.summary;
   const cur = res.currency ?? site.currency;
@@ -415,7 +443,7 @@ async function cmdMrr(ctx) {
 
 async function cmdPayments(ctx) {
   const site = await resolveSite(ctx);
-  const res = await ctx.api("/payments", { query: { websiteId: site.id, ...rangeQuery(ctx.values), limit: ctx.limit } });
+  const res = await revenueReport(site, ctx.api("/payments", { query: { websiteId: site.id, ...rangeQuery(ctx.values), limit: ctx.limit } }));
   if (ctx.values.json) return ctx.out.print(JSON.stringify(res, null, 2));
   const cur = res.currency ?? site.currency;
   header(ctx, site, res.range, "Payments");
@@ -447,7 +475,7 @@ async function cmdKeywords(ctx) {
     { label: "Impr.", value: (r) => num(r.impressions), right: true },
     { label: "CTR", value: (r) => pct(r.ctr), right: true },
     { label: "Pos.", value: (r) => Number(r.position).toFixed(1), right: true },
-    { label: "Revenue", value: (r) => (Number(r.revenue) ? money(r.revenue, cur, true) : ctx.out.c.dim("—")), right: true },
+    ...("revenue" in rows[0] ? [{ label: "Revenue", value: (r) => (Number(r.revenue) ? money(r.revenue, cur, true) : ctx.out.c.dim("—")), right: true }] : []),
   ]);
 }
 
@@ -464,7 +492,8 @@ async function cmdSocial(ctx) {
     ["hn", "Hacker News"],
   ]) {
     const s = d.summary[key];
-    if (s) print(`  ${pad(c.dim(name), 14)}${pad(num(s.mentions), 5, true)} posts  ${pad(num(s.visits), 6, true)} visits (${num(s.credited_visits)} matched)  ${c.green(money(s.credited_revenue, cur))}`);
+    const revenue = s && "credited_revenue" in s ? `  ${c.green(money(s.credited_revenue, cur))}` : "";
+    if (s) print(`  ${pad(c.dim(name), 14)}${pad(num(s.mentions), 5, true)} posts  ${pad(num(s.visits), 6, true)} visits (${num(s.credited_visits)} matched)${revenue}`);
   }
   print();
   if (!d.posts.length && !d.profiles.length) return print(c.dim("  No posts. Watch X and Hacker News in Settings → General."));
@@ -474,7 +503,7 @@ async function cmdSocial(ctx) {
     { label: "Post", value: (p) => (p.id.startsWith("bio:") ? `Link in bio: ${p.links.join(" ")}` : (p.text ?? "").replace(/\s+/g, " ")), flex: true },
     { label: "When", value: (p) => (p.created_at ? ago(p.created_at) : ""), right: true },
     { label: "Visitors", value: (p) => num(p.visitors), right: true },
-    { label: "Revenue", value: (p) => (Number(p.revenue) ? c.green(money(p.revenue, cur, true)) : c.dim("—")), right: true },
+    ...("revenue" in (d.posts[0] ?? d.profiles[0]) ? [{ label: "Revenue", value: (p) => (Number(p.revenue) ? c.green(money(p.revenue, cur, true)) : c.dim("—")), right: true }] : []),
   ]);
 }
 
@@ -487,7 +516,8 @@ async function cmdCrawlers(ctx) {
   header(ctx, site, res.range, "Crawlers");
   const s = d.summary;
   print(`  ${c.dim("AI training")} ${num(s.ai_training)}   ${c.dim("AI search")} ${num(s.ai_search)}   ${c.dim("AI assistants")} ${num(s.ai_user)}   ${c.dim("Search engines")} ${num(s.search)}`);
-  print(`  ${c.dim("Visitors from AI")} ${num(s.ai_visitors)}   ${c.dim("Revenue from AI")} ${c.green(money(s.ai_revenue, res.currency ?? site.currency))}`);
+  const aiRevenue = "ai_revenue" in s ? `   ${c.dim("Revenue from AI")} ${c.green(money(s.ai_revenue, res.currency ?? site.currency))}` : "";
+  print(`  ${c.dim("Visitors from AI")} ${num(s.ai_visitors)}${aiRevenue}`);
   print();
   if (!d.crawlers.length) return print(c.dim('  No crawler requests. Your server can report them (see the Crawlers page), or send access logs with "openrev crawls send".'));
   const labels = { ai_training: "AI training", ai_search: "AI search", ai_user: "AI assistant", search: "Search" };

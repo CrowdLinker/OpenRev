@@ -24,7 +24,7 @@ export function openApiSpec(origin: string) {
       title: "OpenRev API",
       version: VERSION,
       description:
-        "Query analytics, visitors and revenue, and send server-side payments, goals and identities. Authenticate with `Authorization: Bearer <key>` using a website key (`or_...`) or an account token (`ort_...` + `websiteId`).",
+        "Query analytics, visitors and revenue, and send server-side payments, goals and identities. Authenticate with `Authorization: Bearer <key>` using a website key (`or_...`) or an account token (`ort_...` + `websiteId`). Keys follow their user's \"Can see revenue\" on each website: without it, revenue fields are left out and the payments, LTV and MRR endpoints answer 403.",
     },
     servers: [{ url: `${origin}/api/v1` }],
     security: [{ bearer: [] }],

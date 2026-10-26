@@ -18,7 +18,7 @@ export interface SiteSettings {
   /** "#1 KPI": a goal shown as the main conversion metric next to revenue. */
   kpiGoal?: string | null;
   attribution?: AttributionModel;
-  /** Hide the revenue features for sites that don't sell anything. */
+  /** "Hide revenue on share links": public share links leave revenue out. Members follow their own "Can see revenue". */
   hideRevenue?: boolean;
   /** Mobile apps allowed to send events with the SDK: iOS bundle ids and Android package names, lowercase. */
   appIds?: string[];
@@ -118,36 +118,60 @@ export async function getMemberRole(db: Database, siteId: string, userId: string
   return row?.role ?? null;
 }
 
+/** Owners always see revenue; other members when someone who sees it turned on "Can see revenue" for them. */
+export function seesRevenue(role: string | null | undefined, canSeeRevenue: unknown): boolean {
+  return role === "owner" || Number(canSeeRevenue) === 1;
+}
+
+/** A member's role, and whether they see revenue. Null if they aren't a member. */
+export async function getMembership(db: Database, siteId: string, userId: string): Promise<{ role: Role; canSeeRevenue: boolean } | null> {
+  const row = await db.first<{ role: Role; can_see_revenue: number }>("SELECT role, can_see_revenue FROM site_members WHERE site_id = ? AND user_id = ?", [
+    siteId,
+    userId,
+  ]);
+  return row ? { role: row.role, canSeeRevenue: seesRevenue(row.role, row.can_see_revenue) } : null;
+}
+
 /**
  * Consumes an invitation if it is still valid: unexpired, and its creator still exists and can invite
  * (admin or owner of the site, or an instance admin). Removing or demoting the creator voids their links.
  * Returns the invite, or null. The delete is the claim, so a token can't be redeemed twice concurrently.
  */
-export async function claimInvite(db: Database, tokenHash: string): Promise<{ site_id: string; role: Role } | null> {
+export async function claimInvite(db: Database, tokenHash: string): Promise<{ site_id: string; role: Role; can_see_revenue: number } | null> {
   const invite = await findInvite(db, tokenHash);
   if (!invite) return null;
   const { changes } = await db.run("DELETE FROM invites WHERE id = ?", [tokenHash]);
-  return changes > 0 ? { site_id: invite.site_id, role: invite.role } : null;
+  return changes > 0 ? { site_id: invite.site_id, role: invite.role, can_see_revenue: invite.can_see_revenue } : null;
+}
+
+/** Adds the member an invitation was for, with the role and "Can see revenue" chosen when inviting. */
+export function joinStatement(invite: { site_id: string; role: Role; can_see_revenue: number }, userId: string) {
+  return {
+    sql: "INSERT INTO site_members (site_id, user_id, role, can_see_revenue, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING",
+    params: [invite.site_id, userId, invite.role, Number(invite.can_see_revenue) === 1 ? 1 : 0, Date.now()],
+  };
 }
 
 /**
  * Looks up an unexpired invite whose creator can still grant it (an instance admin, or an admin/owner of the
- * site). Invites from someone who has since lost that authority are deleted and treated as invalid.
+ * site). Invites from someone who has since lost that authority are deleted and treated as invalid. "Can see
+ * revenue" only comes with the invite while its creator can still see revenue.
  */
 export async function findInvite(
   db: Database,
   tokenHash: string,
-): Promise<{ site_id: string; role: Role; email: string | null } | null> {
-  const invite = await db.first<{ site_id: string; role: Role; email: string | null; created_by: string | null }>(
-    "SELECT site_id, role, email, created_by FROM invites WHERE id = ? AND expires_at > ?",
+): Promise<{ site_id: string; role: Role; email: string | null; can_see_revenue: number } | null> {
+  const invite = await db.first<{ site_id: string; role: Role; email: string | null; can_see_revenue: number; created_by: string | null }>(
+    "SELECT site_id, role, email, can_see_revenue, created_by FROM invites WHERE id = ? AND expires_at > ?",
     [tokenHash, Date.now()],
   );
   if (!invite) return null;
   const creator = invite.created_by ? await db.first<{ is_admin: number }>("SELECT is_admin FROM users WHERE id = ?", [invite.created_by]) : null;
-  const creatorRole = invite.created_by ? await getMemberRole(db, invite.site_id, invite.created_by) : null;
-  if (!creator || (!creator.is_admin && !roleAtLeast(creatorRole, "admin"))) {
+  const membership = invite.created_by ? await getMembership(db, invite.site_id, invite.created_by) : null;
+  if (!creator || (!creator.is_admin && !roleAtLeast(membership?.role, "admin"))) {
     await db.run("DELETE FROM invites WHERE id = ?", [tokenHash]);
     return null;
   }
-  return { site_id: invite.site_id, role: invite.role, email: invite.email };
+  const revenue = Number(invite.can_see_revenue) === 1 && (!!creator.is_admin || !!membership?.canSeeRevenue);
+  return { site_id: invite.site_id, role: invite.role, email: invite.email, can_see_revenue: revenue ? 1 : 0 };
 }

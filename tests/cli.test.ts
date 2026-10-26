@@ -181,6 +181,72 @@ describe("openrev CLI", () => {
     expect((await cli(["crawls", "send", join(home, "missing.log")])).stderr).toContain("Can't read");
   });
 
+  it("leaves revenue out for a member who can't see it", async () => {
+    // The owner invites a viewer without "Can see revenue", who makes an account token.
+    const as = () => {
+      let cookie = "";
+      return async (path: string, body?: unknown) => {
+        const res = await app.request("http://openrev.test" + path, {
+          method: body ? "POST" : "GET",
+          headers: { "User-Agent": CHROME, "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const sc = res.headers.get("set-cookie");
+        if (sc?.startsWith("openrev_auth=")) cookie = sc.split(";")[0];
+        return res.json();
+      };
+    };
+    const owner = as();
+    await owner("/api/auth/login", { email: "owner@example.com", password: "supersecret" });
+    const invite = new URL((await owner(`/api/sites/${siteId}/invites`, { role: "viewer" })).url).pathname.split("/").pop();
+    const viewer = as();
+    await viewer("/api/auth/signup", { email: "viewer@example.com", password: "supersecret", invite });
+    const token = (await viewer("/api/account/tokens", { name: "cli" })).key;
+    // Keywords and a Hacker News post, so those reports have rows.
+    const now = Date.now();
+    await rt.db.run("INSERT INTO search_console (site_id, property, config, created_at) VALUES (?, ?, ?, ?)", [siteId, "sc-domain:example.com", "{}", now]);
+    await rt.db.run("INSERT INTO search_stats (site_id, ts, query, page, clicks, impressions, position) VALUES (?, ?, ?, ?, ?, ?, ?)", [siteId, now - 60_000, "openrev", "/pricing", 5, 50, 100]);
+    await rt.db.run(
+      "INSERT INTO social_posts (site_id, platform, id, kind, url, author, text, created_at, likes, reposts, replies, links, updated_at) VALUES (?, 'hn', 'hn1', 'post', ?, 'pg', 'Show HN: OpenRev', ?, 1, 0, 0, '[]', ?)",
+      [siteId, "https://news.ycombinator.com/item?id=1", now - 60_000, now],
+    );
+    await rt.db.run("INSERT INTO social_links (site_id, platform, post_id, path, kind, created_at) VALUES (?, 'hn', 'hn1', '/pricing', 'post', ?)", [siteId, now - 3_600_000]);
+
+    const env = { OPENREV_URL: "https://openrev.test", OPENREV_API_KEY: token };
+    const run = async (argv: string[]) => {
+      const r = await cli([...argv, "-p", "today"], env);
+      expect(r.stdout + r.stderr, argv.join(" ")).not.toMatch(/NaN|undefined|\$\d/);
+      return r;
+    };
+    const stats = await run(["stats"]);
+    expect(stats.code).toBe(0);
+    expect(stats.stdout).toMatch(/Visitors\s+2/);
+    expect(stats.stdout).not.toMatch(/Revenue|Customers|Conversion/);
+    const top = await run(["top", "referrers", "--by", "revenue"]);
+    expect(top.code).toBe(0);
+    expect(top.stdout).toContain("Hacker News");
+    expect(top.stdout).not.toMatch(/Revenue|Conv\./);
+    // Goals keep their own conversion rate.
+    expect((await run(["top", "goals"])).stdout).toContain("Conv.");
+    for (const cmd of ["payments", "mrr"]) {
+      const r = await run([cmd]);
+      expect(r.code, cmd).toBe(1);
+      expect(r.stderr, cmd).toContain("This key can't see revenue on example.com");
+    }
+    const keywords = await run(["keywords"]);
+    expect(keywords.stdout).toContain("openrev");
+    expect(keywords.stdout).not.toContain("Revenue");
+    const social = await run(["social"]);
+    expect(social.stdout).toContain("Show HN: OpenRev");
+    expect(social.stdout).not.toContain("Revenue");
+    const crawlers = await run(["crawlers"]);
+    expect(crawlers.stdout).toContain("Visitors from AI");
+    expect(crawlers.stdout).not.toContain("Revenue");
+    const live = await run(["live"]);
+    expect(live.stdout).toMatch(/2 visitors online/);
+    expect(live.stdout).not.toContain("Payments");
+  });
+
   it("asks which website when a key reads several", async () => {
     expect(accountKey).toMatch(/^ort_/);
     const env = { OPENREV_URL: "https://openrev.test", OPENREV_API_KEY: accountKey };

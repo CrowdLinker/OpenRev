@@ -9,7 +9,27 @@
 | Traffic spike | A source sends ≥ N× (default 4×) its usual hourly visitors, with at least M visitors (default 20) | Source, visitors last hour vs. average, landing page |
 | Daily / weekly digest | At the chosen hour in the website timezone (weekly: Mondays) | Visitors, revenue, payments, conversion rate, revenue/visitor, top sources — compared with the previous period |
 
-Use **Send test** to check a destination. The last 50 deliveries (and errors) are listed under the alerts.
+Use **Send test** to check a destination. The last 50 deliveries (and errors) are listed under the alerts. Admins
+without **Can see revenue** don't see the deliveries of payment alerts there, since they carry the amount.
+
+New sale / refund alerts and digests send revenue wherever they go, so only members who can see revenue can set them
+up, change, pause or test them. Admins without it can still add goal and traffic spike alerts, and delete any alert.
+
+## Email and “Can see revenue”
+
+Email alerts follow each recipient's **Can see revenue** ([who sees revenue](team-and-sharing.md#who-sees-revenue)).
+Recipients who are members of the website without it:
+
+- get no new sale or refund alerts;
+- get digests without revenue: visitors and the top sources by visitors, with no revenue, payments, conversion rate,
+  revenue per visitor or customers;
+- get goal and traffic spike alerts as usual.
+
+Other recipients get every alert in full: owners, members with **Can see revenue**, and addresses that aren't members
+of the website. Slack, Discord, Telegram and webhooks don't change either: they get the alert as it is, wherever it
+points. Payment alerts and digests that existed before 0.2.0 keep sending to their destinations, even if whoever set
+them up has since lost **Can see revenue**, so owners should check those destinations after upgrading. When no
+recipient of a payment alert can see revenue, **Send test** says so.
 
 ## Channels
 

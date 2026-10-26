@@ -6,8 +6,9 @@ import { normalizeParams, type Database, type SqlValue, type Statement } from ".
 /**
  * In-process PostgreSQL (WASM) used to check that every query also runs on Postgres.
  * Mirrors the production adapter in src/server/db/postgres.ts (BIGINT/NUMERIC returned as numbers).
+ * `migrate: false` leaves it empty, for upgrade tests that apply older migrations first.
  */
-export async function pgliteDb(): Promise<Database> {
+export async function pgliteDb(opts: { migrate?: boolean } = {}): Promise<Database> {
   const pg = new PGlite({
     parsers: {
       20: (v: string) => Number(v),
@@ -41,6 +42,6 @@ export async function pgliteDb(): Promise<Database> {
       await pg.close();
     },
   };
-  await migrate(db);
+  if (opts.migrate !== false) await migrate(db);
   return db;
 }

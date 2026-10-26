@@ -54,6 +54,8 @@ export type AppEnv = {
     site: Site;
     /** True on public share links: personal data (names, emails) is hidden. */
     isPublic: boolean;
+    /** False on share links with "Hide revenue on share links" and for members without "Can see revenue" (lib/revenue.ts). */
+    canSeeRevenue: boolean;
   };
 };
 

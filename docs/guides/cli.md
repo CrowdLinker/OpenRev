@@ -31,6 +31,10 @@ use environment variables instead: `OPENREV_URL` and `OPENREV_API_KEY` (and `OPE
 With an account token that reads several websites, pick one with `--site example.com` (a domain or website id), or
 save a default: `openrev login --site example.com`.
 
+Keys see revenue when the member who created them has
+[**Can see revenue**](../features/team-and-sharing.md#who-sees-revenue) on the website. Otherwise the reports leave out
+the revenue lines and columns, and `openrev mrr` and `openrev payments` say the key can't see revenue.
+
 ## Commands
 
 | Command | Shows |

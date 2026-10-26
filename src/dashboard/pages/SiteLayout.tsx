@@ -1,8 +1,9 @@
-import { BarChart3, Bot, DollarSign, Megaphone, Filter as FunnelIcon, Radio, Repeat, Settings, Users } from "lucide-react";
+import { BarChart3, Bot, DollarSign, EyeOff, Megaphone, Filter as FunnelIcon, Radio, Repeat, Settings, Users } from "lucide-react";
+import type { ComponentType } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
-import { cx, ErrorBox, Loading } from "../components/ui";
+import { cx, Empty, ErrorBox, Loading } from "../components/ui";
 import { useApi } from "../lib/api";
-import { canEdit, SiteContext } from "../lib/context";
+import { canEdit, SiteContext, useSite } from "../lib/context";
 import type { Role, Site, SiteMeta } from "../lib/types";
 import { CrawlersPage } from "./Crawlers";
 import { DashboardPage } from "./Dashboard";
@@ -66,8 +67,19 @@ export function SiteNav({
   );
 }
 
+/** A revenue page (Revenue, MRR), or a note for viewers who can't see revenue and opened its address. */
+export function RevenueOnly({ page: Page }: { page: ComponentType }) {
+  const { canSeeRevenue, isPublic } = useSite();
+  if (canSeeRevenue) return <Page />;
+  return (
+    <Empty title="Revenue is hidden" icon={<EyeOff className="h-6 w-6" />}>
+      {isPublic ? "This dashboard doesn't share revenue." : "An owner, or an admin who can see revenue, can turn on “Can see revenue” for you in Settings → Team."}
+    </Empty>
+  );
+}
+
 export function SiteLayout({ siteId }: { siteId: string }) {
-  const site = useApi<{ site: Site; role: Role }>(`/api/sites/${siteId}`);
+  const site = useApi<{ site: Site; role: Role; canSeeRevenue: boolean }>(`/api/sites/${siteId}`);
   const meta = useApi<SiteMeta>(`/api/sites/${siteId}/stats/meta`);
   if (site.loading && !site.data) return <Loading />;
   if (site.error) return <ErrorBox error={site.error} />;
@@ -77,19 +89,21 @@ export function SiteLayout({ siteId }: { siteId: string }) {
     meta: meta.data ?? null,
     role: site.data?.role ?? null,
     isPublic: false,
+    // The member's own "Can see revenue" (always on for owners); "Hide revenue on share links" doesn't apply here.
+    canSeeRevenue: !!site.data?.canSeeRevenue,
     reloadSite: site.reload,
     reloadMeta: meta.reload,
   };
   return (
     <SiteContext.Provider value={ctx}>
-      <SiteNav role={ctx.role} hideRevenue={ctx.site?.settings.hideRevenue} />
+      <SiteNav role={ctx.role} hideRevenue={!ctx.canSeeRevenue} />
       <Switch>
         <Route path="/" component={DashboardPage} />
         <Route path="/realtime" component={RealtimePage} />
         <Route path="/visitors" component={VisitorsPage} />
         <Route path="/visitors/:visitorId">{(p) => <VisitorProfilePage visitorId={p.visitorId} />}</Route>
-        <Route path="/revenue" component={RevenuePage} />
-        <Route path="/mrr" component={MrrPage} />
+        <Route path="/revenue">{() => <RevenueOnly page={RevenuePage} />}</Route>
+        <Route path="/mrr">{() => <RevenueOnly page={MrrPage} />}</Route>
         <Route path="/funnels" component={FunnelsPage} />
         <Route path="/social" component={SocialPage} />
         <Route path="/crawlers" component={CrawlersPage} />
