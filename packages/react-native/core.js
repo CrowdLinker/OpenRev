@@ -1,5 +1,6 @@
 // OpenRev for mobile apps: the platform-agnostic client. index.js wires it to React Native; tests use it directly.
 
+// The same as package.json (a test checks): React Native bundles can't read the package file at run time.
 export const VERSION = "0.1.0";
 const SESSION_TIMEOUT = 30 * 60_000;
 /** A link can hand its visitor id to an install this young, as cross-domain links do for new browsers. */

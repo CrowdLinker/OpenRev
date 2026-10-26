@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { createClient } from "../packages/react-native/core.js";
+import sdkPackage from "../packages/react-native/package.json";
+import { createClient, VERSION } from "../packages/react-native/core.js";
 import { createApp } from "../src/server/app";
 import type { Runtime } from "../src/server/context";
 import type { Database } from "../src/server/db/types";
@@ -10,6 +11,12 @@ import { pgliteDb } from "./pglite";
 
 const CHROME = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const OKHTTP = "okhttp/4.12.0";
+
+describe("React Native SDK package", () => {
+  it("reports the version in its package.json", () => {
+    expect(VERSION).toBe(sdkPackage.version);
+  });
+});
 
 describe.each([
   ["sqlite", testDb],
