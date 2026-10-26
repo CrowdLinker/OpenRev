@@ -4,12 +4,14 @@ import { useApi } from "../lib/api";
 import { timeAgo } from "../lib/format";
 import { Badge, CodeBlock, Tabs } from "./ui";
 
-export function scriptUrl(variant: "default" | "hash" | "cookieless" = "default") {
-  const file = variant === "hash" ? "script.hash.js" : variant === "cookieless" ? "script.cookieless.js" : "script.js";
+type Variant = "default" | "hash" | "cookieless" | "consent";
+
+export function scriptUrl(variant: Variant = "default") {
+  const file = variant === "default" ? "script.js" : `script.${variant}.js`;
   return `${window.location.origin}/js/${file}`;
 }
 
-export function snippet(site: { id: string; domain: string }, variant: "default" | "hash" | "cookieless" = "default") {
+export function snippet(site: { id: string; domain: string }, variant: Variant = "default") {
   return `<script
   defer
   data-website-id="${site.id}"

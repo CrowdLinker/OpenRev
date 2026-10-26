@@ -9,6 +9,8 @@
 
 declare const __HASH_MODE__: boolean;
 declare const __COOKIELESS__: boolean;
+/** The consent build (script.consent.js): cookieless until the visitor consents. */
+declare const __CONSENT__: boolean;
 
 type Props = Record<string, unknown>;
 type Fn = ((...args: unknown[]) => void) & { q?: unknown[][] };
@@ -58,7 +60,7 @@ interface Payload {
     .filter(Boolean);
   const src = script && script.src ? script.src : "";
   const hashMode = __HASH_MODE__ || flag("hash") || /\.hash\./.test(src);
-  const cookieless = __COOKIELESS__ || flag("cookieless") || /\.cookieless\./.test(src);
+  const alwaysCookieless = __COOKIELESS__ || flag("cookieless") || /\.cookieless\./.test(src);
   const disableConsole = flag("disable-console");
   const disablePayments = flag("disable-payments");
   const trackOutbound = attr("disable-outbound") !== "true";
@@ -89,6 +91,7 @@ interface Payload {
   // ---------------------------------------------------------------------------
   const VISITOR_COOKIE = "openrev_visitor_id";
   const SESSION_COOKIE = "openrev_session_id";
+  const CONSENT_COOKIE = "openrev_consent";
   const SESSION_TTL = 30 * 60;
 
   function cookieDomain(): string {
@@ -108,6 +111,10 @@ interface Payload {
     // Fall back to a host-only cookie if the browser rejected the domain cookie.
     if (domain && getCookie(name) !== value) d.cookie = base;
   }
+  // The consent build stays cookieless until openrev("consent", true), or, with data-consent="google", until Google
+  // Consent Mode grants analytics_storage. Until then it doesn't read or write any cookie but its own consent flag.
+  let cookieless = __CONSENT__ ? alwaysCookieless || getCookie(CONSENT_COOKIE) !== "1" : alwaysCookieless;
+
   // In-memory ids keep events of this page consistent even if cookies are blocked.
   const mem: { v: string | null; s: string | null } = { v: null, s: null };
   function uuid(): string {
@@ -459,6 +466,53 @@ interface Payload {
   }
 
   // ---------------------------------------------------------------------------
+  // Consent mode (consent build only)
+  // ---------------------------------------------------------------------------
+  const setConsent = __CONSENT__
+    ? (granted: boolean) => {
+        if (alwaysCookieless || granted === !cookieless) return;
+        if (granted) {
+          // Keep the visit going: the cookieless session becomes the cookie session, and the server moves it to the new
+          // visitor id sent with the consent event.
+          const sid = sessionId();
+          cookieless = false;
+          setCookie(CONSENT_COOKIE, "1", 31536000);
+          mem.s = sid;
+          setCookie(SESSION_COOKIE, sid, SESSION_TTL);
+          send("consent");
+          log("Consent given: using cookies");
+        } else {
+          [VISITOR_COOKIE, SESSION_COOKIE, CONSENT_COOKIE].forEach((name) => setCookie(name, "", 0));
+          mem.v = mem.s = null;
+          cookieless = true;
+          log("Consent withdrawn: cookies removed, cookieless from now on");
+        }
+      }
+    : null;
+
+  // Google Consent Mode: gtag("consent", "default" | "update", { analytics_storage }) pushes onto dataLayer. Updates
+  // apply both ways; a "default" can only grant, so a denied default at page load can't wipe the cookies of a visitor
+  // who consented on an earlier visit (their banner sends an update right after).
+  const watchGoogleConsent = __CONSENT__
+    ? () => {
+        const dl = ((w as { dataLayer?: unknown[] }).dataLayer = (w as { dataLayer?: unknown[] }).dataLayer || []);
+        const check = (item: unknown) => {
+          const a = item as ArrayLike<unknown> | null;
+          if (!a || typeof a !== "object" || a[0] !== "consent") return;
+          const state = ((a[2] || {}) as { analytics_storage?: string }).analytics_storage;
+          if (state === "granted") setConsent!(true);
+          else if (state === "denied" && a[1] === "update") setConsent!(false);
+        };
+        for (let i = 0; i < dl.length; i++) check(dl[i]);
+        const push = dl.push;
+        dl.push = function (...items: unknown[]) {
+          items.forEach(check);
+          return push.apply(this, items);
+        };
+      }
+    : null;
+
+  // ---------------------------------------------------------------------------
   // Public API: openrev("goal_name", {props}) / openrev("identify", {...}) / openrev("payment", {email})
   // ---------------------------------------------------------------------------
   function track(name: string, props?: Props, beacon = false) {
@@ -477,6 +531,9 @@ interface Payload {
     } else if (cmd === "pageview") {
       lastPage = null;
       pageview();
+    } else if (cmd === "consent") {
+      // openrev("consent", true | false | "granted" | "denied"); ignored outside the consent build.
+      if (__CONSENT__) setConsent!((data as unknown) === true || (data as unknown) === "granted");
     } else {
       track(cmd, data);
     }
@@ -501,7 +558,12 @@ interface Payload {
 
   if (ignored) log("Tracking disabled: " + ignored);
 
+  if (__CONSENT__) {
+    // Consent given before the script loaded applies before the first pageview.
+    for (const args of queued) if (args[0] === "consent") call(...(Array.from(args as ArrayLike<unknown>)));
+    if ((attr("consent") || "").toLowerCase() === "google") watchGoogleConsent!();
+  }
   pageview();
   shopify();
-  for (const args of queued) call(...(Array.from(args as ArrayLike<unknown>)));
+  for (const args of queued) if (!__CONSENT__ || args[0] !== "consent") call(...(Array.from(args as ArrayLike<unknown>)));
 })();

@@ -1,6 +1,6 @@
 # Privacy and cookies
 
-OpenRev is self-hosted: the data goes to your server and nowhere else. This page explains what the script collects, what it stores in the browser, and the two tracking modes.
+OpenRev is self-hosted: the data goes to your server and nowhere else. This page explains what the script collects, what it stores in the browser, and the three tracking modes: cookies, cookieless, and cookieless until the visitor consents.
 
 *This is a technical description, not legal advice. Check your obligations (GDPR, ePrivacy, CCPA…) with someone qualified.*
 
@@ -73,11 +73,74 @@ In cookieless mode the browser stores no cookies and no visitor id.
 
 Do both. With only the setting, the old script keeps setting cookies (which the server then ignores). With only the script, nothing breaks, but the setting keeps the dashboard snippet in sync.
 
+## Cookieless until consent
+
+If you show a cookie banner, use the consent build, `/js/script.consent.js`. It works like cookieless mode until the visitor accepts, then like cookie mode.
+
+- **Before consent:** no cookies and no visitor id in the browser. The server counts the visitor with the daily hash, like in cookieless mode, and the session id lives in the tab's `sessionStorage`.
+- **When the visitor accepts:** the script sets the visitor and session cookies, plus `openrev_consent=1` (1 year), and tells the server. The server moves the current visit (its pageviews, goals and payments) from the anonymous hash to the new visitor id. The visit isn't counted twice, and a payment keeps the source that brought the visitor in. Only the current visit moves; earlier visits stay anonymous.
+- **On later visits:** the `openrev_consent` cookie tells the script that the visitor accepted, so it uses cookies from the first pageview.
+- **When the visitor withdraws consent:** the script deletes its three cookies and goes back to cookieless.
+
+Leave **Settings → General → Cookieless mode** off: with it on, the server ignores visitor ids, consent included.
+
+### Connect it to your banner
+
+Use the consent build with the queue snippet:
+
+```html
+<script>
+  window.openrev = window.openrev || function () { (window.openrev.q = window.openrev.q || []).push(arguments); };
+</script>
+<script
+  defer
+  data-website-id="YOUR_WEBSITE_ID"
+  data-domain="example.com"
+  src="https://analytics.example.com/js/script.consent.js"
+></script>
+```
+
+Then call OpenRev from your consent tool's accept and reject handlers:
+
+```js
+openrev("consent", true); // the visitor accepted analytics cookies
+openrev("consent", false); // the visitor refused or withdrew consent
+```
+
+`"granted"` and `"denied"` work too. Calls made before the script loads (through the queue snippet) apply before the first pageview, so a visitor who accepts right away is tracked with cookies from the start.
+
+With Cookiebot, for example:
+
+```js
+window.addEventListener("CookiebotOnAccept", () => openrev("consent", Cookiebot.consent.statistics));
+window.addEventListener("CookiebotOnDecline", () => openrev("consent", false));
+```
+
+### Google Consent Mode
+
+If your site already uses [Google Consent Mode](https://developers.google.com/tag-platform/security/guides/consent), directly with `gtag` or through a consent tool that updates it, add `data-consent="google"` instead of calling `openrev("consent", …)`:
+
+```html
+<script
+  defer
+  data-consent="google"
+  data-website-id="YOUR_WEBSITE_ID"
+  data-domain="example.com"
+  src="https://analytics.example.com/js/script.consent.js"
+></script>
+```
+
+OpenRev then follows `analytics_storage`. `granted` switches it to cookies, and an `update` to `denied` takes it back to cookieless. A `default` of `denied` leaves alone the cookies of a visitor who accepted on an earlier visit, because consent tools send the stored choice as an `update` right after. It works whether Google's tag loads before or after OpenRev.
+
+### Trade-offs
+
+Until a visitor accepts, cookieless mode's [trade-offs](#trade-offs) apply. A visitor who never accepts counts as new each day, and their later payments can only be linked through the checkout success page, `identify` or their email. Visitors who accept get cookie-mode attribution from the visit where they accepted.
+
 ## Other browser storage
 
 | Key | Storage | When |
 | --- | --- | --- |
-| `openrev_session_id`, `openrev_session_id_t` | `sessionStorage` | Cookieless mode only |
+| `openrev_session_id`, `openrev_session_id_t` | `sessionStorage` | Cookieless mode, and the consent build before consent |
 | `openrev_cart` | `sessionStorage` | Shopify stores only: remembers that the cart was tagged |
 | `openrev_ignore` | `localStorage` | Only if you [exclude your browser](exclusions.md#exclude-your-own-visits) |
 
@@ -95,12 +158,12 @@ The script also reads DataFast's `datafast_visitor_id` / `datafast_session_id` c
 
 ## Choosing a mode
 
-| | Cookie mode | Cookieless mode |
-| --- | --- | --- |
-| Stores an identifier in the browser | Yes (1 year) | No |
-| Recognizes returning visitors | Yes | Same day only |
-| Revenue attribution over days or weeks | Yes | Limited to the same day, or by email |
-| Automatic payment link tagging | Yes | No |
-| Accuracy for shared IPs | High | Lower |
+| | Cookie mode | Cookieless mode | Cookieless until consent |
+| --- | --- | --- | --- |
+| Stores an identifier in the browser | Yes (1 year) | No | After consent (1 year) |
+| Recognizes returning visitors | Yes | Same day only | Once they've accepted |
+| Revenue attribution over days or weeks | Yes | Limited to the same day, or by email | For visitors who accept |
+| Automatic payment link tagging | Yes | No | After consent |
+| Accuracy for shared IPs | High | Lower | High after consent |
 
-If revenue attribution is the reason you use OpenRev, cookie mode with a consent banner (where required) gives the best results. If you can't store anything on the device without consent and don't want a banner, use cookieless mode and rely on [identify](identify.md) and checkout metadata to connect payments.
+If you show a consent banner, use the [consent build](#cookieless-until-consent): it counts every visitor, and gives full revenue attribution for those who accept. If you can't store anything on the device without consent and don't want a banner, use cookieless mode and rely on [identify](identify.md) and checkout metadata to connect payments. Cookie mode suits sites that don't need consent for it.

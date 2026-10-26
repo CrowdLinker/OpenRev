@@ -287,7 +287,7 @@ Migrations run on start-up, and IP geolocation works out of the box (from Cloudf
 ## 🔒 Privacy and security
 
 - **Your data, your database.** No third-party scripts, no data sent anywhere you didn't configure.
-- **Cookieless mode** for sites that don't want a consent banner, and IP addresses are never stored. See [privacy, cookies and GDPR](docs/tracking/privacy-and-cookies.md).
+- **Cookieless mode** for sites that don't want a consent banner, or **cookieless until consent** for sites that have one. IP addresses are never stored. See [privacy, cookies and GDPR](docs/tracking/privacy-and-cookies.md).
 - **Hardened by default.** Provider webhooks are checked against their signing secrets, alert webhooks can't reach private networks, sign-in and password checks are rate-limited, and the proxy headers you trust are configurable with `TRUST_PROXY`.
 - Found a vulnerability? Please report it privately as described in [SECURITY.md](SECURITY.md).
 

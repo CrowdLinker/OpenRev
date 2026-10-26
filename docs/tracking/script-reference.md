@@ -30,6 +30,7 @@ Boolean attributes are only on when the value is exactly `"true"`.
 | `data-disable-outbound` | `false` | Don't record clicks on links to other sites. |
 | `data-hash` | `false` | Hash-based routing: include `location.hash` in the page path and track `hashchange`. Same as `script.hash.js`. See [SPA & hash routing](spa-and-hash-routing.md). |
 | `data-cookieless` | `false` | No cookies. Same as `script.cookieless.js`. See [Privacy & cookies](privacy-and-cookies.md). |
+| `data-consent` | none | Consent build only: set it to `"google"` to follow Google Consent Mode's `analytics_storage` instead of `openrev("consent", …)` calls. See [Cookieless until consent](privacy-and-cookies.md#cookieless-until-consent). |
 
 ## Script variants
 
@@ -41,8 +42,10 @@ All variants are served by your OpenRev instance under `/js/`.
 | `/js/script.hash.js` | yes | no |
 | `/js/script.cookieless.js` | no | yes |
 | `/js/script.hash.cookieless.js` | yes | yes |
+| `/js/script.consent.js` | no | until the visitor consents |
+| `/js/script.hash.consent.js` | yes | until the visitor consents |
 
-The variants are the same as `script.js` with `data-hash="true"` and/or `data-cookieless="true"`. Use whichever you prefer.
+The hash and cookieless variants are the same as `script.js` with `data-hash="true"` and/or `data-cookieless="true"`. Use whichever you prefer. Consent mode has no attribute: it's only in the `.consent.js` files, so `script.js` stays small. See [Cookieless until consent](privacy-and-cookies.md#cookieless-until-consent).
 
 ## JavaScript API
 
@@ -55,10 +58,11 @@ The script defines `window.openrev`. It also defines `window.datafast` with the 
 | `openrev("identify", { user_id, email, name, image, ...props })` | Attaches a user to the current visitor. See [Identify users](identify.md). |
 | `openrev("payment", { email })` | Tells OpenRev this visitor just paid with this email, so the payment can be matched when the provider reports it (a payment OpenRev already received is only linked if it's less than 2 hours old). Also accepts `ref`: the checkout reference your provider reports, such as a Stripe Checkout Session id. `transaction_id` is an alias, sent as `ref`. |
 | `openrev("pageview")` | Sends a pageview for the current URL, even if it was already counted. Only needed when your router doesn't use the History API. |
+| `openrev("consent", true)` | Consent build only: the visitor accepted cookies. `false` withdraws consent; `"granted"` and `"denied"` work too. Ignored by the other builds. See [Cookieless until consent](privacy-and-cookies.md#cookieless-until-consent). |
 | `openrev.visitorId()` | Returns the visitor id (also `openrev.getVisitorId()`). Returns `null` in cookieless mode. |
 | `openrev.sessionId()` | Returns the session id (also `openrev.getSessionId()`). |
 
-`identify`, `payment` and `pageview` are reserved. Any other first argument is treated as a goal name.
+`identify`, `payment`, `pageview` and `consent` are reserved. Any other first argument is treated as a goal name.
 
 ### Calling the API before the script loads
 
@@ -70,7 +74,7 @@ The script loads with `defer`, so `window.openrev` doesn't exist until the page 
 </script>
 ```
 
-Queued calls run as soon as the script loads, right after the first pageview. A queue on `window.datafast` is picked up too. `openrev.visitorId()` and `openrev.sessionId()` only exist once the script has loaded.
+Queued calls run as soon as the script loads, right after the first pageview (queued `consent` calls run just before it). A queue on `window.datafast` is picked up too. `openrev.visitorId()` and `openrev.sessionId()` only exist once the script has loaded.
 
 ### TypeScript
 
@@ -107,7 +111,8 @@ The DataFast equivalents `data-fast-goal`, `data-fast-goal-*`, `data-fast-scroll
 | --- | --- | --- | --- |
 | `openrev_visitor_id` | cookie | 1 year, renewed on every event | Random visitor id |
 | `openrev_session_id` | cookie | 30 minutes, renewed on every event | Random session id |
-| `openrev_session_id`, `openrev_session_id_t` | `sessionStorage` | the browser tab | Session id and last activity time (cookieless mode only) |
+| `openrev_consent` | cookie | 1 year | Consent build only: `1` once the visitor has accepted |
+| `openrev_session_id`, `openrev_session_id_t` | `sessionStorage` | the browser tab | Session id and last activity time (cookieless mode, and the consent build before consent) |
 | `openrev_cart` | `sessionStorage` | the browser tab | Shopify only: remembers that the cart was already tagged |
 | `openrev_ignore` | `localStorage` | until removed | Set it to `"true"` to [exclude your browser](exclusions.md#exclude-your-own-visits) |
 

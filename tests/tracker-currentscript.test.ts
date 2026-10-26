@@ -18,7 +18,7 @@ const trackerCode = buildSync({
   write: false,
   format: "iife",
   target: ["es2017"],
-  define: { __HASH_MODE__: "false", __COOKIELESS__: "false" },
+  define: { __HASH_MODE__: "false", __COOKIELESS__: "false", __CONSENT__: "false" },
 }).outputFiles[0].text;
 
 class FakeElement {

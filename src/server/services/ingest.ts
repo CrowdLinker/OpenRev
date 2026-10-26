@@ -62,7 +62,7 @@ export interface RequestMeta {
 
 export type IngestResult = { ok: true; visitorId: string; sessionId: string } | { ok: false; reason: string };
 
-const VALID_TYPES = new Set(["pageview", "goal", "engagement", "identify", "payment", "outbound"]);
+const VALID_TYPES = new Set(["pageview", "goal", "engagement", "identify", "payment", "outbound", "consent"]);
 
 export function normalizePath(url: URL, includeHash: boolean): string {
   let path = url.pathname || "/";
@@ -108,6 +108,48 @@ function isExcluded(site: Site, hostname: string, path: string, meta: RequestMet
   return false;
 }
 
+/**
+ * Consent mode (the `script.consent.js` build): the tracker runs cookieless until the visitor consents, then sends a
+ * `consent` event with its new cookie visitor id and the session it's in. That session (its events, and payments attributed to it)
+ * moves from the cookieless visitor to the new one, so the visit isn't split in two. It only moves when the session
+ * belongs to the cookieless id of this very request (same site, IP, browser and day): a session id alone can't claim
+ * someone else's visit. Earlier cookieless sessions stay as they were; consent doesn't reach back.
+ */
+async function adoptConsentedVisitor(rt: Runtime, site: Site, body: IncomingEvent, meta: RequestMeta, now: number): Promise<IngestResult> {
+  const visitorId = body.visitorId;
+  const sessionId = body.sessionId;
+  if (site.settings.cookieless || !isValidClientId(visitorId) || !isValidClientId(sessionId)) return { ok: false, reason: "invalid_consent" };
+  const cookieless = await cookielessVisitorId(rt, site, meta, now);
+  const session = await rt.db.first<{ visitor_id: string; started_at: number }>("SELECT visitor_id, started_at FROM sessions WHERE id = ? AND site_id = ?", [
+    sessionId,
+    site.id,
+  ]);
+  if (!session || session.visitor_id !== cookieless || visitorId === cookieless) return { ok: true, visitorId, sessionId };
+  await rt.db.batch([
+    {
+      sql: `INSERT INTO visitors (site_id, id, first_seen, last_seen, sessions) VALUES (?, ?, ?, ?, 1)
+            ON CONFLICT (site_id, id) DO UPDATE SET last_seen = excluded.last_seen, sessions = visitors.sessions + 1`,
+      params: [site.id, visitorId, Number(session.started_at), now],
+    },
+    { sql: "UPDATE sessions SET visitor_id = ? WHERE id = ? AND site_id = ?", params: [visitorId, sessionId, site.id] },
+    { sql: "UPDATE events SET visitor_id = ? WHERE session_id = ? AND site_id = ?", params: [visitorId, sessionId, site.id] },
+    {
+      sql: `UPDATE payments SET visitor_id = ? WHERE site_id = ? AND visitor_id = ?
+            AND (first_session_id = ? OR last_session_id = ? OR touch_session_id = ?)`,
+      params: [visitorId, site.id, cookieless, sessionId, sessionId, sessionId],
+    },
+    {
+      sql: `UPDATE visitors SET sessions = sessions - 1 WHERE site_id = ? AND id = ? AND sessions > 0`,
+      params: [site.id, cookieless],
+    },
+    {
+      sql: `DELETE FROM visitors WHERE site_id = ? AND id = ? AND NOT EXISTS (SELECT 1 FROM sessions WHERE site_id = ? AND visitor_id = ?)`,
+      params: [site.id, cookieless, site.id, cookieless],
+    },
+  ]);
+  return { ok: true, visitorId, sessionId };
+}
+
 export async function ingestEvent(rt: Runtime, body: IncomingEvent, meta: RequestMeta): Promise<IngestResult> {
   const type = body.type ?? "pageview";
   if (!VALID_TYPES.has(type)) return { ok: false, reason: "invalid_type" };
@@ -136,6 +178,8 @@ export async function ingestEvent(rt: Runtime, body: IncomingEvent, meta: Reques
 
   const now = Date.now();
   const db = rt.db;
+
+  if (type === "consent") return adoptConsentedVisitor(rt, site, body, meta, now);
 
   // ---- identity ----------------------------------------------------------
   let visitorId: string;

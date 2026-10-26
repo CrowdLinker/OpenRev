@@ -11,6 +11,9 @@ const variants = [
   { file: "script.hash.js", hash: true, cookieless: false },
   { file: "script.cookieless.js", hash: false, cookieless: true },
   { file: "script.hash.cookieless.js", hash: true, cookieless: true },
+  // Cookieless until the visitor consents (docs/tracking/privacy-and-cookies.md#cookieless-until-consent).
+  { file: "script.consent.js", hash: false, cookieless: false, consent: true },
+  { file: "script.hash.consent.js", hash: true, cookieless: false, consent: true },
 ];
 
 for (const v of variants) {
@@ -21,7 +24,7 @@ for (const v of variants) {
     minify: true,
     format: "iife",
     target: ["es2017"],
-    define: { __HASH_MODE__: String(v.hash), __COOKIELESS__: String(v.cookieless) },
+    define: { __HASH_MODE__: String(v.hash), __COOKIELESS__: String(v.cookieless), __CONSENT__: String(!!v.consent) },
     legalComments: "none",
   };
   await run(options, v.file);

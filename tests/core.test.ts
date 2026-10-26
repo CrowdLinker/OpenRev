@@ -196,4 +196,38 @@ describe.each(DATABASES)("ingestion + stats (%s)", (_name, makeDb) => {
     const ex = await ingestEvent(rt, { type: "pageview", websiteId: site.id, href: "https://example.com/admin/users" }, meta());
     expect(ex.ok).toBe(false);
   });
+
+  it("moves a cookieless session to the visitor id sent with consent, and only from the same browser", async () => {
+    // Before consent the consent build sends no visitor id, only its sessionStorage session id.
+    const page = { websiteId: site.id, href: "https://example.com/pricing", sessionId: "session-consent-1" };
+    const first = await ingestEvent(rt, { type: "pageview", ...page, referrer: "https://news.ycombinator.com/" }, meta());
+    expect(first.ok).toBe(true);
+    const cookielessId = first.ok ? first.visitorId : "";
+    await recordPayment(rt, site, { provider: "stripe", transactionId: "pi_c1", type: "new", amount: 900, currency: "USD", ref: "cs_test_c1" });
+    await ingestEvent(rt, { type: "payment", ref: "cs_test_c1", ...page, href: "https://example.com/success?session_id=cs_test_c1" }, meta());
+    const owner = () => rt.db.first<{ visitor_id: string }>("SELECT visitor_id FROM sessions WHERE id = 'session-consent-1'");
+
+    // A request from another browser can't claim the session, even with its id.
+    await ingestEvent(rt, { type: "consent", ...page, visitorId: "visitor-intruder-1" }, { ...meta(), ip: "5.6.7.8" });
+    expect((await owner())?.visitor_id).toBe(cookielessId);
+
+    const consent = await ingestEvent(rt, { type: "consent", ...page, visitorId: "visitor-consent-1" }, meta());
+    expect(consent).toEqual({ ok: true, visitorId: "visitor-consent-1", sessionId: "session-consent-1" });
+    expect((await owner())?.visitor_id).toBe("visitor-consent-1");
+    const events = await rt.db.all<{ visitor_id: string }>("SELECT DISTINCT visitor_id FROM events WHERE session_id = 'session-consent-1'");
+    expect(events).toEqual([{ visitor_id: "visitor-consent-1" }]);
+    expect((await rt.db.first<{ visitor_id: string }>("SELECT visitor_id FROM payments WHERE transaction_id = 'pi_c1'"))?.visitor_id).toBe("visitor-consent-1");
+    const visitors = await rt.db.all<{ id: string; sessions: number }>("SELECT id, sessions FROM visitors WHERE site_id = ? ORDER BY id", [site.id]);
+    expect(visitors).toEqual([{ id: "visitor-consent-1", sessions: 1 }]);
+
+    // With cookies, the visit carries on in the same session.
+    const next = await ingestEvent(rt, { type: "pageview", ...page, href: "https://example.com/checkout", visitorId: "visitor-consent-1" }, meta());
+    expect(next.ok && next.sessionId).toBe("session-consent-1");
+    expect((await rt.db.first<{ pageviews: number }>("SELECT pageviews FROM sessions WHERE id = 'session-consent-1'"))?.pageviews).toBe(2);
+
+    // A site set to always cookieless ignores consent.
+    await rt.db.run("UPDATE sites SET settings = ? WHERE id = ?", [JSON.stringify({ cookieless: true }), site.id]);
+    invalidateSite(site.id);
+    expect((await ingestEvent(rt, { type: "consent", ...page, visitorId: "visitor-consent-2" }, meta())).ok).toBe(false);
+  });
 });
