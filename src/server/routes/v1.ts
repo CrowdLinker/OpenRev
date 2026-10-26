@@ -4,6 +4,7 @@ import type { AppEnv } from "../context";
 import { parseInterval } from "../lib/billing";
 import { isValidCurrency, toMinor } from "../lib/currency";
 import { isValidClientId } from "../lib/ids";
+import { withoutRevenue } from "../lib/revenue";
 import { clampString, isEmail, sanitizeGoalName, sanitizeProps } from "../lib/validate";
 import { verifyApiKey } from "../services/auth";
 import { identifyVisitor, recordServerGoal } from "../services/ingest";
@@ -15,7 +16,7 @@ import { deletePayment, recordPayment } from "../services/payments";
 import { notifyPayment } from "../services/notify";
 import type { Site } from "../services/sites";
 import * as stats from "../services/stats";
-import { buildStatsQuery, fail, rangeInfo, readJson, siteForUser } from "./helpers";
+import { buildStatsQuery, fail, rangeInfo, readJson, requireRevenue, siteForUser } from "./helpers";
 import { openApiSpec } from "./openapi";
 
 /** Breakdown names used by DataFast's API, mapped to OpenRev dimensions. */
@@ -116,13 +117,21 @@ export function v1Routes() {
     return c.json({ status: "error", error: { code: status, message: err.message } }, status);
   });
 
+  /** The key's website. Keys act as the member who created them, so they see revenue when that member does. */
   const site = async (c: Context<AppEnv>, min: "viewer" | "admin" = "viewer") => {
     const apiKey = c.get("apiKey")!;
     const id = apiKey.siteId ?? c.req.query("websiteId") ?? c.req.query("website_id");
     if (!id) fail(400, "`websiteId` query parameter is required with account tokens");
-    return (await siteForUser(c, id, min)).site;
+    const { site, canSeeRevenue } = await siteForUser(c, id, min);
+    c.set("canSeeRevenue", canSeeRevenue);
+    return site;
   };
-  const ok = (c: Context, data: unknown, extra: Record<string, unknown> = {}) => c.json({ status: "success", data, ...extra });
+  const query = (c: Context<AppEnv>, s: Site) => buildStatsQuery(c.get("rt").db, s, c.req.query(), { revenue: c.get("canSeeRevenue") });
+  /** Success envelope, without revenue data for keys that can't see revenue (lib/revenue.ts). */
+  const ok = (c: Context<AppEnv>, data: unknown, extra: Record<string, unknown> = {}, opts: { purchaseConversion?: boolean } = {}) => {
+    const body = { status: "success", data, ...extra };
+    return c.json(c.get("canSeeRevenue") ? body : withoutRevenue(body, opts));
+  };
 
   app.get("/openapi.json", (c) => c.json(openApiSpec(new URL(c.req.url).origin)));
 
@@ -140,20 +149,20 @@ export function v1Routes() {
 
   app.get("/analytics/overview", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const q = await query(c, s);
     const { current, previous } = await stats.overview(c.get("rt").db, q, c.req.query("compare") !== "0");
-    return ok(c, { ...current, currency: s.currency }, { previous, range: rangeInfo(q) });
+    return ok(c, { ...current, currency: s.currency }, { previous, range: rangeInfo(q) }, { purchaseConversion: true });
   });
 
   app.get("/analytics/timeseries", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const q = await query(c, s);
     return ok(c, await stats.timeseries(c.get("rt").db, q), { currency: s.currency, interval: q.range.interval, range: rangeInfo(q) });
   });
 
   app.get("/analytics/realtime", async (c) => {
     const s = await site(c);
-    const r = await stats.realtime(c.get("rt").db, s);
+    const r = await stats.realtime(c.get("rt").db, s, Date.now(), { revenue: c.get("canSeeRevenue") });
     return ok(c, { visitors: r.visitors, sessions: r.sessions, recent_events: r.events, recent_payments: r.payments }, { currency: s.currency });
   });
 
@@ -161,23 +170,25 @@ export function v1Routes() {
     const dim = resolveDimension(dimName);
     if (!dim) fail(404, `Unknown breakdown "${dimName}"`);
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const q = await query(c, s);
     const rows = await stats.breakdown(c.get("rt").db, q, dim, {
       limit: Number(c.req.query("limit") || 50),
       sort: c.req.query("sort") as never,
     });
-    return ok(c, rows, { dimension: dim, currency: s.currency, range: rangeInfo(q) });
+    return ok(c, rows, { dimension: dim, currency: s.currency, range: rangeInfo(q) }, { purchaseConversion: dim !== "goal" });
   };
   // Registered before /analytics/:dimension, which would otherwise take "mrr".
+  // Payments, lifetime value and MRR are revenue as a whole: refused to keys that can't see revenue.
   app.get("/analytics/mrr", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    requireRevenue(c);
+    const q = await query(c, s);
     return ok(c, await mrrReport(c.get("rt").db, q), { currency: s.currency, interval: q.range.interval, range: rangeInfo(q) });
   });
 
   app.get("/analytics/search-keywords", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const q = await query(c, s);
     const sort = c.req.query("sort");
     const report = await searchKeywords(c.get("rt").db, q, {
       limit: Number(c.req.query("limit") || 50),
@@ -188,21 +199,22 @@ export function v1Routes() {
 
   app.get("/analytics/crawlers", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const q = await query(c, s);
     const report = await crawlerReport(c.get("rt").db, q, { timezone: s.timezone, category: c.req.query("category") });
     return ok(c, report, { currency: s.currency, range: rangeInfo(q) });
   });
 
   app.get("/analytics/social", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const q = await query(c, s);
     const report = await socialReport(c.get("rt").db, q, { platform: c.req.query("platform"), limit: Number(c.req.query("limit")) || undefined });
     return ok(c, report, { currency: s.currency, range: rangeInfo(q) });
   });
 
   app.get("/analytics/mrr/breakdown", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    requireRevenue(c);
+    const q = await query(c, s);
     const group = mrrGroup(c.req.query("group"));
     return ok(c, await mrrBreakdown(c.get("rt").db, q, group), { currency: s.currency, group, range: rangeInfo(q) });
   });
@@ -212,10 +224,13 @@ export function v1Routes() {
 
   app.get("/visitors", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const customersOnly = c.req.query("customers") === "1" || c.req.query("customers") === "true";
+    // Listing only the visitors who paid would list the customers.
+    if (customersOnly) requireRevenue(c);
+    const q = await query(c, s);
     const rows = await stats.listVisitors(c.get("rt").db, q, {
       search: c.req.query("search"),
-      customersOnly: c.req.query("customers") === "1" || c.req.query("customers") === "true",
+      customersOnly,
       goal: c.req.query("goal") ?? c.req.query("completed_goal") ?? null,
       limit: Number(c.req.query("limit") || 50),
       offset: Number(c.req.query("offset") || 0),
@@ -225,14 +240,15 @@ export function v1Routes() {
 
   app.get("/visitors/:visitorId", async (c) => {
     const s = await site(c);
-    const profile = await stats.visitorProfile(c.get("rt").db, s, c.req.param("visitorId"));
+    const profile = await stats.visitorProfile(c.get("rt").db, s, c.req.param("visitorId"), { revenue: c.get("canSeeRevenue") });
     if (!profile) fail(404, "Visitor not found");
     return ok(c, profile, { currency: s.currency });
   });
 
   app.get("/payments", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    requireRevenue(c);
+    const q = await query(c, s);
     return ok(c, await stats.listPayments(c.get("rt").db, q, { limit: Number(c.req.query("limit") || 50), offset: Number(c.req.query("offset") || 0) }), {
       currency: s.currency,
       range: rangeInfo(q),
@@ -243,7 +259,9 @@ export function v1Routes() {
     const s = await site(c, "admin");
     const body = await readJson(c);
     const { payment, created } = await createPaymentFromApi(c, s, body);
-    return c.json({ status: "success", data: payment, created }, created ? 201 : 200);
+    // A key that can't see revenue can still send payments, but only gets their id back: a repeat returns the stored one.
+    const data = c.get("canSeeRevenue") ? payment : { id: payment.id, transaction_id: payment.transaction_id };
+    return c.json({ status: "success", data, created }, created ? 201 : 200);
   });
 
   app.delete("/payments/:id", async (c) => {
@@ -290,7 +308,7 @@ export function v1Routes() {
 
   app.get("/goals", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const q = await query(c, s);
     return ok(c, await stats.breakdown(c.get("rt").db, q, "goal", { limit: 200 }), { range: rangeInfo(q) });
   });
 
@@ -323,14 +341,15 @@ export function v1Routes() {
     const s = await site(c);
     const row = await c.get("rt").db.first<{ id: string; name: string; steps: string }>("SELECT * FROM funnels WHERE id = ? AND site_id = ?", [c.req.param("funnelId"), s.id]);
     if (!row) fail(404, "Funnel not found");
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    const q = await query(c, s);
     const steps = JSON.parse(row.steps);
     return ok(c, await stats.funnelResults(c.get("rt").db, q, steps), { funnel: { id: row.id, name: row.name, steps }, range: rangeInfo(q) });
   });
 
   app.get("/ltv", async (c) => {
     const s = await site(c);
-    const q = await buildStatsQuery(c.get("rt").db, s, c.req.query());
+    requireRevenue(c);
+    const q = await query(c, s);
     return ok(c, await stats.customerLtv(c.get("rt").db, q, (c.req.query("group") as "source") ?? "source"), { currency: s.currency, range: rangeInfo(q) });
   });
 

@@ -118,13 +118,13 @@ function PostRow({ p, cur, hideRevenue }: { p: SocialPostRow; cur: string; hideR
 }
 
 export function SocialPage() {
-  const { statsBase, meta, role, isPublic } = useSite();
+  const { statsBase, meta, role, isPublic, canSeeRevenue } = useSite();
   const [q] = useDashQuery();
   const [platform, setPlatform] = useState<"all" | Platform>("all");
   const report = useApi<SocialResponse>(`${statsBase}/social?${toSearch(q, { platform: platform === "all" ? undefined : platform })}`);
   const d = report.data;
   const cur = d?.currency ?? meta?.site.currency ?? "USD";
-  const hideRevenue = meta?.site.hideRevenue;
+  const hideRevenue = !canSeeRevenue;
   const editor = !isPublic && canEdit(role);
   const s = d?.summary;
   const both = [s?.x, s?.hn].filter(Boolean) as PlatformSummary[];

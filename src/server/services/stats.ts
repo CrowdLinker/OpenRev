@@ -145,6 +145,11 @@ export interface StatsQuery {
   attribution?: string | null;
   /** Add imported history (Plausible, Google Analytics) where it covers the range. Default true. */
   imported?: boolean;
+  /**
+   * Include revenue (payments, customers). False for viewers who can't see revenue: reports skip payments and never
+   * sort by revenue, and the routes leave the revenue fields out (lib/revenue.ts). Default true.
+   */
+  revenue?: boolean;
 }
 
 function n(v: unknown): number {
@@ -158,6 +163,10 @@ function n(v: unknown): number {
  */
 export function includesImported(q: StatsQuery): boolean {
   return q.imported !== false && q.filters.length === 0;
+}
+
+export function includesRevenue(q: StatsQuery): boolean {
+  return q.revenue !== false;
 }
 
 /** Dimensions imported history has values for. */
@@ -226,18 +235,20 @@ async function overviewFor(db: Database, q: StatsQuery, from: number, to: number
        WHERE s.site_id = ? AND s.started_at >= ? AND s.started_at < ?${f.sql}`,
       [q.site.id, from, to, ...f.params],
     ),
-    db.first<Record<string, number>>(
-      `SELECT SUM(p.revenue) AS revenue,
-              SUM(CASE WHEN p.type = 'refund' THEN -p.revenue ELSE 0 END) AS refunds,
-              SUM(CASE WHEN p.type = 'new' THEN p.revenue ELSE 0 END) AS new_revenue,
-              SUM(CASE WHEN p.type = 'renewal' THEN p.revenue ELSE 0 END) AS renewal_revenue,
-              SUM(CASE WHEN p.type <> 'refund' THEN 1 ELSE 0 END) AS payments,
-              COUNT(DISTINCT ${PAYING}) AS paying_visitors,
-              COUNT(DISTINCT CASE WHEN p.type <> 'refund' THEN COALESCE(p.visitor_id, p.customer_id, p.email, p.id) END) AS customers
-       FROM payments p ${hasFilters ? `JOIN sessions s ON s.id = p.${attr}` : ""}
-       WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?${f.sql}`,
-      [q.site.id, from, to, ...f.params],
-    ),
+    includesRevenue(q)
+      ? db.first<Record<string, number>>(
+          `SELECT SUM(p.revenue) AS revenue,
+                  SUM(CASE WHEN p.type = 'refund' THEN -p.revenue ELSE 0 END) AS refunds,
+                  SUM(CASE WHEN p.type = 'new' THEN p.revenue ELSE 0 END) AS new_revenue,
+                  SUM(CASE WHEN p.type = 'renewal' THEN p.revenue ELSE 0 END) AS renewal_revenue,
+                  SUM(CASE WHEN p.type <> 'refund' THEN 1 ELSE 0 END) AS payments,
+                  COUNT(DISTINCT ${PAYING}) AS paying_visitors,
+                  COUNT(DISTINCT CASE WHEN p.type <> 'refund' THEN COALESCE(p.visitor_id, p.customer_id, p.email, p.id) END) AS customers
+           FROM payments p ${hasFilters ? `JOIN sessions s ON s.id = p.${attr}` : ""}
+           WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?${f.sql}`,
+          [q.site.id, from, to, ...f.params],
+        )
+      : Promise.resolve(null),
     includesImported(q)
       ? db.first<Record<string, number>>(`SELECT ${IMPORTED_SUMS} FROM imported_stats i WHERE i.site_id = ? AND i.dim = '' AND i.ts >= ? AND i.ts < ? AND ${DONE_IMPORT}`, [
           q.site.id,
@@ -340,15 +351,17 @@ export async function timeseries(db: Database, q: StatsQuery, interval?: Interva
        GROUP BY b`,
       [q.site.id, q.range.from, q.range.to, ...f.params],
     ),
-    db.all<Record<string, number>>(
-      `SELECT ${plan.sql("p.ts")} AS b, SUM(p.revenue) AS revenue,
-              SUM(CASE WHEN p.type <> 'refund' THEN 1 ELSE 0 END) AS payments,
-              COUNT(DISTINCT ${PAYING}) AS customers
-       FROM payments p ${hasFilters ? `JOIN sessions s ON s.id = p.${attr}` : ""}
-       WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?${f.sql}
-       GROUP BY b`,
-      [q.site.id, q.range.from, q.range.to, ...f.params],
-    ),
+    includesRevenue(q)
+      ? db.all<Record<string, number>>(
+          `SELECT ${plan.sql("p.ts")} AS b, SUM(p.revenue) AS revenue,
+                  SUM(CASE WHEN p.type <> 'refund' THEN 1 ELSE 0 END) AS payments,
+                  COUNT(DISTINCT ${PAYING}) AS customers
+           FROM payments p ${hasFilters ? `JOIN sessions s ON s.id = p.${attr}` : ""}
+           WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?${f.sql}
+           GROUP BY b`,
+          [q.site.id, q.range.from, q.range.to, ...f.params],
+        )
+      : Promise.resolve([]),
     q.site.settings.kpiGoal
       ? db.all<Record<string, number>>(
           `SELECT ${plan.sql("e.ts")} AS b, COUNT(DISTINCT e.visitor_id) AS conversions
@@ -433,6 +446,8 @@ export async function breakdown(
   const f = sessionFilterSql(q.filters);
   const attr = attributionColumn(q.site, q.attribution);
   const base = [q.site.id, q.range.from, q.range.to];
+  // Without revenue, payments aren't read at all: no rows that only payments brought in, no ordering by revenue.
+  const withRevenue = includesRevenue(q);
   const rows = new Map<string, BreakdownRow>();
   const key = (value: string, meta?: string | null) => `${meta ?? ""}\u0000${value}`;
   const get = (value: string, meta?: string | null) => {
@@ -498,7 +513,7 @@ export async function breakdown(
       r.avg_session_duration = r.sessions ? t.duration / r.sessions : 0;
     }
     const join = q.filters.length ? "JOIN" : "LEFT JOIN";
-    const revenue = await db.all<Record<string, unknown>>(
+    const revenue = !withRevenue ? [] : await db.all<Record<string, unknown>>(
       `SELECT CASE WHEN s.id IS NULL THEN '${UNATTRIBUTED}' ELSE COALESCE(${col}, '') END AS value
               ${withCountry ? ", COALESCE(s.country, '') AS meta" : dim === "source" ? ", MAX(s.referrer_domain) AS meta" : ""},
               SUM(p.revenue) AS revenue, SUM(CASE WHEN p.type <> 'refund' THEN 1 ELSE 0 END) AS payments,
@@ -547,7 +562,7 @@ export async function breakdown(
       r.pageviews = (r.pageviews ?? 0) + n(v.pageviews);
     }
     // Revenue influenced by a page: payments whose visitor viewed the page before paying.
-    const revenue = await db.all<Record<string, unknown>>(
+    const revenue = !withRevenue ? [] : await db.all<Record<string, unknown>>(
       `SELECT x.path AS value, SUM(x.revenue) AS revenue, SUM(x.is_payment) AS payments, COUNT(DISTINCT x.paying) AS customers
        FROM (
          SELECT DISTINCT p.id, p.revenue, e.path,
@@ -590,7 +605,7 @@ export async function breakdown(
       r.visitors += n(v.visitors);
       r.completions = (r.completions ?? 0) + n(v.events);
     }
-    if (dim === "goal") {
+    if (dim === "goal" && withRevenue) {
       const revenue = await db.all<Record<string, unknown>>(
         `SELECT g.name AS value, SUM(p.revenue) AS revenue, SUM(CASE WHEN p.type <> 'refund' THEN 1 ELSE 0 END) AS payments,
                 COUNT(DISTINCT ${PAYING}) AS customers
@@ -628,7 +643,8 @@ export async function breakdown(
     r.revenue_per_visitor = r.visitors ? r.revenue / r.visitors : 0;
     return r;
   });
-  const sort = opts.sort ?? "visitors";
+  const byRevenue = opts.sort === "revenue" || (opts.sort === "conversion_rate" && dim !== "goal");
+  const sort = byRevenue && !withRevenue ? "visitors" : (opts.sort ?? "visitors");
   out.sort((a, b) => {
     const d =
       sort === "revenue"
@@ -688,7 +704,9 @@ export async function goalProperties(db: Database, q: StatsQuery, goal: string) 
 
 export const REALTIME_WINDOW = 5 * 60 * 1000;
 
-export async function realtime(db: Database, site: Site, now = Date.now()) {
+/** `revenue: false` leaves payments out, and scores buyer intent without what each channel's visitors bought. */
+export async function realtime(db: Database, site: Site, now = Date.now(), opts: { revenue?: boolean } = {}) {
+  const withRevenue = opts.revenue !== false;
   const since = now - REALTIME_WINDOW;
   const [count, sessions, events, payments, perMinute, convRates] = await Promise.all([
     db.first<{ visitors: number }>("SELECT COUNT(DISTINCT visitor_id) AS visitors FROM sessions WHERE site_id = ? AND last_seen_at > ?", [
@@ -711,24 +729,28 @@ export async function realtime(db: Database, site: Site, now = Date.now()) {
        WHERE e.site_id = ? AND e.ts > ? ORDER BY e.ts DESC LIMIT 50`,
       [site.id, now - 30 * 60 * 1000],
     ),
-    db.all<Record<string, unknown>>(
-      `SELECT p.id, p.ts, p.type, p.revenue, p.revenue_currency, p.amount, p.currency, p.visitor_id, p.email, p.name, p.provider,
-              s.country, s.city, s.source, s.referrer_domain
-       FROM payments p LEFT JOIN sessions s ON s.id = p.touch_session_id
-       WHERE p.site_id = ? AND p.ts > ? ORDER BY p.ts DESC LIMIT 20`,
-      [site.id, now - 24 * 60 * 60 * 1000],
-    ),
+    withRevenue
+      ? db.all<Record<string, unknown>>(
+          `SELECT p.id, p.ts, p.type, p.revenue, p.revenue_currency, p.amount, p.currency, p.visitor_id, p.email, p.name, p.provider,
+                  s.country, s.city, s.source, s.referrer_domain
+           FROM payments p LEFT JOIN sessions s ON s.id = p.touch_session_id
+           WHERE p.site_id = ? AND p.ts > ? ORDER BY p.ts DESC LIMIT 20`,
+          [site.id, now - 24 * 60 * 60 * 1000],
+        )
+      : Promise.resolve([]),
     db.all<{ m: number; pageviews: number; visitors: number }>(
       `SELECT (${Math.floor(now)} - ts) / 60000 AS m, COUNT(*) AS pageviews, COUNT(DISTINCT visitor_id) AS visitors
        FROM events WHERE site_id = ? AND type = 'pageview' AND ts > ? GROUP BY m`,
       [site.id, now - 30 * 60 * 1000],
     ),
-    db.all<{ channel: string; visitors: number; customers: number }>(
-      `SELECT s.channel, COUNT(DISTINCT s.visitor_id) AS visitors,
-              COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.site_id = s.site_id AND p.visitor_id = s.visitor_id AND p.type <> 'refund') THEN s.visitor_id END) AS customers
-       FROM sessions s WHERE s.site_id = ? AND s.started_at > ? GROUP BY s.channel`,
-      [site.id, now - 90 * 24 * 60 * 60 * 1000],
-    ),
+    withRevenue
+      ? db.all<{ channel: string; visitors: number; customers: number }>(
+          `SELECT s.channel, COUNT(DISTINCT s.visitor_id) AS visitors,
+                  COUNT(DISTINCT CASE WHEN EXISTS (SELECT 1 FROM payments p WHERE p.site_id = s.site_id AND p.visitor_id = s.visitor_id AND p.type <> 'refund') THEN s.visitor_id END) AS customers
+           FROM sessions s WHERE s.site_id = ? AND s.started_at > ? GROUP BY s.channel`,
+          [site.id, now - 90 * 24 * 60 * 60 * 1000],
+        )
+      : Promise.resolve([] as { channel: string; visitors: number; customers: number }[]),
   ]);
 
   // Pages seen by live sessions, used for the buyer-intent score.
@@ -791,15 +813,20 @@ export async function listVisitors(
     const like = `%${opts.search.toLowerCase()}%`;
     extraParams.push(like, like, like, opts.search);
   }
-  if (opts.customersOnly) extra += " AND EXISTS (SELECT 1 FROM payments p WHERE p.site_id = v.site_id AND p.visitor_id = v.id AND p.type <> 'refund')";
+  const withRevenue = includesRevenue(q);
+  if (opts.customersOnly && withRevenue) extra += " AND EXISTS (SELECT 1 FROM payments p WHERE p.site_id = v.site_id AND p.visitor_id = v.id AND p.type <> 'refund')";
   if (opts.goal) {
     extra += " AND EXISTS (SELECT 1 FROM events ge WHERE ge.site_id = v.site_id AND ge.visitor_id = v.id AND ge.type = 'goal' AND ge.name = ?)";
     extraParams.push(opts.goal);
   }
   const rows = await db.all<Record<string, unknown>>(
     `SELECT v.id, v.first_seen, v.last_seen, v.sessions, v.user_id, v.name, v.email, v.image,
-            (SELECT SUM(p.revenue) FROM payments p WHERE p.site_id = v.site_id AND p.visitor_id = v.id) AS revenue,
-            (SELECT COUNT(*) FROM payments p WHERE p.site_id = v.site_id AND p.visitor_id = v.id AND p.type <> 'refund') AS payments,
+            ${
+              withRevenue
+                ? `(SELECT SUM(p.revenue) FROM payments p WHERE p.site_id = v.site_id AND p.visitor_id = v.id) AS revenue,
+            (SELECT COUNT(*) FROM payments p WHERE p.site_id = v.site_id AND p.visitor_id = v.id AND p.type <> 'refund') AS payments,`
+                : ""
+            }
             fs.source, fs.channel, fs.referrer_domain, fs.country, fs.city, fs.device, fs.browser, fs.os, fs.entry_page
      FROM visitors v
      JOIN (SELECT s.visitor_id FROM sessions s
@@ -811,10 +838,11 @@ export async function listVisitors(
      LIMIT ${limit} OFFSET ${offset}`,
     [q.site.id, q.range.from, q.range.to, ...f.params, q.site.id, ...extraParams],
   );
-  return rows.map((r) => ({ ...r, revenue: n(r.revenue), payments: n(r.payments) }));
+  return withRevenue ? rows.map((r) => ({ ...r, revenue: n(r.revenue), payments: n(r.payments) })) : rows;
 }
 
-export async function visitorProfile(db: Database, site: Site, visitorId: string) {
+/** `revenue: false` leaves the visitor's payments out of the journey. */
+export async function visitorProfile(db: Database, site: Site, visitorId: string, opts: { revenue?: boolean } = {}) {
   const visitor = await db.first<Record<string, unknown>>("SELECT * FROM visitors WHERE site_id = ? AND id = ?", [site.id, visitorId]);
   if (!visitor) return null;
   // Visitors identified with the same user id are merged into one profile (cross-device).
@@ -833,7 +861,9 @@ export async function visitorProfile(db: Database, site: Site, visitorId: string
       `SELECT id, session_id, ts, type, name, path, hostname, props FROM events WHERE site_id = ? AND visitor_id IN (${ph}) ORDER BY ts DESC LIMIT 2000`,
       [site.id, ...ids],
     ),
-    db.all<Record<string, unknown>>(`SELECT * FROM payments WHERE site_id = ? AND visitor_id IN (${ph}) ORDER BY ts DESC`, [site.id, ...ids]),
+    opts.revenue === false
+      ? Promise.resolve([] as Record<string, unknown>[])
+      : db.all<Record<string, unknown>>(`SELECT * FROM payments WHERE site_id = ? AND visitor_id IN (${ph}) ORDER BY ts DESC`, [site.id, ...ids]),
   ]);
   const revenue = payments.reduce((acc, p) => acc + n(p.revenue), 0);
   return {
@@ -867,9 +897,15 @@ function stepCondition(step: FunnelStep, alias: string): SqlPart {
   return { sql: `${alias}.type = '${type}' AND ${col} = ?`, params: [v] };
 }
 
+/**
+ * Visitors at each step, and what they paid. Without revenue, the funnel stops before its first payment step: that
+ * step counts customers, and every later step only visitors who paid.
+ */
 export async function funnelResults(db: Database, q: StatsQuery, steps: FunnelStep[]) {
-  if (!steps.length) return [];
   steps = steps.slice(0, 10);
+  const withRevenue = includesRevenue(q);
+  if (!withRevenue && steps.some((s) => s.type === "payment")) steps = steps.slice(0, steps.findIndex((s) => s.type === "payment"));
+  if (!steps.length) return [];
   const f = sessionFilterSql(q.filters);
   const ctes: string[] = [];
   const params: SqlValue[] = [];
@@ -899,10 +935,11 @@ export async function funnelResults(db: Database, q: StatsQuery, steps: FunnelSt
   const selects = steps
     .map(
       (_, i) =>
-        `(SELECT COUNT(*) FROM s${i}) AS c${i}, (SELECT SUM(p.revenue) FROM payments p JOIN s${i} ON s${i}.visitor_id = p.visitor_id WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?) AS r${i}`,
+        `(SELECT COUNT(*) FROM s${i}) AS c${i}` +
+        (withRevenue ? `, (SELECT SUM(p.revenue) FROM payments p JOIN s${i} ON s${i}.visitor_id = p.visitor_id WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?) AS r${i}` : ""),
     )
     .join(", ");
-  steps.forEach(() => params.push(q.site.id, q.range.from, q.range.to));
+  if (withRevenue) steps.forEach(() => params.push(q.site.id, q.range.from, q.range.to));
   const row = await db.first<Record<string, number>>(`WITH ${ctes.join(",\n")} SELECT ${selects}`, params);
   const first = n(row?.c0);
   return steps.map((step, i) => {
@@ -973,11 +1010,12 @@ export async function customerLtv(db: Database, q: StatsQuery, groupBy: "source"
   }));
 }
 
-export async function firstDataTimestamp(db: Database, siteId: string): Promise<number | null> {
+export async function firstDataTimestamp(db: Database, siteId: string, opts: { payments?: boolean } = {}): Promise<number | null> {
+  const payments = opts.payments === false ? "NULL" : "(SELECT MIN(ts) FROM payments WHERE site_id = ?)";
   const row = await db.first<{ t: number | null; p: number | null; i: number | null }>(
-    `SELECT (SELECT MIN(started_at) FROM sessions WHERE site_id = ?) AS t, (SELECT MIN(ts) FROM payments WHERE site_id = ?) AS p,
+    `SELECT (SELECT MIN(started_at) FROM sessions WHERE site_id = ?) AS t, ${payments} AS p,
             (SELECT MIN(i.ts) FROM imported_stats i WHERE i.site_id = ? AND ${DONE_IMPORT}) AS i`,
-    [siteId, siteId, siteId],
+    opts.payments === false ? [siteId, siteId] : [siteId, siteId, siteId],
   );
   const vals = [row?.t, row?.p, row?.i].filter((x): x is number => x !== null && x !== undefined).map(Number);
   return vals.length ? Math.min(...vals) : null;

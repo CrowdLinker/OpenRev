@@ -197,7 +197,7 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 - **CLI**: `npx openrev stats`, `top pages`, `live`, `mrr` and more in your terminal, with `--json` for scripts ([guide](docs/guides/cli.md)).
 - **Social**: posts on 𝕏 (beta) and Hacker News that mention or link to you, with the visitors and revenue each one brings, link-in-bio attribution for 𝕏 profiles, and link-in-bio pages like Linktree as sources ([docs](docs/features/social.md)).
 - **AI crawlers**: which AI crawlers (GPTBot, ClaudeBot, ChatGPT-User…) read which pages, reported by a few lines of server middleware, next to the visitors and revenue that AI assistants send ([docs](docs/features/ai-crawlers.md)).
-- **Team and sharing**: unlimited websites and members (owner, admin, viewer), invitation links, and public read-only dashboards that hide personal data.
+- **Team and sharing**: unlimited websites and members (owner, admin, viewer), a "Can see revenue" permission per member, invitation links, and public read-only dashboards that hide personal data, and revenue too if you choose.
 - **Live badge**: show "3 online · 1,297 visitors today" on your site, linking to your public dashboard ([docs](docs/features/live-badge.md)).
 - **Alerts**: new sales and refunds with source, country and journey, goal completions, traffic spikes, and daily or weekly digests to Slack, Discord, Telegram, email or webhooks.
 - **Tracking options**: subdomains and cross-domain tracking, a first-party proxy to get past ad blockers, and exclusions by IP, path, country, hostname or your own browser.

@@ -6,20 +6,22 @@ import { api, useApi } from "../lib/api";
 import { canEdit, useSite } from "../lib/context";
 import { toSearch, useDashQuery } from "../lib/query";
 import type { Funnel, FunnelResult, FunnelStep } from "../lib/types";
-import { FunnelBars } from "./Dashboard";
+import { FunnelBars, PaymentStepsHidden } from "./Dashboard";
 
 function FunnelCard({ funnel, onEdit, onDelete }: { funnel: Funnel; onEdit?: () => void; onDelete?: () => void }) {
-  const { statsBase, meta } = useSite();
+  const { statsBase, meta, canSeeRevenue } = useSite();
   const [q] = useDashQuery();
   const { data, loading, error } = useApi<{ results: FunnelResult[] }>(`${statsBase}/funnels/${funnel.id}?${toSearch(q)}`);
   const overall = data?.results.length ? data.results[data.results.length - 1].conversion_rate : 0;
+  // Without revenue the results stop before the first payment step, so the last one isn't the funnel's conversion.
+  const truncated = !canSeeRevenue && funnel.steps.some((s) => s.type === "payment");
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">{funnel.name}</h3>
           <p className="text-xs text-zinc-500">
-            {funnel.steps.length} steps · {(overall * 100).toFixed(1)}% overall conversion
+            {funnel.steps.length} steps{truncated ? "" : ` · ${(overall * 100).toFixed(1)}% overall conversion`}
           </p>
         </div>
         <div className="flex gap-1">
@@ -37,13 +39,14 @@ function FunnelCard({ funnel, onEdit, onDelete }: { funnel: Funnel; onEdit?: () 
         </div>
       </div>
       <ErrorBox error={error} />
-      {data && <FunnelBars results={data.results} currency={meta?.site.currency ?? "USD"} showRevenue={!meta?.site.hideRevenue} />}
+      {data && <FunnelBars results={data.results} currency={meta?.site.currency ?? "USD"} showRevenue={canSeeRevenue} />}
+      {data && <PaymentStepsHidden steps={funnel.steps} />}
     </Card>
   );
 }
 
 function FunnelEditor({ funnel, onClose, onSaved }: { funnel: Funnel | null; onClose: () => void; onSaved: () => void }) {
-  const { site, statsBase, meta } = useSite();
+  const { site, statsBase, meta, canSeeRevenue } = useSite();
   const [q] = useDashQuery();
   const [name, setName] = useState(funnel?.name ?? "");
   const [steps, setSteps] = useState<FunnelStep[]>(funnel?.steps ?? [{ type: "page", value: "/", match: "equals" }, { type: "payment" }]);
@@ -131,7 +134,14 @@ function FunnelEditor({ funnel, onClose, onSaved }: { funnel: Funnel | null; onC
         <div>
           <div className="label">Preview</div>
           <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            {preview ? <FunnelBars results={preview} currency={meta?.site.currency ?? "USD"} showRevenue={!meta?.site.hideRevenue} /> : <p className="text-sm text-zinc-500">Fill in the steps to preview conversions.</p>}
+            {preview ? (
+              <>
+                <FunnelBars results={preview} currency={meta?.site.currency ?? "USD"} showRevenue={canSeeRevenue} />
+                <PaymentStepsHidden steps={steps} />
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">Fill in the steps to preview conversions.</p>
+            )}
           </div>
         </div>
       </div>

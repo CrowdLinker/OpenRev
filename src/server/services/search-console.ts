@@ -5,7 +5,7 @@ import { accessToken, GoogleError, googleJson, parseServiceAccountKey, type Serv
 import { dayStart } from "./imports";
 import { getSecret } from "./instance";
 import { getSite, type Site } from "./sites";
-import { attributionColumn, type StatsQuery } from "./stats";
+import { attributionColumn, includesRevenue, type StatsQuery } from "./stats";
 
 /**
  * Google Search Console: clicks, impressions and positions per day, query and landing page, read with a service
@@ -334,22 +334,26 @@ export interface KeywordRow {
   page: string;
 }
 
+/** Keywords with their estimated revenue. Without revenue (`q.revenue` false) payments aren't read or sorted on. */
 export async function searchKeywords(db: Database, q: StatsQuery, opts: { limit?: number; sort?: "clicks" | "revenue" | "impressions" } = {}) {
   const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 10) || 10, 1), 1000);
   const attr = attributionColumn(q.site, q.attribution);
+  const withRevenue = includesRevenue(q);
   const [pairs, pages] = await Promise.all([
     db.all<{ query: string; page: string; clicks: number; impressions: number; position: number }>(
       `SELECT query, page, SUM(clicks) AS clicks, SUM(impressions) AS impressions, SUM(position) AS position
        FROM search_stats WHERE site_id = ? AND ts >= ? AND ts < ? GROUP BY query, page`,
       [q.site.id, q.range.from, q.range.to],
     ),
-    db.all<{ page: string; revenue: number }>(
-      `SELECT COALESCE(s.entry_page, '/') AS page, SUM(p.revenue) AS revenue
-       FROM payments p JOIN sessions s ON s.id = p.${attr}
-       WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ? AND s.channel = 'Organic Search' AND s.source = 'Google'
-       GROUP BY COALESCE(s.entry_page, '/')`,
-      [q.site.id, q.range.from, q.range.to],
-    ),
+    withRevenue
+      ? db.all<{ page: string; revenue: number }>(
+          `SELECT COALESCE(s.entry_page, '/') AS page, SUM(p.revenue) AS revenue
+           FROM payments p JOIN sessions s ON s.id = p.${attr}
+           WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ? AND s.channel = 'Organic Search' AND s.source = 'Google'
+           GROUP BY COALESCE(s.entry_page, '/')`,
+          [q.site.id, q.range.from, q.range.to],
+        )
+      : Promise.resolve([] as { page: string; revenue: number }[]),
   ]);
   const pageRevenue = new Map(pages.map((p) => [p.page, Number(p.revenue) || 0]));
   const pageClicks = new Map<string, number>();
@@ -378,7 +382,7 @@ export async function searchKeywords(db: Database, q: StatsQuery, opts: { limit?
     clicks += c;
     impressions += i;
   }
-  const sort = opts.sort ?? "clicks";
+  const sort = opts.sort === "revenue" && !withRevenue ? "clicks" : (opts.sort ?? "clicks");
   const rows: KeywordRow[] = [...byQuery.values()]
     .map(({ position_sum, top: _top, ...r }) => ({
       ...r,

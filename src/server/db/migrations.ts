@@ -433,6 +433,21 @@ CREATE TABLE IF NOT EXISTS social_links (
 CREATE INDEX IF NOT EXISTS social_links_path ON social_links (site_id, platform, path, created_at);
 `,
   },
+  {
+    id: 7,
+    name: "can see revenue",
+    // Which members see revenue. Owners always do; everyone else starts without it, including members who saw it
+    // before, until an owner or admin turns it on. Invitations carry the choice made when inviting. `revenue_notice`
+    // marks the owners and admins of websites whose members lost revenue here: Settings → Team tells each of them once.
+    sql: `
+ALTER TABLE site_members ADD COLUMN can_see_revenue INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE site_members ADD COLUMN revenue_notice INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE invites ADD COLUMN can_see_revenue INTEGER NOT NULL DEFAULT 0;
+UPDATE site_members SET can_see_revenue = 1 WHERE role = 'owner';
+UPDATE site_members SET revenue_notice = 1
+  WHERE role IN ('owner', 'admin') AND site_id IN (SELECT site_id FROM site_members WHERE role <> 'owner');
+`,
+  },
 ];
 
 export const LATEST_MIGRATION = migrations[migrations.length - 1].id;

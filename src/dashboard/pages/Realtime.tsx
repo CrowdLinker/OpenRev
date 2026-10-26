@@ -15,7 +15,8 @@ interface Realtime {
   currency: string;
   sessions: Row[];
   events: Row[];
-  payments: Row[];
+  /** Left out for viewers who can't see revenue. */
+  payments?: Row[];
   minutes: { minute: number; pageviews: number; visitors: number }[];
 }
 
@@ -160,7 +161,7 @@ export function RealtimePage() {
                 <span className="shrink-0 text-xs text-zinc-400">{timeAgo(Number(e.ts))}</span>
               </div>
             ))}
-            {!data?.events.length && !data?.payments.length && <Empty title="No activity in the last 30 minutes" />}
+            {!data?.events.length && !data?.payments?.length && <Empty title="No activity in the last 30 minutes" />}
           </div>
         </Card>
       </div>

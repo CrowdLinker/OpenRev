@@ -15,6 +15,7 @@
 | `RESEND_API_KEY` | — | Enables emails (invitations, email alerts, digests) via [Resend](https://resend.com). |
 | `OPENREV_EMAIL_FROM` | `OpenRev <onboarding@resend.dev>` | Sender address (must be a domain verified in Resend). |
 | `RETENTION_DAYS` | — (keep forever) | Delete raw events and sessions older than N days. Payments are kept. |
+| `DEMO_MODE` | `false` | Only for instances with made-up data, like the [live demo](https://openrev.si/demo): public share links also show the Visitors tab and visitor profiles. Never set it on an instance that tracks real people. |
 | `TRUST_PROXY` | `true` | Read the client IP from `X-Forwarded-For` / `X-Real-IP`. Analytics use the first `X-Forwarded-For` address (the visitor, also when a website proxies the tracker). Login rate limits use the connection's address, or the last `X-Forwarded-For` entry (the one your reverse proxy appends) when the connection comes from a trusted proxy: with `true`, any private or loopback address. Set a comma-separated list of proxy addresses (IPs or IPv4 CIDRs, e.g. `127.0.0.1,10.0.0.0/24`) to trust only those; use it when untrusted clients can reach OpenRev from the same private network. Set `false` if OpenRev is exposed without a reverse proxy: analytics and rate limits then use the connection's address. |
 | `GEOIP_DB` | — | Path to a MaxMind GeoLite2 / DB-IP `.mmdb` file. |
 | `GEOIP_AUTO_DOWNLOAD` | `true` | Download the free DB-IP Lite city database into `DATA_DIR` and refresh it monthly. |
@@ -32,6 +33,7 @@ Variables go in `wrangler.jsonc` → `vars`; secrets are set with `npx wrangler 
 | `RESEND_API_KEY` | secret |
 | `OPENREV_EMAIL_FROM` | var |
 | `RETENTION_DAYS` | var |
+| `DEMO_MODE` | var (see above: made-up data only) |
 
 Geolocation is provided by Cloudflare. The D1 binding must be named `DB`.
 

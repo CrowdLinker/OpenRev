@@ -86,13 +86,28 @@ export function Field({ label, help, children }: { label: string; help?: ReactNo
   );
 }
 
-export function Toggle({ checked, onChange, label, help }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; help?: ReactNode }) {
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  help,
+  disabled,
+  title,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: ReactNode;
+  help?: ReactNode;
+  disabled?: boolean;
+  title?: string;
+}) {
   return (
-    <label className="flex cursor-pointer items-start gap-3">
+    <label className={cx("flex items-start gap-3", disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer")} title={title}>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cx("relative mt-0.5 inline-flex h-5 w-9 shrink-0 rounded-full transition", checked ? "bg-brand-600" : "bg-zinc-300 dark:bg-zinc-700")}
       >

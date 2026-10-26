@@ -26,6 +26,7 @@ export interface SiteSettings {
   strictHostnames?: boolean;
   kpiGoal?: string | null;
   attribution?: AttributionModel;
+  /** "Hide revenue on share links". Members follow their own "Can see revenue" instead. */
   hideRevenue?: boolean;
   /** Mobile apps (bundle ids, package names) allowed to send events with the SDK. */
   appIds?: string[];
@@ -51,11 +52,12 @@ export interface SiteSummary {
   currency: string;
   timezone: string;
   role: Role;
-  hideRevenue: boolean;
+  /** Whether the signed-in member sees revenue here. When not, `revenue` is left out. */
+  canSeeRevenue: boolean;
   visitors: number;
-  revenue: number;
+  revenue?: number;
   online: number;
-  series: { date: string; visitors: number; revenue: number }[];
+  series: { date: string; visitors: number; revenue?: number }[];
 }
 
 export interface RangeInfo {
@@ -167,10 +169,14 @@ export interface SiteMeta {
     timezone: string;
     currency: string;
     kpiGoal: string | null;
-    hideRevenue: boolean;
     attribution: AttributionModel;
     created_at: number;
   };
+  /**
+   * Whether this viewer sees revenue: off on share links with "Hide revenue on share links", and for members without
+   * "Can see revenue". The server then leaves revenue out of every response (amounts, payments, customer counts).
+   */
+  canSeeRevenue: boolean;
   funnels: Funnel[];
   goals: string[];
   /** Completed history imports (Plausible, Google Analytics). */
@@ -181,6 +187,8 @@ export interface SiteMeta {
   crawlers?: boolean;
   /** Posts on X or Hacker News were found. */
   social?: boolean;
+  /** The dashboard has the Visitors tab: always for members, on share links only on a demo instance. */
+  visitors?: boolean;
 }
 
 export interface Note {

@@ -1,11 +1,12 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { AppEnv } from "../context";
+import { withoutRevenue } from "../lib/revenue";
 import { mrrBreakdown, mrrGroup, mrrReport } from "../services/mrr";
 import { crawlerReport } from "../services/crawlers";
 import { searchKeywords } from "../services/search-console";
 import { hasSocialPosts, socialReport } from "../services/social";
 import * as stats from "../services/stats";
-import { fail, rangeInfo, readJson, statsQuery } from "./helpers";
+import { fail, rangeInfo, readJson, requireRevenue, statsQuery } from "./helpers";
 
 // Hidden on public share links: personal data, plus identifiers that would let a viewer follow one
 // visitor or customer across responses (row ids stay, they're random and only used as list keys).
@@ -34,9 +35,19 @@ function scrub<T extends Record<string, unknown>>(row: T): T {
   return out as T;
 }
 
+/** Visitor lists and profiles are personal data: members see them, share links only on a demo instance (DEMO_MODE). */
+function showsVisitors(c: Context<AppEnv>): boolean {
+  return !c.get("isPublic") || !!c.get("rt").config.demoMode;
+}
+
+/** Sends a response, without its revenue data for viewers who can't see revenue (lib/revenue.ts). */
+function send(c: Context<AppEnv>, data: Record<string, unknown>, opts: { purchaseConversion?: boolean } = {}) {
+  return c.json(c.get("canSeeRevenue") ? data : withoutRevenue(data, opts));
+}
+
 /**
  * Read-only analytics endpoints. Mounted for signed-in members (/api/sites/:siteId/stats)
- * and for public share links (/api/share/:token/stats). Expects `site` to be set.
+ * and for public share links (/api/share/:token/stats). Expects `site` and `canSeeRevenue` to be set.
  */
 export function statsRoutes() {
   const app = new Hono<AppEnv>();
@@ -44,13 +55,13 @@ export function statsRoutes() {
   app.get("/overview", async (c) => {
     const q = await statsQuery(c, c.get("site"));
     const result = await stats.overview(c.get("rt").db, q, c.req.query("compare") !== "0");
-    return c.json({ range: rangeInfo(q), currency: q.site.currency, ...result });
+    return send(c, { range: rangeInfo(q), currency: q.site.currency, ...result }, { purchaseConversion: true });
   });
 
   app.get("/timeseries", async (c) => {
     const q = await statsQuery(c, c.get("site"));
     const points = await stats.timeseries(c.get("rt").db, q);
-    return c.json({ range: rangeInfo(q), currency: q.site.currency, interval: q.range.interval, points });
+    return send(c, { range: rangeInfo(q), currency: q.site.currency, interval: q.range.interval, points });
   });
 
   app.get("/breakdown/:dimension", async (c) => {
@@ -59,7 +70,7 @@ export function statsRoutes() {
     const q = await statsQuery(c, c.get("site"));
     const sort = c.req.query("sort") as "visitors" | "revenue" | "conversion_rate" | "completions" | undefined;
     const rows = await stats.breakdown(c.get("rt").db, q, dim, { limit: Number(c.req.query("limit") || 10), sort });
-    return c.json({ range: rangeInfo(q), currency: q.site.currency, dimension: dim, rows });
+    return send(c, { range: rangeInfo(q), currency: q.site.currency, dimension: dim, rows }, { purchaseConversion: dim !== "goal" });
   });
 
   app.get("/goals/:goal/properties", async (c) => {
@@ -79,18 +90,20 @@ export function statsRoutes() {
   });
 
   app.get("/realtime", async (c) => {
-    const data = await stats.realtime(c.get("rt").db, c.get("site"));
+    const data = await stats.realtime(c.get("rt").db, c.get("site"), Date.now(), { revenue: c.get("canSeeRevenue") });
     if (c.get("isPublic")) {
       data.sessions = data.sessions.map((s) => scrub({ ...s, id: null }));
       // Event names are goal/outbound labels the public feed shows, so only drop the identifiers.
       data.events = data.events.map((e) => ({ ...e, visitor_id: null, session_id: null }));
       data.payments = data.payments.map((p) => scrub(p));
     }
-    return c.json({ currency: c.get("site").currency, ...data });
+    return send(c, { currency: c.get("site").currency, ...data });
   });
 
   app.get("/visitors", async (c) => {
-    if (c.get("isPublic")) fail(403, "Visitor details are not available on public dashboards");
+    if (!showsVisitors(c)) fail(403, "Visitor details are not available on public dashboards");
+    // Listing only the visitors who paid would list the customers.
+    if (c.req.query("customers") === "1") requireRevenue(c);
     const q = await statsQuery(c, c.get("site"));
     const rows = await stats.listVisitors(c.get("rt").db, q, {
       search: c.req.query("search") || undefined,
@@ -99,17 +112,19 @@ export function statsRoutes() {
       limit: Number(c.req.query("limit") || 50),
       offset: Number(c.req.query("offset") || 0),
     });
-    return c.json({ range: rangeInfo(q), currency: q.site.currency, visitors: rows });
+    return send(c, { range: rangeInfo(q), currency: q.site.currency, visitors: rows });
   });
 
   app.get("/visitors/:visitorId", async (c) => {
-    if (c.get("isPublic")) fail(403, "Visitor details are not available on public dashboards");
-    const profile = await stats.visitorProfile(c.get("rt").db, c.get("site"), c.req.param("visitorId"));
+    if (!showsVisitors(c)) fail(403, "Visitor details are not available on public dashboards");
+    const profile = await stats.visitorProfile(c.get("rt").db, c.get("site"), c.req.param("visitorId"), { revenue: c.get("canSeeRevenue") });
     if (!profile) fail(404, "Visitor not found");
-    return c.json({ currency: c.get("site").currency, ...profile });
+    return send(c, { currency: c.get("site").currency, ...profile });
   });
 
+  // Payments, lifetime value and MRR are revenue as a whole: refused to viewers who can't see revenue.
   app.get("/payments", async (c) => {
+    requireRevenue(c);
     const q = await statsQuery(c, c.get("site"));
     let rows = await stats.listPayments(c.get("rt").db, q, {
       limit: Number(c.req.query("limit") || 50),
@@ -120,12 +135,14 @@ export function statsRoutes() {
   });
 
   app.get("/ltv", async (c) => {
+    requireRevenue(c);
     const q = await statsQuery(c, c.get("site"));
     const group = (c.req.query("group") ?? "source") as "source" | "channel" | "country" | "utm_campaign";
     return c.json({ range: rangeInfo(q), currency: q.site.currency, rows: await stats.customerLtv(c.get("rt").db, q, group) });
   });
 
   app.get("/mrr", async (c) => {
+    requireRevenue(c);
     const q = await statsQuery(c, c.get("site"));
     const report = await mrrReport(c.get("rt").db, q);
     return c.json({ range: rangeInfo(q), currency: q.site.currency, interval: q.range.interval, ...report });
@@ -134,13 +151,13 @@ export function statsRoutes() {
   app.get("/crawlers", async (c) => {
     const q = await statsQuery(c, c.get("site"));
     const report = await crawlerReport(c.get("rt").db, q, { timezone: c.get("site").timezone, category: c.req.query("category") });
-    return c.json({ range: rangeInfo(q), currency: q.site.currency, ...report });
+    return send(c, { range: rangeInfo(q), currency: q.site.currency, ...report });
   });
 
   app.get("/social", async (c) => {
     const q = await statsQuery(c, c.get("site"));
     const report = await socialReport(c.get("rt").db, q, { platform: c.req.query("platform"), limit: Number(c.req.query("limit")) || undefined });
-    return c.json({ range: rangeInfo(q), currency: q.site.currency, ...report });
+    return send(c, { range: rangeInfo(q), currency: q.site.currency, ...report });
   });
 
   app.get("/search-keywords", async (c) => {
@@ -150,10 +167,11 @@ export function statsRoutes() {
       limit: Number(c.req.query("limit") || 10),
       sort: sort === "revenue" || sort === "impressions" ? sort : "clicks",
     });
-    return c.json({ range: rangeInfo(q), currency: q.site.currency, ...report });
+    return send(c, { range: rangeInfo(q), currency: q.site.currency, ...report });
   });
 
   app.get("/mrr/breakdown", async (c) => {
+    requireRevenue(c);
     const q = await statsQuery(c, c.get("site"));
     const group = mrrGroup(c.req.query("group"));
     return c.json({ range: rangeInfo(q), currency: q.site.currency, group, rows: await mrrBreakdown(c.get("rt").db, q, group) });
@@ -170,13 +188,13 @@ export function statsRoutes() {
     if (!row) fail(404, "Funnel not found");
     const q = await statsQuery(c, site);
     const steps = JSON.parse(row.steps) as stats.FunnelStep[];
-    return c.json({ range: rangeInfo(q), currency: site.currency, funnel: { id: row.id, name: row.name, steps }, results: await stats.funnelResults(c.get("rt").db, q, steps) });
+    return send(c, { range: rangeInfo(q), currency: site.currency, funnel: { id: row.id, name: row.name, steps }, results: await stats.funnelResults(c.get("rt").db, q, steps) });
   });
 
   app.post("/funnels/preview", async (c) => {
     const body = await readJson<{ steps?: stats.FunnelStep[] }>(c);
     const q = await statsQuery(c, c.get("site"));
-    return c.json({ results: await stats.funnelResults(c.get("rt").db, q, Array.isArray(body.steps) ? body.steps : []) });
+    return send(c, { results: await stats.funnelResults(c.get("rt").db, q, Array.isArray(body.steps) ? body.steps : []) });
   });
 
   app.get("/notes", async (c) => {
@@ -212,10 +230,11 @@ export function statsRoutes() {
         timezone: site.timezone,
         currency: site.currency,
         kpiGoal: site.settings.kpiGoal ?? null,
-        hideRevenue: !!site.settings.hideRevenue,
         attribution: site.settings.attribution ?? "last_non_direct",
         created_at: site.created_at,
       },
+      /** Whether this viewer sees revenue. When not, the server leaves it out of every response, and the dashboard hides it. */
+      canSeeRevenue: c.get("canSeeRevenue"),
       funnels: funnels.map((f) => ({ id: f.id, name: f.name, steps: JSON.parse(f.steps) })),
       goals: goals.map((g) => g.name),
       /** Completed history imports: the dashboard says when a chart includes them, or leaves them out under filters. */
@@ -226,6 +245,8 @@ export function statsRoutes() {
       crawlers: !!crawlers,
       /** Whether posts on X or Hacker News were found: shared dashboards only show the Social page then. */
       social,
+      /** Whether this dashboard has the Visitors tab: always for members, on share links only on a demo instance. */
+      visitors: showsVisitors(c),
     });
   });
 

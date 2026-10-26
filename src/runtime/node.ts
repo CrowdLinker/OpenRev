@@ -179,6 +179,7 @@ async function main() {
       resendApiKey: env.RESEND_API_KEY || undefined,
       emailFrom: env.OPENREV_EMAIL_FROM || undefined,
       retentionDays: env.RETENTION_DAYS ? Number(env.RETENTION_DAYS) : undefined,
+      demoMode: env.DEMO_MODE === "true",
       trustProxy: parseTrustProxy(env.TRUST_PROXY),
     },
     geo: (ip) => lookupGeo(ip),

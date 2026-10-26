@@ -12,7 +12,8 @@ import { RealtimePage } from "./Realtime";
 import { MrrPage } from "./Mrr";
 import { RevenuePage } from "./Revenue";
 import { SocialPage } from "./Social";
-import { SiteNav } from "./SiteLayout";
+import { RevenueOnly, SiteNav } from "./SiteLayout";
+import { VisitorProfilePage, VisitorsPage } from "./Visitors";
 
 /** Public, read-only dashboard: /share/:token */
 export function SharePage({ token }: { token: string }) {
@@ -32,6 +33,8 @@ export function SharePage({ token }: { token: string }) {
     meta: meta.data ?? null,
     role: null,
     isPublic: true,
+    // Off when "Hide revenue on share links" is on: the server leaves revenue out of every response.
+    canSeeRevenue: !!meta.data?.canSeeRevenue,
     reloadSite: () => {},
     reloadMeta: meta.reload,
   };
@@ -53,12 +56,22 @@ export function SharePage({ token }: { token: string }) {
           </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-          <SiteNav isPublic role={null} hideRevenue={meta.data?.site.hideRevenue} crawlers={!!meta.data?.crawlers} social={!!meta.data?.social} />
+          <SiteNav
+            isPublic
+            role={null}
+            hideRevenue={!ctx.canSeeRevenue}
+            crawlers={!!meta.data?.crawlers}
+            social={!!meta.data?.social}
+            visitors={!!meta.data?.visitors}
+          />
           <Switch>
             <Route path="/" component={DashboardPage} />
             <Route path="/realtime" component={RealtimePage} />
-            <Route path="/revenue" component={RevenuePage} />
-            <Route path="/mrr" component={MrrPage} />
+            {/* Only on a demo instance (DEMO_MODE): share links never list visitors otherwise. */}
+            {meta.data?.visitors && <Route path="/visitors" component={VisitorsPage} />}
+            {meta.data?.visitors && <Route path="/visitors/:visitorId">{(p) => <VisitorProfilePage visitorId={p.visitorId} />}</Route>}
+            <Route path="/revenue">{() => <RevenueOnly page={RevenuePage} />}</Route>
+            <Route path="/mrr">{() => <RevenueOnly page={MrrPage} />}</Route>
             <Route path="/funnels" component={FunnelsPage} />
             <Route path="/social" component={SocialPage} />
             <Route path="/crawlers" component={CrawlersPage} />

@@ -2,14 +2,17 @@ import type { Runtime } from "../context";
 import { fromMinor } from "../lib/currency";
 import { publicHttpsUrl } from "../lib/net";
 import { uuid } from "../lib/ids";
+import { withoutRevenue } from "../lib/revenue";
 import { formatLocalDate, localParts, resolveRange } from "../lib/time";
 import { emailEnabled, escapeHtml, sendEmail } from "./email";
 import type { PaymentRow } from "./payments";
-import { getSite, type Site } from "./sites";
+import { getSite, seesRevenue, type Site } from "./sites";
 import * as stats from "./stats";
 
 export const ALERT_TYPES = ["payment", "goal", "traffic_spike", "digest"] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
+/** Alerts that send revenue: payment alerts carry the amount, digests the revenue figures. */
+export const REVENUE_ALERT_TYPES: readonly string[] = ["payment", "digest"];
 export const ALERT_CHANNELS = ["slack", "discord", "telegram", "webhook", "email"] as const;
 export type AlertChannel = (typeof ALERT_CHANNELS)[number];
 
@@ -152,12 +155,43 @@ export async function deliver(rt: Runtime, channel: AlertChannel, config: AlertC
   }
 }
 
-async function trigger(rt: Runtime, alert: AlertRow, site: Site, msg: Message) {
+/**
+ * Splits an email alert's recipients by "Can see revenue": members of the website who can't see it are `restricted`.
+ * Everyone else, including addresses that aren't members, is treated like the other destinations admins set up.
+ */
+async function emailRecipients(rt: Runtime, site: Site, config: AlertConfig): Promise<{ full: string[]; restricted: string[] }> {
+  const to = (config.email ?? "").split(",").map((e) => e.trim()).filter(Boolean);
+  if (!to.length) return { full: [], restricted: [] };
+  const members = await rt.db.all<{ email: string; role: string; can_see_revenue: number }>(
+    "SELECT u.email, m.role, m.can_see_revenue FROM site_members m JOIN users u ON u.id = m.user_id WHERE m.site_id = ?",
+    [site.id],
+  );
+  const hidden = new Set(members.filter((m) => !seesRevenue(m.role, m.can_see_revenue)).map((m) => m.email.toLowerCase()));
+  return { full: to.filter((e) => !hidden.has(e.toLowerCase())), restricted: to.filter((e) => hidden.has(e.toLowerCase())) };
+}
+
+/**
+ * Sends an alert and logs it. Slack, Discord, Telegram and webhooks get `msg`. So do email recipients, except members
+ * who can't see revenue when the alert has some: they get `restricted` instead, or nothing when it's null (payment
+ * alerts). Leave `restricted` out for alerts without revenue. Returns false when there was no one to send to.
+ */
+async function trigger(rt: Runtime, alert: AlertRow, site: Site, msg: Message, restricted?: (() => Promise<Message>) | null): Promise<boolean> {
   const config = JSON.parse(alert.config || "{}") as AlertConfig;
   let status = "sent";
   let error: string | null = null;
   try {
-    await deliver(rt, alert.channel, config, msg, site);
+    if (alert.channel === "email" && restricted !== undefined) {
+      const to = await emailRecipients(rt, site, config);
+      // Built before any send starts, so a failure here can't leave a send running unobserved.
+      const restrictedMsg = to.restricted.length && restricted ? await restricted() : null;
+      const sends: Promise<unknown>[] = [];
+      if (to.full.length) sends.push(deliver(rt, "email", { ...config, email: to.full.join(",") }, msg, site));
+      if (restrictedMsg) sends.push(deliver(rt, "email", { ...config, email: to.restricted.join(",") }, restrictedMsg, site));
+      if (!sends.length) return false;
+      await Promise.all(sends);
+    } else {
+      await deliver(rt, alert.channel, config, msg, site);
+    }
   } catch (err) {
     status = "failed";
     error = err instanceof Error ? err.message : String(err);
@@ -170,6 +204,7 @@ async function trigger(rt: Runtime, alert: AlertRow, site: Site, msg: Message) {
     },
   ]);
   if (error) throw new Error(error);
+  return true;
 }
 
 const alertCache = new Map<string, { rows: AlertRow[]; at: number }>();
@@ -255,7 +290,8 @@ export async function notifyPayment(rt: Runtime, site: Site, p: PaymentRow): Pro
       const cfg = JSON.parse(a.config || "{}") as AlertConfig;
       if (p.type === "refund" && cfg.includeRefunds === false) return;
       if (cfg.minAmount && Math.abs(fromMinor(Number(p.revenue), site.currency)) < cfg.minAmount) return;
-      await trigger(rt, a, site, msg);
+      // Members who can't see revenue get no payment or refund emails.
+      await trigger(rt, a, site, msg, null);
     }),
   );
 }
@@ -323,31 +359,41 @@ async function checkTrafficSpike(rt: Runtime, alert: AlertRow, site: Site, now: 
   }
 }
 
-export async function digestMessage(rt: Runtime, site: Site, frequency: "daily" | "weekly", now: number): Promise<Message> {
+/** The daily or weekly summary. With `revenue: false` (for members who can't see it) it has visitors and sources only. */
+export async function digestMessage(rt: Runtime, site: Site, frequency: "daily" | "weekly", now: number, opts: { revenue?: boolean } = {}): Promise<Message> {
+  const revenue = opts.revenue !== false;
   const lp = localParts(site.timezone, now);
   const day = (offset: number) => new Date(Date.UTC(lp.year, lp.month - 1, lp.day + offset)).toISOString().slice(0, 10);
   const range =
     frequency === "daily"
       ? resolveRange(site.timezone, { period: "yesterday" }, now)
       : resolveRange(site.timezone, { from: day(-7), to: day(-1) }, now);
-  const q = { site, range, filters: [] };
+  const q = { site, range, filters: [], revenue };
   const { current, previous } = await stats.overview(rt.db, q);
-  const sources = await stats.breakdown(rt.db, q, "source", { limit: 5, sort: "revenue" });
+  const sources = await stats.breakdown(rt.db, q, "source", { limit: 5, sort: revenue ? "revenue" : "visitors" });
   const pct = (a: number, b: number) => (b ? `${a >= b ? "▲" : "▼"} ${Math.abs(Math.round(((a - b) / b) * 100))}%` : "");
   const label = frequency === "daily" ? `Yesterday (${formatLocalDate(site.timezone, range.from)})` : `Last 7 days`;
-  const lines = [
-    `👀 Visitors: ${current.visitors} ${pct(current.visitors, previous?.visitors ?? 0)}`,
-    `💰 Revenue: ${money(current.revenue, site.currency)} ${pct(current.revenue, previous?.revenue ?? 0)} · ${current.payments} payments`,
-    `📈 Conversion rate: ${(current.conversion_rate * 100).toFixed(2)}% · Revenue/visitor: ${money(Math.round(current.revenue_per_visitor), site.currency)}`,
-    "Top sources:",
-    ...sources.filter((s) => s.visitors || s.revenue).map((s) => `  • ${s.value === stats.UNATTRIBUTED ? "Unattributed" : s.value || "Direct"}: ${s.visitors} visitors, ${money(s.revenue, site.currency)}`),
-  ];
+  const sourceName = (s: stats.BreakdownRow) => (s.value === stats.UNATTRIBUTED ? "Unattributed" : s.value || "Direct");
+  const lines = revenue
+    ? [
+        `👀 Visitors: ${current.visitors} ${pct(current.visitors, previous?.visitors ?? 0)}`,
+        `💰 Revenue: ${money(current.revenue, site.currency)} ${pct(current.revenue, previous?.revenue ?? 0)} · ${current.payments} payments`,
+        `📈 Conversion rate: ${(current.conversion_rate * 100).toFixed(2)}% · Revenue/visitor: ${money(Math.round(current.revenue_per_visitor), site.currency)}`,
+        "Top sources:",
+        ...sources.filter((s) => s.visitors || s.revenue).map((s) => `  • ${sourceName(s)}: ${s.visitors} visitors, ${money(s.revenue, site.currency)}`),
+      ]
+    : [
+        `👀 Visitors: ${current.visitors} ${pct(current.visitors, previous?.visitors ?? 0)}`,
+        "Top sources:",
+        ...sources.filter((s) => s.visitors).map((s) => `  • ${sourceName(s)}: ${s.visitors} visitors`),
+      ];
+  const data = { frequency, from: range.from, to: range.to, ...current, top_sources: sources };
   return {
     title: `📊 ${site.name} — ${label}`,
     lines,
     url: dashboardUrl(rt, site),
     event: "digest",
-    data: { frequency, from: range.from, to: range.to, ...current, top_sources: sources },
+    data: revenue ? data : withoutRevenue(data, { purchaseConversion: true }),
   };
 }
 
@@ -359,7 +405,8 @@ async function checkDigest(rt: Runtime, alert: AlertRow, site: Site, now: number
   const weekday = new Date(Date.UTC(local.year, local.month - 1, local.day)).getUTCDay();
   if (cfg.frequency === "weekly" && weekday !== 1) return; // Mondays
   if (alert.last_triggered_at && now - Number(alert.last_triggered_at) < 20 * 3_600_000) return;
-  await trigger(rt, alert, site, await digestMessage(rt, site, cfg.frequency === "weekly" ? "weekly" : "daily", now));
+  const frequency = cfg.frequency === "weekly" ? "weekly" : "daily";
+  await trigger(rt, alert, site, await digestMessage(rt, site, frequency, now), () => digestMessage(rt, site, frequency, now, { revenue: false }));
 }
 
 export async function runScheduledAlerts(rt: Runtime, now = Date.now()) {
@@ -380,18 +427,21 @@ export async function runScheduledAlerts(rt: Runtime, now = Date.now()) {
 
 /** Sends a sample message so users can check their configuration. */
 export async function sendTestAlert(rt: Runtime, alert: AlertRow, site: Site) {
-  let msg: Message;
   if (alert.type === "digest") {
     const cfg = JSON.parse(alert.config || "{}") as AlertConfig;
-    msg = await digestMessage(rt, site, cfg.frequency === "weekly" ? "weekly" : "daily", Date.now());
-  } else {
-    msg = {
-      title: "✅ OpenRev test alert",
-      lines: [`Your ${alert.type.replace("_", " ")} alert for ${site.domain} is set up correctly.`],
-      url: dashboardUrl(rt, site),
-      event: "test",
-      data: { alert_id: alert.id, type: alert.type },
-    };
+    const frequency = cfg.frequency === "weekly" ? "weekly" : "daily";
+    const now = Date.now();
+    await trigger(rt, alert, site, await digestMessage(rt, site, frequency, now), () => digestMessage(rt, site, frequency, now, { revenue: false }));
+    return;
   }
-  await trigger(rt, alert, site, msg);
+  const msg: Message = {
+    title: "✅ OpenRev test alert",
+    lines: [`Your ${alert.type.replace("_", " ")} alert for ${site.domain} is set up correctly.`],
+    url: dashboardUrl(rt, site),
+    event: "test",
+    data: { alert_id: alert.id, type: alert.type },
+  };
+  // Like the real thing, a payment alert's test skips members who can't see revenue.
+  const sent = await trigger(rt, alert, site, msg, alert.type === "payment" ? null : undefined);
+  if (!sent) throw new Error("None of these recipients can see revenue on this website, so they don't get payment alerts");
 }

@@ -17,6 +17,7 @@ export interface Env {
   RESEND_API_KEY?: string;
   OPENREV_EMAIL_FROM?: string;
   RETENTION_DAYS?: string;
+  DEMO_MODE?: string;
 }
 
 interface ExecutionContextLike {
@@ -37,6 +38,7 @@ function buildRuntime(env: Env, ctx: ExecutionContextLike): Runtime {
       resendApiKey: env.RESEND_API_KEY || undefined,
       emailFrom: env.OPENREV_EMAIL_FROM || undefined,
       retentionDays: env.RETENTION_DAYS ? Number(env.RETENTION_DAYS) : undefined,
+      demoMode: env.DEMO_MODE === "true",
       trustProxy: true,
     },
     geo: (_ip, request, proxied) => {

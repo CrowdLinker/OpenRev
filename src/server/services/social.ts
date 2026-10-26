@@ -3,7 +3,7 @@ import type { Database, SqlValue, Statement } from "../db/types";
 import { decryptString, encryptString } from "../lib/crypto";
 import { getSecret } from "./instance";
 import { getSite, siteHosts, type Site } from "./sites";
-import { attributionColumn, type StatsQuery } from "./stats";
+import { attributionColumn, includesRevenue, type StatsQuery } from "./stats";
 
 /**
  * Social posts that mention or link to the website, and the visits and revenue they bring.
@@ -668,7 +668,8 @@ interface PostRow {
 
 /**
  * Posts and profiles with the visits and revenue credited to them in the range, and the posts published in it.
- * Filters don't apply. Revenue is what the credited visits went on to pay, by the website's attribution model.
+ * Filters don't apply. Revenue is what the credited visits went on to pay, by the website's attribution model. Without
+ * revenue (`q.revenue` false) payments aren't read, and posts are ordered by visitors.
  */
 export async function socialReport(db: Database, q: StatsQuery, opts: { platform?: string | null; limit?: number } = {}) {
   const platform = (SOCIAL_PLATFORMS as readonly string[]).includes(opts.platform ?? "") ? (opts.platform as SocialPlatform) : null;
@@ -678,11 +679,17 @@ export async function socialReport(db: Database, q: StatsQuery, opts: { platform
   const sources = platforms.map((p) => PLATFORM_SOURCE[p]);
   const platformOf = `CASE s.source ${platforms.map((p) => `WHEN '${PLATFORM_SOURCE[p]}' THEN '${p}'`).join(" ")} END`;
   const range = [q.site.id, q.range.from, q.range.to];
+  const withRevenue = includesRevenue(q);
 
   // Each visit from a platform, with the post (or profile) it's credited to, and what it paid.
+  const paid = withRevenue
+    ? `LEFT JOIN (
+         SELECT p.${attr} AS sid, SUM(p.revenue) AS revenue FROM payments p WHERE p.site_id = ? AND p.ts >= ? AND p.${attr} IS NOT NULL GROUP BY p.${attr}
+       ) pay ON pay.sid = m.id`
+    : "";
   const credited = await db.all<{ platform: SocialPlatform; post_id: string | null; sessions: number; visitors: number; revenue: number; customers: number }>(
     `SELECT m.platform, m.post_id, COUNT(*) AS sessions, COUNT(DISTINCT m.visitor_id) AS visitors,
-            COALESCE(SUM(pay.revenue), 0) AS revenue, COUNT(DISTINCT CASE WHEN pay.revenue > 0 THEN m.visitor_id END) AS customers
+            ${withRevenue ? "COALESCE(SUM(pay.revenue), 0) AS revenue, COUNT(DISTINCT CASE WHEN pay.revenue > 0 THEN m.visitor_id END) AS customers" : "0 AS revenue, 0 AS customers"}
      FROM (
        SELECT s.id, s.visitor_id, ${platformOf} AS platform,
          (SELECT l.post_id FROM social_links l
@@ -692,11 +699,9 @@ export async function socialReport(db: Database, q: StatsQuery, opts: { platform
        FROM sessions s
        WHERE s.site_id = ? AND s.started_at >= ? AND s.started_at < ? AND s.source IN (${sources.map(() => "?").join(", ")})
      ) m
-     LEFT JOIN (
-       SELECT p.${attr} AS sid, SUM(p.revenue) AS revenue FROM payments p WHERE p.site_id = ? AND p.ts >= ? AND p.${attr} IS NOT NULL GROUP BY p.${attr}
-     ) pay ON pay.sid = m.id
+     ${paid}
      GROUP BY m.platform, m.post_id`,
-    [POST_WINDOW_MS, ...range, ...sources, q.site.id, q.range.from],
+    [POST_WINDOW_MS, ...range, ...sources, ...(withRevenue ? [q.site.id, q.range.from] : [])],
   );
 
   const byPost = new Map<string, { sessions: number; visitors: number; revenue: number; customers: number }>();
