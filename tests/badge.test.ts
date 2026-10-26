@@ -73,8 +73,8 @@ describe.each([
   });
 
   it("stops working when the public link is turned off", async () => {
+    expect((await call(`/api/badge/${token}`)).status).toBe(200); // cached now
     await call(`/api/sites/${siteId}/share`, { body: { enabled: false } });
-    clearBadgeCache(token);
     expect((await call(`/api/badge/${token}`)).status).toBe(404);
   });
 });
