@@ -11,6 +11,7 @@ import { shopify } from "./shopify";
 import { stripe } from "./stripe";
 import type { PaymentProvider } from "./types";
 import { woocommerce } from "./woocommerce";
+import { yolfi } from "./yolfi";
 
 /**
  * Registry of payment providers. To add a provider, implement `PaymentProvider`
@@ -28,6 +29,7 @@ export const PROVIDERS: PaymentProvider[] = [
   gumroad,
   paystack,
   razorpay,
+  yolfi,
   custom,
 ];
 

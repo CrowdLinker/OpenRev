@@ -31,7 +31,7 @@ The **Customer lifetime value** report always groups customers by their first to
 ## Money
 
 - Amounts are stored in the original currency and converted to the website currency with daily exchange rates (European Central Bank via frankfurter.dev, with fallbacks).
-- Revenue is the gross amount paid by the customer (including tax), consistently across providers.
+- Revenue is the gross amount paid by the customer (including tax), except [Yolfi](yolfi.md), whose native payload reports the final merchant receivable in USD after fees.
 - **New** = first purchases and first subscription payments; **Renewals** = recurring charges; **Refunds** are subtracted from net revenue and inherit the original payment's attribution.
 - Every provider event is idempotent: retries and duplicate webhooks are recorded once.
 
@@ -50,6 +50,7 @@ The **Customer lifetime value** report always groups customers by their first to
 | Paystack | [paystack.md](paystack.md) | Charges, refunds | ✅ (beta) |
 | Razorpay | [razorpay.md](razorpay.md) | Payments, subscriptions, invoices, refunds | |
 | WooCommerce | [woocommerce.md](woocommerce.md) | Orders, refunds | |
+| Yolfi | [yolfi.md](yolfi.md) | Confirmed one-time crypto payments (USD merchant receivable) | |
 | **Any other system** | [custom-provider.md](custom-provider.md) | Configure JSON paths + signature for any webhook | |
 | **Your backend** | [Payments API](../api/README.md#payments) | `POST /api/v1/payments` | |
 

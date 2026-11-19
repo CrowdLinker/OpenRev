@@ -37,7 +37,7 @@ It is a free, MIT-licensed alternative to [DataFast](https://datafa.st) and [Dat
   <tr>
     <td width="33%" valign="top">
       <h4>💸 Revenue attribution</h4>
-      Stripe, Lemon Squeezy, Polar, Paddle, Shopify and 6 more built in, plus any other system through a custom webhook or the Payments API.
+      Stripe, Lemon Squeezy, Polar, Paddle, Shopify and 7 more built in, plus any other system through a custom webhook or the Payments API.
     </td>
     <td width="33%" valign="top">
       <h4>🪶 A 3.9 kB script</h4>
@@ -218,6 +218,7 @@ Lifetime value and repeat-purchase rate by first-touch source, so you can tell w
 | [Paystack](docs/revenue/paystack.md) | Charges, refunds | ✅ (beta) |
 | [Razorpay](docs/revenue/razorpay.md) | Payments, subscriptions, invoices, refunds | |
 | [WooCommerce](docs/revenue/woocommerce.md) | Orders, refunds | |
+| [Yolfi](docs/revenue/yolfi.md) | Confirmed one-time crypto payments (USD merchant receivable) | |
 | **Anything else** | [Custom webhook](docs/revenue/custom-provider.md): map JSON paths and a signature for any provider | |
 | **Your backend** | [`POST /api/v1/payments`](docs/api/README.md#payments) | |
 
@@ -304,7 +305,7 @@ Migrations run on start-up, and IP geolocation works out of the box (from Cloudf
 | Self-hosted | ✅ Cloudflare, Docker, Node.js | — | ✅ Cloudflare |
 | Where your data lives | Your D1, SQLite or PostgreSQL | DataFast's service | Your Cloudflare D1 |
 | Revenue attribution | ✅ | ✅ | ✅ |
-| Payment providers | 11 built in + custom webhook + API | Stripe, Lemon Squeezy, Polar, Paddle, Shopify and more + API | Stripe, Polar, Dodo |
+| Payment providers | 12 built in + custom webhook + API | Stripe, Lemon Squeezy, Polar, Paddle, Shopify and more + API | Stripe, Polar, Dodo |
 | Goals, funnels and journeys | ✅ | ✅ | ✅ |
 | Alerts | Slack, Discord, Telegram, email, webhooks | Email | Telegram |
 | API and MCP server | ✅ | ✅ | Read-only |

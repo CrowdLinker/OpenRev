@@ -17,7 +17,7 @@
 
 ## Revenue
 - [How revenue attribution works](revenue/README.md)
-- Providers: [Stripe](revenue/stripe.md) · [Lemon Squeezy](revenue/lemonsqueezy.md) · [Polar](revenue/polar.md) · [Paddle](revenue/paddle.md) · [Shopify](revenue/shopify.md) · [Dodo Payments](revenue/dodo.md) · [Creem](revenue/creem.md) · [Gumroad](revenue/gumroad.md) · [Paystack](revenue/paystack.md) · [Razorpay](revenue/razorpay.md) · [WooCommerce](revenue/woocommerce.md)
+- Providers: [Stripe](revenue/stripe.md) · [Lemon Squeezy](revenue/lemonsqueezy.md) · [Polar](revenue/polar.md) · [Paddle](revenue/paddle.md) · [Shopify](revenue/shopify.md) · [Dodo Payments](revenue/dodo.md) · [Creem](revenue/creem.md) · [Gumroad](revenue/gumroad.md) · [Paystack](revenue/paystack.md) · [Razorpay](revenue/razorpay.md) · [WooCommerce](revenue/woocommerce.md) · [Yolfi](revenue/yolfi.md)
 - [Any other provider (custom webhook) & writing an adapter](revenue/custom-provider.md)
 
 ## Product
